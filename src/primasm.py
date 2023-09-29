@@ -94,9 +94,35 @@ class PrimAsm:
             with open(outputfn, "wb") as f:
                 f.write(bytes(data))
 
+    def disassemble(data):
+        lookup = [""] * 256
+        for instr in PrimAsm.INSTRUCTIONS:
+            opcode = PrimAsm.INSTRUCTIONS[instr]
+            lookup[opcode] = instr
+        i = 0
+        s = ""
+        while i < len(data):
+            retbit = (data[i] >> 7) & 1
+            data[i] &= 0x7f
+            if data[i] == Prim.OP_PUSH:
+                s += f"0x{data[i+1]+(data[i+2]<<8):x}"
+                i += 3
+            elif data[i] == Prim.OP_PUSH8:
+                s += f"0x{data[i+1]:x}"
+                i += 2
+            else:
+                s += f"{lookup[data[i]]}"
+                i += 1
+            if retbit:
+                s += ".RET "
+            else:
+                s += " "
+        return s[:-1]
+
 def main():
-    PrimAsm.assemble("123 0x100 and or add.ret # kommentar")
-    PrimAsm.assembleFile("src/test.asm", "src/test.bin")
+    # PrimAsm.assembleFile("src/test.asm", "src/test.bin")
+    data = PrimAsm.assemble("123 0x1234 and or add.ret # kommentar")
+    print(repr(PrimAsm.disassemble(data)))
 
 if __name__ == "__main__":
     main()
