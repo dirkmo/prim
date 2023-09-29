@@ -1,7 +1,9 @@
+import sys
+
 class MemoryIf:
-    def read(addr):
+    def read(self, addr):
         ...
-    def write(addr, value):
+    def write(self, addr, value):
         ...
 
 class Prim:
@@ -33,6 +35,7 @@ class Prim:
     OP_STORE = 0x18
     OP_PUSH8  = 0x19
     OP_PUSH = 0x1a
+    OP_SIMEND = 0xff
     # stack sizes
     DS_SIZE = 16
     RS_SIZE = 16
@@ -47,13 +50,13 @@ class Prim:
         self._pc = 0 # pc is 17 bits
         self._ds = [0] * Prim.DS_SIZE
         self._rs = [0] * Prim.RS_SIZE
-        self._dsp = 0
-        self._rsp = 0
+        self._dsp = Prim.DS_SIZE - 1
+        self._rsp = Prim.RS_SIZE - 1
         self._lmf = 0 # last memory fetch
 
     def fetch(self, addr):
-        self._w = self._mif.read(addr)
-        return self._w
+        self._lmf = self._mif.read(addr)
+        return self._lmf
 
     def dpush(self, value):
         self._dsp = (self._dsp + 1) % Prim.DS_SIZE
@@ -170,7 +173,7 @@ class Prim:
 
     def fetch8(self):
         if (self._pc & 1) == 0:
-            w = self.fetch(self._pc)
+            w = self.fetch(self._pc >> 1)
         else:
             w = (self._lmf >> 8)
         self._pc += 1
@@ -178,20 +181,24 @@ class Prim:
 
     def fetch16(self):
         if (self._pc & 1) == 0:
-            w = self.fetch(self._pc)
+            w = self.fetch(self._pc >> 1)
         else:
             w = self._lmf & 0xff00
-            w |= self.fetch(self._pc) & 0xff
+            w |= self.fetch(self._pc >> 1) & 0xff
         self._pc += 2
         return w & 0xffff
 
     def step(self):
         ir = self.fetch8()
-        self._pc += 1
+        if ir == Prim.OP_SIMEND:
+            return False
         self.execute(ir)
+        return True
 
-def main():
-    return 0
-
-if __name__ == "__main__":
-    exit(main())
+    def status(self):
+        for d in range(self._dsp+1):
+            sys.stdout.write(f"{self._ds[d]:x} ")
+        print()
+        for r in range(self._rsp+1):
+            sys.stdout.write(f"{self._rs[r]:x} ")
+        print()
