@@ -28,13 +28,16 @@ class Prim:
     OP_NIP = 0x11
     OP_ROT = 0x12
     OP_NROT = 0x13
-    OP_TO_R = 0x14
-    OP_FROM_R = 0x15
-    OP_INT = 0x16
-    OP_FETCH = 0x17
-    OP_STORE = 0x18
-    OP_PUSH8  = 0x19
-    OP_PUSH = 0x1a
+    OP_DROP = 0x14
+    OP_RDROP = 0x15
+    OP_CARRY = 0x16
+    OP_TO_R = 0x17
+    OP_FROM_R = 0x18
+    OP_INT = 0x19
+    OP_FETCH = 0x1a
+    OP_STORE = 0x1b
+    OP_PUSH8  = 0x1c
+    OP_PUSH = 0x1d
     OP_SIMEND = 0xff
     # stack sizes
     DS_SIZE = 16
@@ -53,6 +56,7 @@ class Prim:
         self._dsp = Prim.DS_SIZE - 1
         self._rsp = Prim.RS_SIZE - 1
         self._lmf = 0 # last memory fetch
+        self._carry = 0
 
     def fetch(self, addr):
         self._lmf = self._mif.read(addr)
@@ -68,11 +72,11 @@ class Prim:
 
     def dpop(self):
         self._dsp = (self._dsp - 1) % Prim.DS_SIZE
-        return self._ds[self._dsp+1]
+        return self._ds[(self._dsp + 1) % Prim.DS_SIZE]
 
-    def dpop(self):
+    def rpop(self):
         self._rsp = (self._rsp - 1) % Prim.RS_SIZE
-        return self._rs[self._rsp+1]
+        return self._rs[(self._rsp + 1 % prim.RS_SIZE)]
 
     def T(self):
         return self._ds[self._dsp]
@@ -97,15 +101,15 @@ class Prim:
         elif ir == Prim.OP_CALL:
             retbit = 0
             self.rpush(self._pc)
-            self._pc = self.dpop()
+            self._pc = self.dpop() >> 1
         elif ir == Prim.OP_JP:
             retbit = 0
-            self._pc = self.dpop()
+            self._pc = self.dpop() >> 1
         elif ir == Prim.OP_JPZ:
             retbit = 0
             (f,addr) = (self.dpop(), self.dpop())
             if f == 0:
-                self._pc = addr
+                self._pc = addr >> 1
         elif ir == Prim.OP_AND:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(N & T)
@@ -118,15 +122,21 @@ class Prim:
         elif ir == Prim.OP_NOT:
             self.dpush(~self.dpop())
         elif ir == Prim.OP_LSR:
-            self.dpush(self.dpop() >> 1)
+            T = self.dpop()
+            self.dpush(T >> 1)
+            self._carry = (T & 1) != 0
         elif ir == Prim.OP_LSL:
-            self.dpush(self.dpop() << 1)
+            T = self.dpop()
+            self.dpush(T << 1)
+            self._carry = (T & 0x10000) != 0
         elif ir == Prim.OP_ADD:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(N + T)
+            self._carry = (N + T) > 0xffff
         elif ir == Prim.OP_SUB:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(N - T)
+            self._carry = (N - T) < 0
         elif ir == Prim.OP_LTS:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(Prim.comp2(N) < Prim.comp2(N))
@@ -151,6 +161,12 @@ class Prim:
             self.dpush(T)
             self.dpush(n2)
             self.dpush(N)
+        elif ir == Prim.OP_DROP:
+            self.dpop()
+        elif ir == Prim.OP_RDROP:
+            self.rpop()
+        elif ir == Prim.OP_CARRY:
+            self.dpush(self._carry)
         elif ir == Prim.OP_TO_R:
             self.rpush(self.dpop())
         elif ir == Prim.OP_FROM_R:
