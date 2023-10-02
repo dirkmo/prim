@@ -69,17 +69,20 @@ class PrimAsm:
             return (token[0:idx], token[idx:] == mod)
         return (token, False)
 
-    def assemble(line, addr=0):
+    def assemble(line):
         data = []
         tok = PrimAsm.tokenize(line)
         for t in tok:
-            sys.stdout.write(f"{t} ")
+            # sys.stdout.write(f"{t} ")
             t = t.upper()
             (t, retbit) = PrimAsm.modifier(t)
             if t in PrimAsm.INSTRUCTIONS:
                 opcodes = [PrimAsm.INSTRUCTIONS[t]]
             else: # try to convert as a number
-                num = PrimAsm.convertToNumber(t) & 0xffff
+                try:
+                    num = PrimAsm.convertToNumber(t) & 0xffff
+                except:
+                    raise Exception(f"ERROR: {t} is not a valid instruction or number")
                 if num < 0x100:
                     opcodes = [Prim.OP_PUSH8]
                     opcodes.append(num)
@@ -88,9 +91,8 @@ class PrimAsm:
                     opcodes.extend([num & 0xff, (num >> 8) & 0xff])
             if retbit:
                 opcodes[0] |= 0x80
-            print(list(map(hex, opcodes)))
+            # print(list(map(hex, opcodes)))
             data.extend(opcodes)
-            addr += len(opcodes)
         return data
 
     def assembleFile(inputfn, outputfn=""):
