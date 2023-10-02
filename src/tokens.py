@@ -8,26 +8,34 @@ class Consts:
 
 class Token:
     DEFINITION = 0
-    LIT_NUMBER_DEC = 1
-    LIT_NUMBER_HEX = 2
-    LIT_STRING = 3
-    LIT_WORD_ADDRESS = 4
-    IMMEDIATE = 5
-    IMMEDIATE_NUMBER_DEC = 6
-    IMMEDIATE_NUMBER_HEX = 7
+
+    LIT_NUMBER = 1
+    LIT_STRING = 2
+
+    COMPILE_WORD_CALL = 3
+    COMPILE_WORD_ADDRESS = 4
+    COMPILE_NUMBER = 5
+    COMPILE_STRING = 6
+
+    IMMEDIATE_WORD_CALL = 7
     IMMEDIATE_WORD_ADDRESS = 8
-    COMMENT_BRACES = 9
-    COMMENT_BACKSLASH = 10
-    COMPILE_WORD = 11
-    WHITESPACE= 12
-    BUILDIN = 13
+    IMMEDIATE_NUMBER = 9
+    IMMEDIATE_STRING = 10
+
+    MNEMONIC = 11
+    BUILDIN = 12
+
+    COMMENT_BRACES = 13
+    COMMENT_BACKSLASH = 14
+    WHITESPACE= 15
 
     D = {}
     Didx = 0
 
-    def __init__(self, tag, fragment):
+    def __init__(self, tag, fragment, immediate):
         self.tag = tag
         self.fragment = fragment
+        self.immediate = immediate
 
     def addDefinition(name):
         assert not name in Token.D, f"{name} already defined"
@@ -50,8 +58,8 @@ class Token:
 
 
 class TokenDefinition(Token):
-    def __init__(self, name, fragment):
-        super().__init__(self.DEFINITION, fragment)
+    def __init__(self, name, fragment, immediate):
+        super().__init__(self.DEFINITION, fragment, immediate)
         self.name = name
         Token.addDefinition(name)
 
@@ -59,23 +67,11 @@ class TokenDefinition(Token):
         return Token.generateStringData(self.tag, self.name)
 
 
-class TokenLiteralNumberDec(Token):
-    def __init__(self, num, fragment):
-        super().__init__(self.LIT_NUMBER_DEC, fragment)
+class TokenLiteralNumber(Token):
+    def __init__(self, num, fragment, immediate):
+        super().__init__(self.LIT_NUMBER, fragment, immediate)
         self.value = num
-        print(f"literal: {self.value}")
-
-    def generate(self):
-        data = [self.tag]
-        data.extend(hilo(self.value))
-        return data
-
-
-class TokenLiteralNumberHex(Token):
-    def __init__(self, num, fragment):
-        super().__init__(self.LIT_NUMBER_HEX, fragment)
-        self.value = num
-        print(f"literal: ${self.value:x}")
+        print(f"literal number: {self.value}")
 
     def generate(self):
         data = [self.tag]
@@ -84,8 +80,8 @@ class TokenLiteralNumberHex(Token):
 
 
 class TokenLiteralString(Token):
-    def __init__(self, s, fragment):
-        super().__init__(self.LIT_STRING, fragment)
+    def __init__(self, s, fragment, immediate):
+        super().__init__(self.LIT_STRING, fragment, immediate)
         self.s = s
         print(f"Literal string '{s}'")
 
@@ -93,9 +89,19 @@ class TokenLiteralString(Token):
         return Token.generateStringData(self.tag, self.s)
 
 
-class TokenLiteralWordAddress(Token):
-    def __init__(self, s, fragment):
-        super().__init__(self.LIT_WORD_ADDRESS, fragment)
+class TokenCompileWordCall(Token):
+    def __init__(self, s, fragment, immediate):
+        super().__init__(self.COMPILE_WORD_CALL, fragment, immediate)
+        self.name = s
+        print(f"Compile Word Call {s}")
+
+    def generate(self):
+        return [self.tag, Token.D[self.name]]
+
+
+class TokenCompileWordAddress(Token):
+    def __init__(self, s, fragment, immediate):
+        super().__init__(self.COMPILE_WORD_ADDRESS, fragment, immediate)
         self.name = s
         print(f"Literal word address {s}")
 
@@ -106,9 +112,41 @@ class TokenLiteralWordAddress(Token):
         return data
 
 
+class TokenCompileNumber(Token):
+    def __init__(self, num, fragment, immediate):
+        super().__init__(self.COMPILE_NUMBER, fragment, immediate)
+        self.value = num
+        print(f"Compile Number {num}")
+
+    def generate(self):
+        data = [self.tag]
+        data.extend(hilo(self.value))
+
+
+class TokenCompileString(Token):
+    def __init__(self, s, fragment, immediate):
+        super().__init__(self.WHITESPACE, fragment, immediate)
+        self.s = s
+        print(f"Compile String {s}")
+
+    def generate(self):
+        return Token.generateStringData(self.tag, self.s)
+
+
+
+
+
+
+
+
+
+
+
+
+
 class TokenImmediate(Token):
-    def __init__(self, name, fragment):
-        super().__init__(self.IMMEDIATE, fragment)
+    def __init__(self, name, fragment, immediate):
+        super().__init__(self.IMMEDIATE, fragment, immediate)
         self.name = name
         print(f"Immediate call: {name}")
 
@@ -118,8 +156,8 @@ class TokenImmediate(Token):
 
 
 class TokenImmediateNumberHex(Token):
-    def __init__(self, num, fragment):
-        super().__init__(self.IMMEDIATE_NUMBER_HEX, fragment)
+    def __init__(self, num, fragment, immediate):
+        super().__init__(self.IMMEDIATE_NUMBER_HEX, fragment, immediate)
         self.value = num
         print(f"Immedate number ${num:x}")
 
@@ -130,8 +168,8 @@ class TokenImmediateNumberHex(Token):
 
 
 class TokenImmediateNumberDec(Token):
-    def __init__(self, num, fragment):
-        super().__init__(self.IMMEDIATE_NUMBER_DEC, fragment)
+    def __init__(self, num, fragment, immediate):
+        super().__init__(self.IMMEDIATE_NUMBER_DEC, fragment, immediate)
         self.value = num
         print(f"Immedate number {num}")
 
@@ -142,8 +180,8 @@ class TokenImmediateNumberDec(Token):
 
 
 class TokenCommentBraces(Token):
-    def __init__(self, s, fragment):
-        super().__init__(self.COMMENT_BRACES, fragment)
+    def __init__(self, s, fragment, immediate):
+        super().__init__(self.COMMENT_BRACES, fragment, immediate)
         self.comment = s
         print(f"Comment {self.comment}")
 
@@ -152,8 +190,8 @@ class TokenCommentBraces(Token):
 
 
 class TokenCommentBackslash(Token):
-    def __init__(self, s, fragment):
-        super().__init__(self.COMMENT_BACKSLASH, fragment)
+    def __init__(self, s, fragment, immediate):
+        super().__init__(self.COMMENT_BACKSLASH, fragment, immediate)
         self.comment = s
         print(f"Comment {self.comment}")
 
@@ -161,19 +199,9 @@ class TokenCommentBackslash(Token):
         return Token.generateStringData(self.tag, self.comment)
 
 
-class TokenCompileWord(Token):
-    def __init__(self, s, fragment):
-        super().__init__(self.COMPILE_WORD, fragment)
-        self.name = s
-        print(f"Compile {s}")
-
-    def generate(self):
-        return [self.tag, Token.D[self.name]]
-
-
 class TokenImmediateWordAddress(Token):
-    def __init__(self, s, fragment):
-        super().__init__(self.IMMEDIATE_WORD_ADDRESS, fragment)
+    def __init__(self, s, fragment, immediate):
+        super().__init__(self.IMMEDIATE_WORD_ADDRESS, fragment, immediate)
         self.name = s
         print(f"Push word address {s}")
 
@@ -182,8 +210,8 @@ class TokenImmediateWordAddress(Token):
 
 
 class TokenWhitespace(Token):
-    def __init__(self, s, fragment):
-        super().__init__(self.WHITESPACE, fragment)
+    def __init__(self, s, fragment, immediate):
+        super().__init__(self.WHITESPACE, fragment, immediate)
         self.ws = s
         print(f"Whitespace")
 
@@ -192,8 +220,8 @@ class TokenWhitespace(Token):
 
 
 class TokenBuildin(Token):
-    def __init__(self, s, fragment):
-        super().__init__(self.BUILDIN, fragment)
+    def __init__(self, s, fragment, immediate):
+        super().__init__(self.BUILDIN, fragment, immediate)
         self.name = s
         print(f"Buildin")
 

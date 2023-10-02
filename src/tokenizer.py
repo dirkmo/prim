@@ -3,7 +3,7 @@
 import argparse
 import sys
 from tokens import *
-
+import primasm
 
 class Fragment:
     def __init__(self, _s, _linenum):
@@ -62,67 +62,65 @@ def merge_fragments(fragments):
     return fragments
 
 
+def isMnemonic(s):
+    return s.upper() in primasm.PrimAsm.INSTRUCTIONS
+
+
 def isBuildin(s):
     s = s.upper()
-    bi = ["H", ",", ";", "NOP", "CALL", "JP", "JPZ", "AND", "OR", "XOR", "NOT", "LSR", "LSL", "ADD", "SUB", "LTS", "LTU", "SWAP", "OVER", "DUP", "NIP", "ROT", "NROT", "DROP", "RDROP", "CARRY", "TO_R", "FROM_R", "INT", "@", "!", "PUSH8", "PUSH", "SIMEND"]
+    bi = [",", ";"]
     return s in bi
 
 
 def tokenizeFragments(fragments):
     tokens = []
+    immediate = False
     for f in fragments:
         t = f.s
+        newTokens = []
         if len(t.strip()):
             print(f"'{t.strip()}'")
-            if isBuildin(t): # ";"
-                tokens.append(TokenBuildin(t, f))
+            if t == "[":
+                immediate = True
+            elif t == "]":
+                immediate = False
             elif t[0] == ":": # add name to (virtual) dictionary ":name"
-                tokens.append(TokenDefinition(t[1:], f))
-            elif t[0] == "#": # immediates
-                if t[1] == "'": # "#'name"
-                    assert Token.definitionAvailable(t[2:]), f"ERROR on line {f.linenum+1}: Unkown word {t[1:]}"
-                    tokens.append(TokenLiteralWordAddress(t[2:], f))
-                else: # "#name", "#123", "#$1a2b"
-                    # execute immediately
-                    if Token.definitionAvailable(t[1:]): # "#name"
-                        tokens.append(TokenImmediate(t[1:], f))
-                    else:
-                        try:
-                            if t[1] == '$': # "#$1a2b"
-                                num = int(t[2:], 16)
-                                tokens.append(TokenImmediateNumberHex(num, f))
-                            else: # "#123",
-                                num = int(t[1:], 10)
-                                tokens.append(TokenImmediateNumberDec(num, f))
-                        except:
-                            assert False, f"ERROR on line {f.linenum+1}: Unkown word {t[1:]}"
+                assert immediate == False, f"ERROR on line {f.linenum+1}: Definitions not allowed in immediate mode"
+                newTokens = TokenDefinition(t[1:], f, immediate)
+            elif isMnemonic(t):
+                #newTokens = TokenBuildin(t, f, immediate)
+                pass
+            elif isBuildin(t): # ";", ","
+                newTokens = TokenBuildin(t, f, immediate)
+            elif t[0] == "#":
+                pass
             elif t[0] == '"' and len(t) > 2: # '"str"'
-                tokens.append(TokenLiteralString(t[1:-1], f))
+                newTokens = TokenLiteralString(t[1:-1], f, immediate)
             elif t[0:2] == "\ ": # "\ comment"
-                tokens.append(TokenCommentBackslash(t, f))
+                newTokens = TokenCommentBackslash(t, f, immediate)
             elif t[0:2] == "( ": # "( comment )"
-                tokens.append(TokenCommentBraces(t, f))
+                newTokens = TokenCommentBraces(t, f, immediate)
             elif t[0] == "'": # "'name"
-                tokens.append(TokenImmediateWordAddress(t[1:], f))
+                newTokens = TokenImmediateWordAddress(t[1:], f, immediate)
             else: # "name", "123", "$1a2b"
                 # compile word
                 if Token.definitionAvailable(t): # "name"
-                    tokens.append(TokenCompileWord(t, f))
+                    newTokens = TokenCompileWordCall(t, f, immediate)
                 else:
                     # compile literal
                     try:
                         if t[0] == '$': # "$1a2b"
                             num = int(t[1:], 16)
-                            tokens.append(TokenLiteralNumberHex(num, f))
                         else: # "123"
                             num = int(t, 10)
-                            tokens.append(TokenLiteralNumberDec(num, f))
+                        newTokens = TokenLiteralNumber(num, f, immediate)
                     except:
                         assert False, f"ERROR on line {f.linenum+1}: Unknown word '{t[1:]}'"
         else: # empty line or whitespace
             if len(t) and t != ' ': # ignore single space
                 if ord(t[0]) < 33:
-                    tokens.append(TokenWhitespace(t, f))
+                    newTokens = TokenWhitespace(t, f, immediate)
+        tokens.append(newTokens)
     return tokens
 
 

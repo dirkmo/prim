@@ -33,8 +33,6 @@ class PrimAsm:
         "C@": Prim.OP_BYTE_FETCH,
         "!": Prim.OP_STORE,
         "C!": Prim.OP_BYTE_STORE,
-        "PUSH8": Prim.OP_PUSH8,
-        "PUSH": Prim.OP_PUSH,
         "SIMEND": Prim.OP_SIMEND
     }
 
