@@ -1,0 +1,4 @@
+:start and or 123 ;
+start 'start
+"Hallo1" #55 #"Hallo2"
+[ 123 start 'start ] ;

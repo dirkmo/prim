@@ -72,12 +72,19 @@ def isBuildin(s):
     return s in bi
 
 
+def stringToNumber(s):
+    if s[0] == '$': # "$1a2b"
+        return int(s[1:], 16)
+    # "123"
+    return int(s, 10)
+
+
 def tokenizeFragments(fragments):
     tokens = []
     immediate = False
     for f in fragments:
         t = f.s
-        newTokens = []
+        newTokens = None
         if len(t.strip()):
             print(f"'{t.strip()}'")
             if t == "[":
@@ -86,41 +93,49 @@ def tokenizeFragments(fragments):
                 immediate = False
             elif t[0] == ":": # add name to (virtual) dictionary ":name"
                 assert immediate == False, f"ERROR on line {f.linenum+1}: Definitions not allowed in immediate mode"
-                newTokens = TokenDefinition(t[1:], f, immediate)
+                newTokens = TokenDefinition(t[1:], f)
             elif isMnemonic(t):
-                #newTokens = TokenBuildin(t, f, immediate)
+                newTokens = TokenMnemonic(t, f)
                 pass
             elif isBuildin(t): # ";", ","
-                newTokens = TokenBuildin(t, f, immediate)
+                newTokens = TokenBuildin(t, f)
             elif t[0] == "#":
-                pass
-            elif t[0] == '"' and len(t) > 2: # '"str"'
-                newTokens = TokenLiteralString(t[1:-1], f, immediate)
+                if (len(t) > 3) and (t[1] == '"') and t[-1] == '"':
+                    newTokens = TokenLiteralString(t[2:-1],f)
+                else:
+                    try:
+                        num = stringToNumber(t[1:])
+                        newTokens = TokenLiteralNumber(num, f)
+                    except:
+                        assert False, f"ERROR on line {f.linenum+1}: Unknown word '{t[1:]}'"
+            elif t[0] == "'" and len(t) > 2: # 'name
+                if Token.definitionAvailable(t[1:]):
+                    newTokens = TokenWordAddress(t[1:], f, immediate)
+            elif t[0] == '"' and len(t) > 2 and t[-1] == '"': # '"str"'
+                newTokens = TokenString(t[1:-1], f, immediate)
             elif t[0:2] == "\ ": # "\ comment"
-                newTokens = TokenCommentBackslash(t, f, immediate)
+                newTokens = TokenCommentBackslash(t, f)
             elif t[0:2] == "( ": # "( comment )"
-                newTokens = TokenCommentBraces(t, f, immediate)
+                newTokens = TokenCommentBraces(t, f)
             elif t[0] == "'": # "'name"
-                newTokens = TokenImmediateWordAddress(t[1:], f, immediate)
+                newTokens = TokenWordAddress(t[1:], f, immediate)
             else: # "name", "123", "$1a2b"
                 # compile word
                 if Token.definitionAvailable(t): # "name"
-                    newTokens = TokenCompileWordCall(t, f, immediate)
+                    newTokens = TokenWordCall(t, f, immediate)
                 else:
                     # compile literal
                     try:
-                        if t[0] == '$': # "$1a2b"
-                            num = int(t[1:], 16)
-                        else: # "123"
-                            num = int(t, 10)
-                        newTokens = TokenLiteralNumber(num, f, immediate)
+                        num = stringToNumber(t)
+                        newTokens = TokenNumber(num, f, immediate)
                     except:
                         assert False, f"ERROR on line {f.linenum+1}: Unknown word '{t[1:]}'"
         else: # empty line or whitespace
             if len(t) and t != ' ': # ignore single space
                 if ord(t[0]) < 33:
-                    newTokens = TokenWhitespace(t, f, immediate)
-        tokens.append(newTokens)
+                    newTokens = TokenWhitespace(t, f)
+        if newTokens is not None:
+            tokens.append(newTokens)
     return tokens
 
 
@@ -144,7 +159,10 @@ def convert(fn):
     data = []
     for t in tokens:
         tokendata = t.generate()
-        print(f"'{t.fragment.s}' tag:{t.tag} data:{tokendata}")
+        if t.tag == Token.WHITESPACE:
+            print(f"WS tag:{t.tag}")
+        else:
+            print(f"'{t.fragment.s}' tag:{t.tag} data:{tokendata}")
         data.extend(tokendata)
 
     return data
