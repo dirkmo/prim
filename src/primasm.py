@@ -13,21 +13,29 @@ class PrimAsm:
         "NOT": Prim.OP_NOT,
         "LSR": Prim.OP_LSR,
         "LSL": Prim.OP_LSL,
-        "ADD": Prim.OP_ADD,
-        "SUB": Prim.OP_SUB,
-        "LTS": Prim.OP_LTS,
-        "LTU": Prim.OP_LTU,
+        "+": Prim.OP_ADD,
+        "-": Prim.OP_SUB,
+        "<": Prim.OP_LTS,
+        "<U": Prim.OP_LTU,
         "SWAP": Prim.OP_SWAP,
         "OVER": Prim.OP_OVER,
         "DUP": Prim.OP_DUP,
         "NIP": Prim.OP_NIP,
         "ROT": Prim.OP_ROT,
-        "NROT": Prim.OP_NROT,
-        "TO_R": Prim.OP_TO_R,
-        "FROM_R": Prim.OP_FROM_R,
+        "-ROT": Prim.OP_NROT,
+        "DROP": Prim.OP_DROP,
+        "RDROP": Prim.OP_RDROP,
+        "CARRY": Prim.OP_CARRY,
+        ">R": Prim.OP_TO_R,
+        "R>": Prim.OP_FROM_R,
         "INT": Prim.OP_INT,
-        "FETCH": Prim.OP_FETCH,
-        "STORE": Prim.OP_STORE,
+        "@": Prim.OP_FETCH,
+        "C@": Prim.OP_BYTE_FETCH,
+        "!": Prim.OP_STORE,
+        "C!": Prim.OP_BYTE_STORE,
+        "PUSH8": Prim.OP_PUSH8,
+        "PUSH": Prim.OP_PUSH,
+        "SIMEND": Prim.OP_SIMEND
     }
 
     def convertToNumber(s):
@@ -61,7 +69,7 @@ class PrimAsm:
             return (token[0:idx], token[idx:] == mod)
         return (token, False)
 
-    def assemble(line):
+    def assemble(line, addr=0):
         data = []
         tok = PrimAsm.tokenize(line)
         for t in tok:
@@ -82,6 +90,7 @@ class PrimAsm:
                 opcodes[0] |= 0x80
             print(list(map(hex, opcodes)))
             data.extend(opcodes)
+            addr += len(opcodes)
         return data
 
     def assembleFile(inputfn, outputfn=""):
@@ -95,23 +104,24 @@ class PrimAsm:
                 f.write(bytes(data))
 
     def disassemble(data):
-        lookup = [""] * 256
+        lookup = ["UNDEF"] * 256
         for instr in PrimAsm.INSTRUCTIONS:
             opcode = PrimAsm.INSTRUCTIONS[instr]
             lookup[opcode] = instr
         i = 0
         s = ""
         while i < len(data):
+            s += f"${i}: "
             retbit = (data[i] >> 7) & 1
-            data[i] &= 0x7f
-            if data[i] == Prim.OP_PUSH:
+            ir = data[i] & 0x7f
+            if ir == Prim.OP_PUSH:
                 s += f"0x{data[i+1]+(data[i+2]<<8):x}"
                 i += 3
-            elif data[i] == Prim.OP_PUSH8:
+            elif ir == Prim.OP_PUSH8:
                 s += f"0x{data[i+1]:x}"
                 i += 2
             else:
-                s += f"{lookup[data[i]]}"
+                s += f"{lookup[ir]}"
                 i += 1
             if retbit:
                 s += ".RET "
@@ -121,7 +131,8 @@ class PrimAsm:
 
 def main():
     # PrimAsm.assembleFile("src/test.asm", "src/test.bin")
-    data = PrimAsm.assemble("123 0x1234 and or add.ret # kommentar")
+    data = PrimAsm.assemble("123 nop call 0x1234 and or +.ret # kommentar")
+    print(data)
     print(repr(PrimAsm.disassemble(data)))
 
 if __name__ == "__main__":

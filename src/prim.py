@@ -1,9 +1,13 @@
 import sys
 
 class MemoryIf:
-    def read(self, addr):
+    def read8(self, addr):
         ...
-    def write(self, addr, value):
+    def read16(self, addr):
+        ...
+    def write8(self, addr, value):
+        ...
+    def write16(self, addr, value):
         ...
 
 class Prim:
@@ -35,10 +39,12 @@ class Prim:
     OP_FROM_R = 0x18
     OP_INT = 0x19
     OP_FETCH = 0x1a
-    OP_STORE = 0x1b
-    OP_PUSH8  = 0x1c
-    OP_PUSH = 0x1d
-    OP_SIMEND = 0xff
+    OP_BYTE_FETCH = 0x1b
+    OP_STORE = 0x1c
+    OP_BYTE_STORE = 0x1d
+    OP_PUSH8  = 0x1e
+    OP_PUSH = 0x1f
+    OP_SIMEND = 0x7f
     # stack sizes
     DS_SIZE = 16
     RS_SIZE = 16
@@ -50,17 +56,34 @@ class Prim:
         self.reset()
 
     def reset(self):
-        self._pc = 0 # pc is 17 bits
+        self._pc = 0
         self._ds = [0] * Prim.DS_SIZE
         self._rs = [0] * Prim.RS_SIZE
         self._dsp = Prim.DS_SIZE - 1
         self._rsp = Prim.RS_SIZE - 1
-        self._lmf = 0 # last memory fetch
         self._carry = 0
 
-    def fetch(self, addr):
-        self._lmf = self._mif.read(addr)
-        return self._lmf
+    def read8(self, addr):
+        return self._mif.read8(addr)
+
+    def read16(self, addr):
+        return self._mif.read16(addr)
+
+    def write8(self, addr, value):
+        self._mif.write8(addr, value)
+
+    def write16(self, addr, value):
+        self._mif.write16(addr, value)
+
+    def fetch8(self):
+        b = self.read8(self._pc)
+        self._pc = (self._pc + 1) & 0xffff
+        return b
+
+    def fetch16(self):
+        w = self.read16(self._pc)
+        self._pc = (self._pc + 2) & 0xffff
+        return w & 0xffff
 
     def dpush(self, value):
         self._dsp = (self._dsp + 1) % Prim.DS_SIZE
@@ -76,7 +99,7 @@ class Prim:
 
     def rpop(self):
         self._rsp = (self._rsp - 1) % Prim.RS_SIZE
-        return self._rs[(self._rsp + 1 % prim.RS_SIZE)]
+        return self._rs[(self._rsp + 1) % Prim.RS_SIZE]
 
     def T(self):
         return self._ds[self._dsp]
@@ -101,15 +124,17 @@ class Prim:
         elif ir == Prim.OP_CALL:
             retbit = 0
             self.rpush(self._pc)
-            self._pc = self.dpop() >> 1
+            addr = self.dpop()
+            self._pc = addr
         elif ir == Prim.OP_JP:
             retbit = 0
-            self._pc = self.dpop() >> 1
+            addr = self.dpop()
+            self._pc = addr
         elif ir == Prim.OP_JPZ:
             retbit = 0
             (f,addr) = (self.dpop(), self.dpop())
             if f == 0:
-                self._pc = addr >> 1
+                self._pc = addr
         elif ir == Prim.OP_AND:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(N & T)
@@ -139,10 +164,12 @@ class Prim:
             self._carry = (N - T) < 0
         elif ir == Prim.OP_LTS:
             (T, N) = (self.dpop(), self.dpop())
-            self.dpush(Prim.comp2(N) < Prim.comp2(N))
+            res = Prim.comp2(N) < Prim.comp2(T)
+            self.dpush(0xffff if res else 0)
         elif ir == Prim.OP_LTU:
             (T, N) = (self.dpop(), self.dpop())
-            self.dpush(Prim.comp2(N) < Prim.comp2(N))
+            res = N < T
+            self.dpush(0xffff if res else 0)
         elif ir == Prim.OP_SWAP:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(T)
@@ -176,33 +203,21 @@ class Prim:
             self.rpush(self._pc)
             self._pc = Prim.ISR_ADDR
         elif ir == Prim.OP_FETCH:
-            self.dpush(self._mif.read(self.dpop()))
+            self.dpush(self.read16(self.dpop()))
+        elif ir == Prim.OP_BYTE_FETCH:
+            self.dpush(self.read8(self.dpop()) & 0xff)
         elif ir == Prim.OP_STORE:
             (addr, data) = (self.dpop(), self.dpop())
-            self._mif.write(addr, data)
+            self._mif.write16(addr, data)
+        elif ir == Prim.OP_BYTE_STORE:
+            (addr, data) = (self.dpop(), self.dpop())
+            self.write8(addr, data)
         elif ir == Prim.OP_PUSH8:
             self.dpush(self.fetch8())
         elif ir == Prim.OP_PUSH:
             self.dpush(self.fetch16())
         if retbit:
             self._pc = self.rpop()
-
-    def fetch8(self):
-        if (self._pc & 1) == 0:
-            w = self.fetch(self._pc >> 1)
-        else:
-            w = (self._lmf >> 8)
-        self._pc += 1
-        return w & 0xff
-
-    def fetch16(self):
-        if (self._pc & 1) == 0:
-            w = self.fetch(self._pc >> 1)
-        else:
-            w = self._lmf & 0xff00
-            w |= self.fetch(self._pc >> 1) & 0xff
-        self._pc += 2
-        return w & 0xffff
 
     def step(self):
         ir = self.fetch8()
@@ -212,9 +227,12 @@ class Prim:
         return True
 
     def status(self):
+        print(f"pc: {self._pc:04x}")
+        sys.stdout.write("ds: ")
         for d in range(self._dsp+1):
             sys.stdout.write(f"{self._ds[d]:x} ")
         print()
+        sys.stdout.write("rs: ")
         for r in range(self._rsp+1):
             sys.stdout.write(f"{self._rs[r]:x} ")
         print()
