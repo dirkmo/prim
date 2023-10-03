@@ -28,11 +28,38 @@ class Mif(MemoryIf):
         self._mem[addr+1] = (value >> 8) & 0xff
 
 
-def interpret(tokens):
+class Dictionary:
+    D = []
+    def add(name, addr):
+        Dictionary.D.append((name, addr))
+    def lookup(idx):
+        return Dictionary.D[idx]
+
+
+def init(mif):
+    Dictionary.add("H", Consts.HERE)
+    mif.write16(Consts.HERE, Consts.HERE+2)
+
+
+def comma(mif, values):
+    here = mif.read16(Consts.HERE)
+    if type(values) == list:
+        for v in values:
+            mif.write8(here, v)
+            here += 1
+    else:
+        mif.write8(here, v)
+        here += 1
+    mif.write16(Consts.HERE, here)
+
+
+def interpret(tokens, cpu):
     idx = 0
     mode = Token.MODE_COMPILE
-    while True:
+    mif = cpu._mif
+    while idx < len(tokens):
         tag = tokens[idx]
+        idx += 1
         if mode == Token.MODE_COMPILE:
             if tag == Token.WORD_CALL:
                 pass
@@ -43,7 +70,11 @@ def interpret(tokens):
             elif tag == Token.STRING:
                 pass
             elif tag == Token.MNEMONIC:
-                pass
+                if mode == Token.MODE_COMPILE:
+                    comma(mif, tokens[idx])
+                    idx += 1
+                else:
+                    cpu.execute(tokens[idx])
             elif tag == Token.BUILDIN:
                 pass
             elif tag == Token.LIT_NUMBER:
@@ -51,14 +82,17 @@ def interpret(tokens):
             elif tag == Token.LIT_STRING:
                 pass
             elif tag == Token.DEFINITION:
-                pass
+                l = tokens[idx]
+                name = tokens[idx+1:idx+1+l].decode("utf-8")
+                idx += l + 1
+                Dictionary.add(name, mif.read16(Consts.HERE))
             elif tag == Token.MODE:
-                pass
-
-
-def init(data):
-    data[0:Consts.HERE] = Prim.OP_NOP
-    data[Consts.HERE] = Consts.HERE + 2
+                idx += 1
+                mode = tokens[idx]
+                if mode == Token.MODE_COMPILE:
+                    print("compile mode")
+                else:
+                    print("immediate mode")
 
 
 def main():
@@ -71,8 +105,9 @@ def main():
         tokendata = f.read()
 
     mif = Mif()
+    cpu = Prim(mif)
     init(mif)
-    interpret(tokendata, mif)
+    interpret(tokendata, cpu)
 
 if __name__ == "__main__":
     sys.exit(main())

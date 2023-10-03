@@ -1,11 +1,12 @@
 # prim
 
 ## The Plan
+
 Implement a primitive stack machine and a ColorForth like language that I call __TokenForth__.
 
 ### Stack Machine
 
-The CPU shall have 8-bit opcodes, a 16-bit ALU, 8-bit and 16-bit memory accesses, 16-bit data and return stacks. It implements the basic Forth instructions.
+The CPU has 8-bit opcodes, a 16-bit ALU, 8-bit and 16-bit memory accesses, 16-bit data and return stacks. It implements the basic Forth instructions.
 
 ```asm
 NOP
@@ -89,7 +90,7 @@ Example:
 #### IMMEDIATES
 Immediates are not compiled during compilation phase, but executed immediately.
 
-The syntax is like the copmilation tokens, but immediate mode must be started with `[`. Immediate mode can be ended by `]`.
+The syntax is like the compilation tokens, but immediate mode must be started with `[`. Immediate mode can be ended by `]`.
 
 ##### IMMEDIATE NUMBER
 ```
@@ -112,7 +113,7 @@ During compilation of `word1`, the compiler executes `2` resulting with a 2 on t
 Mnemonics are the names of the CPU instructions.
 
 #### BUILDINS
-Buidins are tokens that are understood by the tokenizer, and will be translated somehow to CPU instructions.
+Buildins are tokens that are understood by the tokenizer, and will be translated somehow to CPU instructions.
 
 |Buildin|Description|
 |-------|-----------|
