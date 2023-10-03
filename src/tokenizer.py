@@ -81,18 +81,16 @@ def stringToNumber(s):
 
 def tokenizeFragments(fragments):
     tokens = []
-    immediate = False
     for f in fragments:
         t = f.s
         newTokens = None
         if len(t.strip()):
             print(f"'{t.strip()}'")
             if t == "[":
-                immediate = True
+                newTokens = TokenMode(t, f, Token.MODE_IMMEDIATE)
             elif t == "]":
-                immediate = False
+                newTokens = TokenMode(t, f, Token.MODE_COMPILE)
             elif t[0] == ":": # add name to (virtual) dictionary ":name"
-                assert immediate == False, f"ERROR on line {f.linenum+1}: Definitions not allowed in immediate mode"
                 newTokens = TokenDefinition(t[1:], f)
             elif isMnemonic(t):
                 newTokens = TokenMnemonic(t, f)
@@ -110,24 +108,24 @@ def tokenizeFragments(fragments):
                         assert False, f"ERROR on line {f.linenum+1}: Unknown word '{t[1:]}'"
             elif t[0] == "'" and len(t) > 2: # 'name
                 if Token.definitionAvailable(t[1:]):
-                    newTokens = TokenWordAddress(t[1:], f, immediate)
+                    newTokens = TokenWordAddress(t[1:], f)
             elif t[0] == '"' and len(t) > 2 and t[-1] == '"': # '"str"'
-                newTokens = TokenString(t[1:-1], f, immediate)
+                newTokens = TokenString(t[1:-1], f)
             elif t[0:2] == "\ ": # "\ comment"
                 newTokens = TokenCommentBackslash(t, f)
             elif t[0:2] == "( ": # "( comment )"
                 newTokens = TokenCommentBraces(t, f)
             elif t[0] == "'": # "'name"
-                newTokens = TokenWordAddress(t[1:], f, immediate)
+                newTokens = TokenWordAddress(t[1:], f)
             else: # "name", "123", "$1a2b"
                 # compile word
                 if Token.definitionAvailable(t): # "name"
-                    newTokens = TokenWordCall(t, f, immediate)
+                    newTokens = TokenWordCall(t, f)
                 else:
                     # compile literal
                     try:
                         num = stringToNumber(t)
-                        newTokens = TokenNumber(num, f, immediate)
+                        newTokens = TokenNumber(num, f)
                     except:
                         assert False, f"ERROR on line {f.linenum+1}: Unknown word '{t[1:]}'"
         else: # empty line or whitespace

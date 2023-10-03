@@ -2,3 +2,4 @@
 start 'start
 "Hallo1" #55 #"Hallo2"
 [ 123 start 'start ] ;
+[ 1 , ] 2 ,

@@ -1,4 +1,5 @@
 from primasm import PrimAsm
+import sys
 
 def hilo(v):
     return [(v >> 8) & 0xff, v & 0xff]
@@ -7,29 +8,29 @@ class Consts:
     HERE = 8 # here is at address 8
 
 class Token:
-    COMPILE_WORD_CALL = 0
-    COMPILE_WORD_ADDRESS = 1
-    COMPILE_NUMBER = 2
-    COMPILE_STRING = 3
+    WORD_CALL = 0
+    WORD_ADDRESS = 1
+    NUMBER = 2
+    STRING = 3
+    MNEMONIC = 4
+    BUILDIN = 5
+    LIT_NUMBER = 6
+    LIT_STRING = 7
 
-    IMMEDIATE_WORD_CALL = 4
-    IMMEDIATE_WORD_ADDRESS = 5
-    IMMEDIATE_NUMBER = 6
-    IMMEDIATE_STRING = 7
+    DEFINITION = 8
 
-    MNEMONIC = 8
-    BUILDIN = 9
-    LIT_NUMBER = 10
-    LIT_STRING = 11
+    MODE = 9
 
-    DEFINITION = 12
+    COMMENT_BRACES = 10
+    COMMENT_BACKSLASH = 11
+    WHITESPACE= 12
 
-    COMMENT_BRACES = 13
-    COMMENT_BACKSLASH = 14
-    WHITESPACE= 15
+    MODE_COMPILE = 0
+    MODE_IMMEDIATE = 1
 
     D = {}
     Didx = 0
+    mode = MODE_COMPILE
 
     def __init__(self, tag, fragment):
         self.tag = tag
@@ -65,14 +66,26 @@ class TokenDefinition(Token):
         return Token.generateStringData(self.tag, self.name)
 
 
-class TokenWordCall(Token):
-    def __init__(self, s, fragment, immediate):
-        if immediate:
-            super().__init__(self.IMMEDIATE_WORD_CALL, fragment)
-            print(f"Immediate Word Call {s}")
+class TokenMode(Token):
+    def __init__(self, name, fragment, mode):
+        super().__init__(self.MODE, fragment)
+        assert mode in [self.MODE_COMPILE, self.MODE_IMMEDIATE], f"Invalid mode {mode}"
+        Token.mode = mode
+        if mode == Token.MODE_COMPILE:
+            print("Compile Mode")
         else:
-            super().__init__(self.COMPILE_WORD_CALL, fragment)
-            print(f"Compile Word Call {s}")
+            print("Immediate Mode")
+
+    def generate(self):
+        return [self.tag, Token.mode]
+
+
+class TokenWordCall(Token):
+    def __init__(self, s, fragment):
+        super().__init__(self.WORD_CALL, fragment)
+        if Token.mode == Token.MODE_IMMEDIATE:
+            sys.stdout.write("Immediate ")
+        print(f"Word Call {s}")
         self.name = s
 
     def generate(self):
@@ -80,13 +93,11 @@ class TokenWordCall(Token):
 
 
 class TokenWordAddress(Token):
-    def __init__(self, s, fragment, immediate):
-        if immediate:
-            super().__init__(self.IMMEDIATE_WORD_ADDRESS, fragment)
-            print(f"Immediate word address {s}")
-        else:
-            super().__init__(self.COMPILE_WORD_ADDRESS, fragment)
-            print(f"Compile word address {s}")
+    def __init__(self, s, fragment):
+        super().__init__(self.WORD_ADDRESS, fragment)
+        if Token.mode == Token.MODE_IMMEDIATE:
+            sys.stdout.write("Immediate ")
+        print(f"Word Address {s}")
         self.name = s
 
     def generate(self):
@@ -97,13 +108,12 @@ class TokenWordAddress(Token):
 
 
 class TokenNumber(Token):
-    def __init__(self, num, fragment, immediate):
-        if immediate:
-            super().__init__(self.COMPILE_NUMBER, fragment)
-        else:
-            super().__init__(self.IMMEDIATE_NUMBER, fragment)
-        self.value = num
+    def __init__(self, num, fragment):
+        super().__init__(self.NUMBER, fragment)
+        if Token.mode == Token.MODE_IMMEDIATE:
+            sys.stdout.write("Immediate ")
         print(f"Compile Number {num}")
+        self.value = num
 
     def generate(self):
         data = [self.tag]
@@ -112,13 +122,11 @@ class TokenNumber(Token):
 
 
 class TokenString(Token):
-    def __init__(self, s, fragment, immediate):
-        if immediate:
-            super().__init__(self.IMMEDIATE_STRING, fragment)
-            print(f"Immediate String {s}")
-        else:
-            super().__init__(self.COMPILE_STRING, fragment)
-            print(f"Compile String {s}")
+    def __init__(self, s, fragment):
+        super().__init__(self.STRING, fragment)
+        if Token.mode == Token.MODE_IMMEDIATE:
+            sys.stdout.write("Immediate ")
+        print(f"String {s}")
         self.s = s
 
     def generate(self):
@@ -129,6 +137,8 @@ class TokenMnemonic(Token):
     def __init__(self, s, fragment):
         super().__init__(self.MNEMONIC, fragment)
         self.mnemonic = s
+        if Token.mode == Token.MODE_IMMEDIATE:
+            sys.stdout.write("Immediate ")
         print(f"Mnemonic {s}")
 
     def generate(self):
@@ -141,6 +151,8 @@ class TokenBuildin(Token):
     def __init__(self, s, fragment):
         super().__init__(self.BUILDIN, fragment)
         self.name = s
+        if Token.mode == Token.MODE_IMMEDIATE:
+            sys.stdout.write("Immediate ")
         print(f"Buildin {s}")
 
     def generate(self):
