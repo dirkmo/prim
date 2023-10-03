@@ -5,7 +5,7 @@ def hilo(v):
     return [(v >> 8) & 0xff, v & 0xff]
 
 class Consts:
-    HERE = 8 # here is at address 8
+    HERE = 10 # here is at address 8
 
 class Token:
     WORD_CALL = 0
