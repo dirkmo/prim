@@ -48,7 +48,7 @@ def comma(mif, values):
             mif.write8(here, v)
             here += 1
     else:
-        mif.write8(here, v)
+        mif.write8(here, values)
         here += 1
     mif.write16(Consts.HERE, here)
 
@@ -59,28 +59,60 @@ def interpret(tokens, cpu):
     mif = cpu._mif
     while idx < len(tokens):
         tag = tokens[idx]
+        print(f"tag: {tag}")
         idx += 1
         if mode == Token.MODE_COMPILE:
             if tag == Token.WORD_CALL:
-                pass
+                addr = Dictionary.lookup(tokens[idx])
+                ops = [Prim.OP_CALL, addr & 0xff, (addr >> 8) & 0xff]
+                if mode == Token.MODE_COMPILE:
+                    comma(mif, ops)
+                else:
+                    pass # TODO
+                idx += 1
             elif tag == Token.WORD_ADDRESS:
-                pass
+                addr = Dictionary.lookup(tokens[idx])
+                ops = [Prim.OP_PUSH, addr & 0xff, (addr >> 8) & 0xff]
+                if mode == Token.MODE_COMPILE:
+                    comma(mif, ops)
+                else:
+                    pass # TODO
+                idx += 1
             elif tag == Token.NUMBER:
-                pass
+                num = tokens[idx] | (tokens[idx+1] << 8)
+                idx += 2
+                ops = [Prim.OP_PUSH, num & 0xff, (num >> 8) & 0xff]
+                if mode == Token.MODE_COMPILE:
+                    comma(mif, ops)
+                else:
+                    pass # TODO
+                idx += 1
             elif tag == Token.STRING:
                 pass
             elif tag == Token.MNEMONIC:
                 if mode == Token.MODE_COMPILE:
                     comma(mif, tokens[idx])
-                    idx += 1
                 else:
                     cpu.execute(tokens[idx])
+                idx += 1
             elif tag == Token.BUILDIN:
-                pass
+                l = tokens[idx]
+                idx += 1
+                if mode == Token.MODE_COMPILE:
+                    comma(mif, tokens[idx:idx+l])
+                    idx += l
+                else:
+                    for op in tokens[idx:idx+l]:
+                        cpu.execute(op)
             elif tag == Token.LIT_NUMBER:
-                pass
+                comma(mif, tokens[idx:idx+1])
+                idx += 2
             elif tag == Token.LIT_STRING:
-                pass
+                l = tokens[idx]
+                name = tokens[idx+1:idx+1+l].decode("utf-8")
+                idx += l + 1
+                comma(mif, l)
+                comma(mif, tokens[idx:idx+1])
             elif tag == Token.DEFINITION:
                 l = tokens[idx]
                 name = tokens[idx+1:idx+1+l].decode("utf-8")
@@ -93,6 +125,9 @@ def interpret(tokens, cpu):
                     print("compile mode")
                 else:
                     print("immediate mode")
+            elif tag in [Token.COMMENT_BACKSLASH, Token.COMMENT_BRACES, Token.WHITESPACE]:
+                l = tokens[idx]
+                idx += l + 1
 
 
 def main():

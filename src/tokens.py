@@ -1,8 +1,8 @@
 from primasm import PrimAsm
 import sys
 
-def hilo(v):
-    return [(v >> 8) & 0xff, v & 0xff]
+def lohi(v):
+    return [v & 0xff, (v >> 8) & 0xff]
 
 class Consts:
     HERE = 10 # here is at address 8
@@ -102,7 +102,7 @@ class TokenWordAddress(Token):
     def generate(self):
         addr = Token.D[self.name]
         data = [self.tag]
-        data.extend(hilo(addr))
+        data.extend(lohi(addr))
         return data
 
 
@@ -116,7 +116,7 @@ class TokenNumber(Token):
 
     def generate(self):
         data = [self.tag]
-        data.extend(hilo(self.value))
+        data.extend(lohi(self.value))
         return data
 
 
@@ -156,14 +156,17 @@ class TokenBuildin(Token):
 
     def generate(self):
         data = [self.tag]
+        ops = []
         if self.name == ";":
-            data.extend(PrimAsm.assemble("NOP.RET"))
+            ops.extend(PrimAsm.assemble("NOP.RET"))
         elif self.name == ",":
-            data.extend(PrimAsm.assemble(f"{Consts.HERE} @ ! {Consts.HERE} @ 1 + {Consts.HERE} !"))
+            ops.extend(PrimAsm.assemble(f"{Consts.HERE} @ ! {Consts.HERE} @ 1 + {Consts.HERE} !"))
         elif self.name == "H":
-            data.extend(PrimAsm.assemble(f"{Consts.HERE}"))
+            ops.extend(PrimAsm.assemble(f"{Consts.HERE}"))
         else:
-            data.extend(PrimAsm.assemble(self.name))
+            ops.extend(PrimAsm.assemble(self.name))
+        data.append(len(ops))
+        data.extend(ops)
         return data
 
 
@@ -175,7 +178,7 @@ class TokenLiteralNumber(Token):
 
     def generate(self):
         data = [self.tag]
-        data.extend(hilo(self.value))
+        data.extend(lohi(self.value))
         return data
 
 
