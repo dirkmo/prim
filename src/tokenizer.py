@@ -81,6 +81,7 @@ def stringToNumber(s):
 
 def tokenizeFragments(fragments):
     tokens = []
+    immediate = False
     for f in fragments:
         t = f.s
         newTokens = None
@@ -88,9 +89,12 @@ def tokenizeFragments(fragments):
             print(f"'{t.strip()}'")
             if t == "[":
                 newTokens = TokenMode(t, f, Token.MODE_IMMEDIATE)
+                immediate = True
             elif t == "]":
                 newTokens = TokenMode(t, f, Token.MODE_COMPILE)
+                immediate = False
             elif t[0] == ":": # add name to (virtual) dictionary ":name"
+                assert not immediate, f"ERROR on line {f.linenum+1}: Definition {t[1:]} not possible in immediate mode."
                 newTokens = TokenDefinition(t[1:], f)
             elif isMnemonic(t):
                 newTokens = TokenMnemonic(t, f)
@@ -98,6 +102,7 @@ def tokenizeFragments(fragments):
             elif isBuildin(t): # ";", ","
                 newTokens = TokenBuildin(t, f)
             elif t[0] == "#":
+                assert not immediate, f"ERROR on line {f.linenum+1}: Literal {t} not possible in immediate mode."
                 if (len(t) > 3) and (t[1] == '"') and t[-1] == '"':
                     newTokens = TokenLiteralString(t[2:-1],f)
                 else:
@@ -110,6 +115,7 @@ def tokenizeFragments(fragments):
                 if Token.definitionAvailable(t[1:]):
                     newTokens = TokenWordAddress(t[1:], f)
             elif t[0] == '"' and len(t) > 2 and t[-1] == '"': # '"str"'
+                assert not immediate, f"ERROR on line {f.linenum+1}: String {t} not possible in immediate mode."
                 newTokens = TokenString(t[1:-1], f)
             elif t[0:2] == "\ ": # "\ comment"
                 newTokens = TokenCommentBackslash(t, f)
