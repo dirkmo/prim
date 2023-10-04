@@ -36,7 +36,7 @@ def fragment(s):
     return fragments
 
 
-def merge_fragments(fragments):
+def merge_comment_fragments(fragments):
     ## merge comments to single fragment
     merge = []
     # \ comments
@@ -67,9 +67,8 @@ def isMnemonic(s):
 
 
 def isBuildin(s):
-    s = s.upper()
-    bi = [",", ";"]
-    return s in bi
+    idx = BuildIn.getIndexByName(s)
+    return idx >= 0
 
 
 def stringToNumber(s):
@@ -94,7 +93,7 @@ def tokenizeFragments(fragments):
                 newTokens = TokenMode(t, f, Token.MODE_COMPILE)
                 immediate = False
             elif t[0] == ":": # add name to (virtual) dictionary ":name"
-                assert not immediate, f"ERROR on line {f.linenum+1}: Definition {t[1:]} not possible in immediate mode."
+                assert not immediate, f"ERROR on line {f.linenum}: Definition {t[1:]} not possible in immediate mode."
                 newTokens = TokenDefinition(t[1:], f)
             elif isMnemonic(t):
                 newTokens = TokenMnemonic(t, f)
@@ -102,7 +101,7 @@ def tokenizeFragments(fragments):
             elif isBuildin(t): # ";", ","
                 newTokens = TokenBuildin(t, f)
             elif t[0] == "#":
-                assert not immediate, f"ERROR on line {f.linenum+1}: Literal {t} not possible in immediate mode."
+                assert not immediate, f"ERROR on line {f.linenum}: Literal {t} not possible in immediate mode."
                 if (len(t) > 3) and (t[1] == '"') and t[-1] == '"':
                     newTokens = TokenLiteralString(t[2:-1],f)
                 else:
@@ -110,12 +109,12 @@ def tokenizeFragments(fragments):
                         num = stringToNumber(t[1:])
                         newTokens = TokenLiteralNumber(num, f)
                     except:
-                        assert False, f"ERROR on line {f.linenum+1}: Unknown word '{t[1:]}'"
+                        assert False, f"ERROR on line {f.linenum}: Unknown word '{t[1:]}'"
             elif t[0] == "'" and len(t) > 2: # 'name
                 if Token.definitionAvailable(t[1:]):
                     newTokens = TokenWordAddress(t[1:], f)
             elif t[0] == '"' and len(t) > 2 and t[-1] == '"': # '"str"'
-                assert not immediate, f"ERROR on line {f.linenum+1}: String {t} not possible in immediate mode."
+                assert not immediate, f"ERROR on line {f.linenum}: String {t} not possible in immediate mode."
                 newTokens = TokenString(t[1:-1], f)
             elif t[0:2] == "\ ": # "\ comment"
                 newTokens = TokenCommentBackslash(t, f)
@@ -133,13 +132,30 @@ def tokenizeFragments(fragments):
                         num = stringToNumber(t)
                         newTokens = TokenNumber(num, f)
                     except:
-                        assert False, f"ERROR on line {f.linenum+1}: Unknown word '{t[1:]}'"
+                        assert False, f"ERROR on line {f.linenum}: Unknown word '{t[1:]}'"
         else: # empty line or whitespace
             if len(t) and t != ' ': # ignore single space
                 if ord(t[0]) < 33:
                     newTokens = TokenWhitespace(t, f)
         if newTokens is not None:
             tokens.append(newTokens)
+    return tokens
+
+
+def initialFragments():
+    fragments = []
+    # add code fragments for comma
+    F_comma = fragment(":, 'H @ ! 'H @ 1 + 'H !")
+    for f in F_comma:
+        fragments.append(Fragment(f,0))
+    return fragments
+
+
+def initialTokens():
+    tokens = []
+    # add definition for H, needed for comma
+    T_here = TokenDefinition("H", Fragment("H", 0))
+    tokens.append(T_here)
     return tokens
 
 
@@ -153,12 +169,14 @@ def convert(fn):
 
     fragments = []
 
-    for num,line in enumerate(lines):
-        frags = merge_fragments(fragment(line))
-        for f in frags:
-            fragments.append(Fragment(f, num))
+    tokens = initialTokens()
+    fragments.extend(initialFragments())
 
-    tokens = tokenizeFragments(fragments)
+    for num,line in enumerate(lines):
+        frags = merge_comment_fragments(fragment(line))
+        for f in frags:
+            fragments.append(Fragment(f, num+1))
+    tokens.extend(tokenizeFragments(fragments))
 
     data = []
     for t in tokens:

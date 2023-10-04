@@ -36,6 +36,8 @@ class PrimAsm:
         "SIMEND": Prim.OP_SIMEND
     }
 
+    LOOKUP = None
+
     def convertToNumber(s):
         s = s.strip()
         sign = 1
@@ -103,11 +105,22 @@ class PrimAsm:
             with open(outputfn, "wb") as f:
                 f.write(bytes(data))
 
+
+    def disassembleOpcode(opcode):
+        if PrimAsm.LOOKUP == None:
+            PrimAsm.LOOKUP = ["UNDEF"] * 256
+            for instr in PrimAsm.INSTRUCTIONS:
+                op = PrimAsm.INSTRUCTIONS[instr]
+                PrimAsm.LOOKUP[op] = instr
+        retbit = (opcode & 0x80) != 0
+        opcode &= 0x7f
+        s = PrimAsm.LOOKUP[opcode]
+        if retbit:
+            s += ".RET"
+        return s
+
+
     def disassemble(data):
-        lookup = ["UNDEF"] * 256
-        for instr in PrimAsm.INSTRUCTIONS:
-            opcode = PrimAsm.INSTRUCTIONS[instr]
-            lookup[opcode] = instr
         i = 0
         s = ""
         while i < len(data):
@@ -121,7 +134,7 @@ class PrimAsm:
                 s += f"0x{data[i+1]:x}"
                 i += 2
             else:
-                s += f"{lookup[ir]}"
+                s += f"{PrimAsm.LOOKUP[ir]}"
                 i += 1
             if retbit:
                 s += ".RET "

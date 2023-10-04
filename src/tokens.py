@@ -4,8 +4,20 @@ import sys
 def lohi(v):
     return [v & 0xff, (v >> 8) & 0xff]
 
+
 class Consts:
-    HERE = 10 # here is at address 8
+    HERE = 10 # here is at this address
+
+class BuildIn:
+    BUILDINS = [(";", "NOP.RET")]
+    def lookupByIndex(idx):
+        return BuildIn.BUILDINS[idx]
+    def getIndexByName(name):
+        for i,b in enumerate(BuildIn.BUILDINS):
+            if b[0] == name:
+                return i
+        return -1
+
 
 class Token:
     WORD_CALL = 0
@@ -31,6 +43,8 @@ class Token:
     D = {}
     Didx = 0
     mode = MODE_COMPILE
+
+    tagnames = ["WORD_CALL", "WORD_ADDRESS", "NUMBER", "STRING", "MNEMONIC", "BUILDIN", "LIT_NUMBER", "LIT_STRING", "DEFINITION", "MODE", "COMMENT_BRACES", "COMMENT_BACKSLASH", "WHITESPACE"]
 
     def __init__(self, tag, fragment):
         self.tag = tag
@@ -88,7 +102,10 @@ class TokenWordCall(Token):
         self.name = s
 
     def generate(self):
-        return [self.tag, Token.D[self.name]]
+        addr = Token.D[self.name]
+        data = [self.tag]
+        data.extend(lohi(addr))
+        return data
 
 
 class TokenWordAddress(Token):
@@ -155,18 +172,9 @@ class TokenBuildin(Token):
         print(f"Buildin {s}")
 
     def generate(self):
-        data = [self.tag]
-        ops = []
-        if self.name == ";":
-            ops.extend(PrimAsm.assemble("NOP.RET"))
-        elif self.name == ",":
-            ops.extend(PrimAsm.assemble(f"{Consts.HERE} @ ! {Consts.HERE} @ 1 + {Consts.HERE} !"))
-        elif self.name == "H":
-            ops.extend(PrimAsm.assemble(f"{Consts.HERE}"))
-        else:
-            ops.extend(PrimAsm.assemble(self.name))
-        data.append(len(ops))
-        data.extend(ops)
+        buildin = BuildIn.getIndexByName(self.name)
+        assert buildin >= 0, f"Buildin {self.name} not found"
+        data = [self.tag, buildin]
         return data
 
 
