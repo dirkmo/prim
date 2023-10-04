@@ -20,8 +20,8 @@ class Mif(MemoryIf):
         return self._mem[addr] | (self._mem[addr+1] << 8)
 
     def write8(self, addr, value):
-        self._mem[addr] = value & 0xff
-        self._mem[addr+1] = (value >> 8) & 0xff
+        self._mem[addr] = int(value)
+        print(f"addr:{addr:02x} {value:02x}")
 
     def write16(self, addr, value):
         self._mem[addr] = value & 0xff
@@ -44,7 +44,7 @@ def init(mif):
 
 def comma(mif, values):
     here = mif.read16(Consts.HERE)
-    if type(values) == list:
+    if hasattr(values, '__iter__'):
         for v in values:
             mif.write8(here, v)
             here += 1
@@ -62,18 +62,18 @@ def getPushOps(num):
     return ops
 
 
-def execute_comma(cpu, values):
-    pass
-
-
 def execute(cpu, opcodes):
-    pass
+    opcodes.append(Prim.OP_SIMEND)
+    l = len(opcodes)
+    cpu._mif._mem[0xf000:0xf000+l] = opcodes
+    cpu._pc = 0xf000
+    while cpu.step():
+        cpu.status()
 
 
 def interpret(tokens, cpu):
     idx = 0
     mode = Token.MODE_COMPILE
-    mif = cpu._mif
     while idx < len(tokens):
         tag = tokens[idx]
         print(f"tag: {Token.tagnames[tag]} ({tag})")
@@ -83,8 +83,9 @@ def interpret(tokens, cpu):
             idx += 2
             (name, addr) = Dictionary.lookup(di)
             ops = getPushOps(addr)
+            ops.append(Prim.OP_CALL)
             if mode == Token.MODE_COMPILE:
-                execute_comma(cpu, ops)
+                comma(cpu._mif, ops)
             else:
                 execute(cpu, ops)
             print(f"word call: {name}")
@@ -94,7 +95,7 @@ def interpret(tokens, cpu):
             (name, addr) = Dictionary.lookup(di)
             ops = getPushOps(addr)
             if mode == Token.MODE_COMPILE:
-                execute_comma(cpu, ops)
+                comma(cpu._mif, ops)
             else:
                 execute(cpu, ops)
             print(f"word address: {name}")
@@ -103,7 +104,7 @@ def interpret(tokens, cpu):
             idx += 2
             ops = getPushOps(num)
             if mode == Token.MODE_COMPILE:
-                execute_comma(cpu, ops)
+                comma(cpu._mif, ops)
             else:
                 execute(cpu, ops)
             print(f"number: {num}")
@@ -114,30 +115,36 @@ def interpret(tokens, cpu):
             print(f"string: {s}")
         elif tag == Token.MNEMONIC:
             if mode == Token.MODE_COMPILE:
-                execute_comma(cpu, [tokens[idx]])
+                comma(cpu._mif, [tokens[idx]])
             else:
                 execute(cpu, [tokens[idx]])
             print(f"mnemonic {PrimAsm.disassembleOpcode(tokens[idx])}")
             idx += 1
         elif tag == Token.BUILDIN:
-            print(f"buildin {tokens[idx]}: {BuildIn.lookupByIndex(tokens[idx])}")
+            asm = BuildIn.lookupByIndex(tokens[idx])[1]
+            ops = PrimAsm.assemble(asm)
+            print(f"buildin {tokens[idx]}: '{asm}' {ops}")
             idx += 1
+            if mode == Token.MODE_COMPILE:
+                comma(cpu._mif, ops)
+            else:
+                execute(cpu, ops)
         elif tag == Token.LIT_NUMBER:
-            execute_comma(cpu, tokens[idx:idx+1])
+            comma(cpu._mif, tokens[idx:idx+1])
             print(f"Literal number: {tokens[idx] | (tokens[idx+1] << 8)}")
             idx += 2
         elif tag == Token.LIT_STRING:
             l = tokens[idx]
             name = tokens[idx+1:idx+1+l].decode("utf-8")
             idx += l + 1
-            execute_comma(cpu, [l])
-            execute_comma(cpu, tokens[idx:idx+1])
+            comma(cpu._mif, [l])
+            comma(cpu._mif, tokens[idx:idx+1])
             print(f"Literal string: {name}")
         elif tag == Token.DEFINITION:
             l = tokens[idx]
             name = tokens[idx+1:idx+1+l].decode("utf-8")
             idx += l + 1
-            Dictionary.add(name, mif.read16(Consts.HERE))
+            Dictionary.add(name, cpu._mif.read16(Consts.HERE))
             print(f"Definition: {name}")
         elif tag == Token.MODE:
             mode = tokens[idx]
@@ -156,7 +163,7 @@ def interpret(tokens, cpu):
 def main():
     parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
     parser.add_argument("-i", help="Token input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.tok")
-    # parser.add_argument("-o", help="Binary token output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="src/test.tok")
+    parser.add_argument("-o", help="Binary token output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="src/test.bin")
     args = parser.parse_args()
 
     with open(args.input_filename, mode="rb") as f:
@@ -166,6 +173,11 @@ def main():
     cpu = Prim(mif)
     init(mif)
     interpret(tokendata, cpu)
+
+    with open(args.output_filename, mode="wb") as f:
+        here = cpu._mif.read16(Consts.HERE)
+        f.write(cpu._mif._mem[0:here])
+
 
 if __name__ == "__main__":
     sys.exit(main())

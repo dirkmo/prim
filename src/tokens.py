@@ -83,14 +83,14 @@ class TokenMode(Token):
     def __init__(self, name, fragment, mode):
         super().__init__(self.MODE, fragment)
         assert mode in [self.MODE_COMPILE, self.MODE_IMMEDIATE], f"Invalid mode {mode}"
-        Token.mode = mode
+        self.mode = mode
         if mode == Token.MODE_COMPILE:
             print("Compile Mode")
         else:
             print("Immediate Mode")
 
     def generate(self):
-        return [self.tag, Token.mode]
+        return [self.tag, self.mode]
 
 
 class TokenWordCall(Token):
