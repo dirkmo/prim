@@ -145,8 +145,9 @@ def tokenizeFragments(fragments):
 def initialFragments():
     fragments = []
     # add code fragments for comma
-    F_comma = fragment(":, 'H @ ! 'H @ 1 + 'H !")
-    for f in F_comma:
+    F_bytecomma = fragment(":c, 'H @ ! 'H @ 1 + 'H ! ;")
+    F_wordcomma = fragment(":, c, c, ;")
+    for f in F_bytecomma + F_wordcomma:
         fragments.append(Fragment(f,0))
     return fragments
 

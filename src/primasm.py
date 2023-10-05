@@ -6,7 +6,7 @@ class PrimAsm:
         "NOP": Prim.OP_NOP,
         "CALL": Prim.OP_CALL,
         "JP": Prim.OP_JP,
-        "JPZ": Prim.OP_JPZ,
+        "JZ": Prim.OP_JPZ,
         "AND": Prim.OP_AND,
         "OR": Prim.OP_OR,
         "XOR": Prim.OP_XOR,

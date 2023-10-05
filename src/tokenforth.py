@@ -21,7 +21,6 @@ class Mif(MemoryIf):
 
     def write8(self, addr, value):
         self._mem[addr] = int(value)
-        print(f"addr:{addr:02x} {value:02x}")
 
     def write16(self, addr, value):
         self._mem[addr] = value & 0xff
@@ -54,8 +53,8 @@ def comma(mif, values):
     mif.write16(Consts.HERE, here)
 
 
-def getPushOps(num):
-    if num < 0x100:
+def getPushOps(num, shrink=True):
+    if shrink and (num < 0x100):
         ops = [Prim.OP_PUSH8, num & 0xff]
     else:
         ops = [Prim.OP_PUSH, num & 0xff, (num >> 8) & 0xff]
@@ -69,6 +68,23 @@ def execute(cpu, opcodes):
     cpu._pc = 0xf000
     while cpu.step():
         cpu.status()
+
+
+def compile_string(mif, s):
+    here = mif.read16(Consts.HERE)
+    strbytes = s.encode("utf-8")
+    ops = []
+    ops.extend(getPushOps(here + 7, shrink=False)) # 3 bytes
+    ops.extend(getPushOps(here + 7 + 1 + len(strbytes), shrink=False)) # 3 bytes
+    ops.append(Prim.OP_JP) # 1 byte
+    ops.append(len(s)) #  1 byte
+    ops.extend(strbytes) # len(s) bytes
+    comma(mif, ops)
+
+
+def execute_string(cpu, s):
+    print("execute_string not implemented")
+    pass
 
 
 def interpret(tokens, cpu):
@@ -112,6 +128,10 @@ def interpret(tokens, cpu):
             l = tokens[idx]
             s = tokens[idx+1:idx+1+l].decode("utf-8")
             idx += l + 1
+            if mode == Token.MODE_COMPILE:
+                compile_string(cpu._mif, s)
+            else:
+                execute_string(cpu, s)
             print(f"string: {s}")
         elif tag == Token.MNEMONIC:
             if mode == Token.MODE_COMPILE:

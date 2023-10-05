@@ -1,5 +1,2 @@
-:start and or 123 ;
-start 'start
-"Hallo1" #55 #"Hallo2"
-[ 123 start 'start ] ;
-[ 1 , ] 2 ,
+:if H $ffff , 3 c, ;
+:then H swap ! ;
