@@ -1,5 +1,8 @@
 import sys
 
+from primconsts import *
+from primasm import *
+
 class MemoryIf:
     def read8(self, addr):
         ...
@@ -11,49 +14,21 @@ class MemoryIf:
         ...
 
 class Prim:
-    # opcodes
-    OP_NOP = 0x00
-    OP_CALL = 0x01
-    OP_JP = 0x02
-    OP_JPZ = 0x03
-    OP_AND = 0x04
-    OP_OR = 0x05
-    OP_XOR = 0x06
-    OP_NOT = 0x07
-    OP_LSR = 0x08
-    OP_LSL = 0x09
-    OP_ADD = 0x0a
-    OP_SUB = 0x0b
-    OP_LTS = 0x0c
-    OP_LTU = 0x0d
-    OP_SWAP = 0x0e
-    OP_OVER = 0x0f
-    OP_DUP = 0x10
-    OP_NIP = 0x11
-    OP_ROT = 0x12
-    OP_NROT = 0x13
-    OP_DROP = 0x14
-    OP_RDROP = 0x15
-    OP_CARRY = 0x16
-    OP_TO_R = 0x17
-    OP_FROM_R = 0x18
-    OP_INT = 0x19
-    OP_FETCH = 0x1a
-    OP_BYTE_FETCH = 0x1b
-    OP_STORE = 0x1c
-    OP_BYTE_STORE = 0x1d
-    OP_PUSH8  = 0x1e
-    OP_PUSH = 0x1f
-    OP_SIMEND = 0x7f
     # stack sizes
     DS_SIZE = 16
     RS_SIZE = 16
     # isr
     ISR_ADDR = 4
 
+    LOG_LEVEL_MUTE = 0
+    LOG_LEVEL_WARN = 1
+    LOG_LEVEL_INF = 2
+    LOG_LEVEL_DBG = 3
+
     def __init__(self, mif):
         self._mif = mif # memory interface with read, write methodes
         self.reset()
+        self._log_level = Prim.LOG_LEVEL_MUTE
 
     def reset(self):
         self._pc = 0
@@ -62,6 +37,15 @@ class Prim:
         self._dsp = Prim.DS_SIZE - 1
         self._rsp = Prim.RS_SIZE - 1
         self._carry = 0
+
+    def setLogLevel(self, level):
+        self._log_level = level
+
+    def log(self, level, s):
+        sl = ["LOG_MUTE", "LOG_WARN", "LOG_INF", "LOG_DBG"]
+        assert level >= Prim.LOG_LEVEL_MUTE and level <= Prim.LOG_LEVEL_DBG, f"Invalid log level {level}"
+        if level <= self._log_level:
+            print(f"<{sl[level]}>:  {s}")
 
     def read8(self, addr):
         return self._mif.read8(addr)
@@ -117,111 +101,112 @@ class Prim:
         return value
 
     def execute(self, ir):
+        self.log(Prim.LOG_LEVEL_DBG, f"execute: {PrimAsm.disassembleOpcode(ir)}")
         retbit = ir & 0x80
         ir &= 0x7f
-        if ir == Prim.OP_NOP:
+        if ir == PrimOpcodes.NOP:
             pass
-        elif ir == Prim.OP_CALL:
+        elif ir == PrimOpcodes.CALL:
             retbit = 0
             self.rpush(self._pc)
             addr = self.dpop()
             self._pc = addr
-        elif ir == Prim.OP_JP:
+        elif ir == PrimOpcodes.JP:
             retbit = 0
             addr = self.dpop()
             self._pc = addr
-        elif ir == Prim.OP_JPZ:
+        elif ir == PrimOpcodes.JZ:
             retbit = 0
             (f,addr) = (self.dpop(), self.dpop())
             if f == 0:
                 self._pc = addr
-        elif ir == Prim.OP_AND:
+        elif ir == PrimOpcodes.AND:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(N & T)
-        elif ir == Prim.OP_OR:
+        elif ir == PrimOpcodes.OR:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(N | T)
-        elif ir == Prim.OP_XOR:
+        elif ir == PrimOpcodes.XOR:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(N ^ T)
-        elif ir == Prim.OP_NOT:
+        elif ir == PrimOpcodes.NOT:
             self.dpush(~self.dpop())
-        elif ir == Prim.OP_LSR:
+        elif ir == PrimOpcodes.LSR:
             T = self.dpop()
             self.dpush(T >> 1)
             self._carry = (T & 1) != 0
-        elif ir == Prim.OP_LSL:
+        elif ir == PrimOpcodes.LSL:
             T = self.dpop()
             self.dpush(T << 1)
             self._carry = (T & 0x10000) != 0
-        elif ir == Prim.OP_ADD:
+        elif ir == PrimOpcodes.ADD:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(N + T)
             self._carry = (N + T) > 0xffff
-        elif ir == Prim.OP_SUB:
+        elif ir == PrimOpcodes.SUB:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(N - T)
             self._carry = (N - T) < 0
-        elif ir == Prim.OP_LTS:
+        elif ir == PrimOpcodes.LTS:
             (T, N) = (self.dpop(), self.dpop())
             res = Prim.comp2(N) < Prim.comp2(T)
             self.dpush(0xffff if res else 0)
-        elif ir == Prim.OP_LTU:
+        elif ir == PrimOpcodes.LTU:
             (T, N) = (self.dpop(), self.dpop())
             res = N < T
             self.dpush(0xffff if res else 0)
-        elif ir == Prim.OP_SWAP:
+        elif ir == PrimOpcodes.SWAP:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(T)
             self.dpush(N)
-        elif ir == Prim.OP_OVER:
+        elif ir == PrimOpcodes.OVER:
             self.dpush(self.N())
-        elif ir == Prim.OP_DUP:
+        elif ir == PrimOpcodes.DUP:
             self.dpush(self.T())
-        elif ir == Prim.OP_ROT:
+        elif ir == PrimOpcodes.ROT:
             (T, N, n2) = (self.dpop(), self.dpop(), self.dpop())
             self.dpush(N)
             self.dpush(T)
             self.dpush(n2)
-        elif ir == Prim.OP_NROT:
+        elif ir == PrimOpcodes.NROT:
             (T, N, n2) = (self.dpop(), self.dpop(), self.dpop())
             self.dpush(T)
             self.dpush(n2)
             self.dpush(N)
-        elif ir == Prim.OP_DROP:
+        elif ir == PrimOpcodes.DROP:
             self.dpop()
-        elif ir == Prim.OP_RDROP:
+        elif ir == PrimOpcodes.RDROP:
             self.rpop()
-        elif ir == Prim.OP_CARRY:
+        elif ir == PrimOpcodes.CARRY:
             self.dpush(self._carry)
-        elif ir == Prim.OP_TO_R:
+        elif ir == PrimOpcodes.TO_R:
             self.rpush(self.dpop())
-        elif ir == Prim.OP_FROM_R:
+        elif ir == PrimOpcodes.FROM_R:
             self.dpush(self.rpop())
-        elif ir == Prim.OP_INT:
+        elif ir == PrimOpcodes.INT:
             retbit = 0
             self.rpush(self._pc)
             self._pc = Prim.ISR_ADDR
-        elif ir == Prim.OP_FETCH:
+        elif ir == PrimOpcodes.FETCH:
             self.dpush(self.read16(self.dpop()))
-        elif ir == Prim.OP_BYTE_FETCH:
+        elif ir == PrimOpcodes.BYTE_FETCH:
             self.dpush(self.read8(self.dpop()) & 0xff)
-        elif ir == Prim.OP_STORE:
+        elif ir == PrimOpcodes.STORE:
             (addr, data) = (self.dpop(), self.dpop())
             self._mif.write16(addr, data)
-        elif ir == Prim.OP_BYTE_STORE:
+        elif ir == PrimOpcodes.BYTE_STORE:
             (addr, data) = (self.dpop(), self.dpop())
             self.write8(addr, data)
-        elif ir == Prim.OP_PUSH8:
+        elif ir == PrimOpcodes.PUSH8:
             self.dpush(self.fetch8())
-        elif ir == Prim.OP_PUSH:
+        elif ir == PrimOpcodes.PUSH:
             self.dpush(self.fetch16())
         if retbit:
             self._pc = self.rpop()
 
     def step(self):
         ir = self.fetch8()
-        if ir == Prim.OP_SIMEND:
+        if ir == PrimOpcodes.SIMEND:
             return False
         self.execute(ir)
         return True

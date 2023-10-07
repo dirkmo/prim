@@ -74,6 +74,8 @@ def isBuildin(s):
 def stringToNumber(s):
     if s[0] == '$': # "$1a2b"
         return int(s[1:], 16)
+    if s[0:2].lower() == "0x":
+        return int(s[2:], 16)
     # "123"
     return int(s, 10)
 

@@ -1,12 +1,10 @@
 from primasm import PrimAsm
+from primconsts import *
 import sys
 
 def lohi(v):
     return [v & 0xff, (v >> 8) & 0xff]
 
-
-class Consts:
-    HERE = 10 # here is at this address
 
 class BuildIn:
     BUILDINS = [(";", "NOP.RET")]

@@ -1,39 +1,39 @@
 import sys
-from prim import Prim
+from primconsts import *
 
 class PrimAsm:
     INSTRUCTIONS = {
-        "NOP": Prim.OP_NOP,
-        "CALL": Prim.OP_CALL,
-        "JP": Prim.OP_JP,
-        "JZ": Prim.OP_JPZ,
-        "AND": Prim.OP_AND,
-        "OR": Prim.OP_OR,
-        "XOR": Prim.OP_XOR,
-        "NOT": Prim.OP_NOT,
-        "LSR": Prim.OP_LSR,
-        "LSL": Prim.OP_LSL,
-        "+": Prim.OP_ADD,
-        "-": Prim.OP_SUB,
-        "<": Prim.OP_LTS,
-        "<U": Prim.OP_LTU,
-        "SWAP": Prim.OP_SWAP,
-        "OVER": Prim.OP_OVER,
-        "DUP": Prim.OP_DUP,
-        "NIP": Prim.OP_NIP,
-        "ROT": Prim.OP_ROT,
-        "-ROT": Prim.OP_NROT,
-        "DROP": Prim.OP_DROP,
-        "RDROP": Prim.OP_RDROP,
-        "CARRY": Prim.OP_CARRY,
-        ">R": Prim.OP_TO_R,
-        "R>": Prim.OP_FROM_R,
-        "INT": Prim.OP_INT,
-        "@": Prim.OP_FETCH,
-        "C@": Prim.OP_BYTE_FETCH,
-        "!": Prim.OP_STORE,
-        "C!": Prim.OP_BYTE_STORE,
-        "SIMEND": Prim.OP_SIMEND
+        "NOP": PrimOpcodes.NOP,
+        "CALL": PrimOpcodes.CALL,
+        "JP": PrimOpcodes.JP,
+        "JZ": PrimOpcodes.JZ,
+        "AND": PrimOpcodes.AND,
+        "OR": PrimOpcodes.OR,
+        "XOR": PrimOpcodes.XOR,
+        "NOT": PrimOpcodes.NOT,
+        "LSR": PrimOpcodes.LSR,
+        "LSL": PrimOpcodes.LSL,
+        "+": PrimOpcodes.ADD,
+        "-": PrimOpcodes.SUB,
+        "<": PrimOpcodes.LTS,
+        "<U": PrimOpcodes.LTU,
+        "SWAP": PrimOpcodes.SWAP,
+        "OVER": PrimOpcodes.OVER,
+        "DUP": PrimOpcodes.DUP,
+        "NIP": PrimOpcodes.NIP,
+        "ROT": PrimOpcodes.ROT,
+        "-ROT": PrimOpcodes.NROT,
+        "DROP": PrimOpcodes.DROP,
+        "RDROP": PrimOpcodes.RDROP,
+        "CARRY": PrimOpcodes.CARRY,
+        ">R": PrimOpcodes.TO_R,
+        "R>": PrimOpcodes.FROM_R,
+        "INT": PrimOpcodes.INT,
+        "@": PrimOpcodes.FETCH,
+        "C@": PrimOpcodes.BYTE_FETCH,
+        "!": PrimOpcodes.STORE,
+        "C!": PrimOpcodes.BYTE_STORE,
+        "SIMEND": PrimOpcodes.SIMEND
     }
 
     LOOKUP = None
@@ -84,10 +84,10 @@ class PrimAsm:
                 except:
                     raise Exception(f"ERROR: {t} is not a valid instruction or number")
                 if num < 0x100:
-                    opcodes = [Prim.OP_PUSH8]
+                    opcodes = [PrimOpcodes.PUSH8]
                     opcodes.append(num)
                 else:
-                    opcodes = [Prim.OP_PUSH]
+                    opcodes = [PrimOpcodes.PUSH]
                     opcodes.extend([num & 0xff, (num >> 8) & 0xff])
             if retbit:
                 opcodes[0] |= 0x80
@@ -106,12 +106,16 @@ class PrimAsm:
                 f.write(bytes(data))
 
 
-    def disassembleOpcode(opcode):
+    def createLookup():
         if PrimAsm.LOOKUP == None:
             PrimAsm.LOOKUP = ["UNDEF"] * 256
             for instr in PrimAsm.INSTRUCTIONS:
                 op = PrimAsm.INSTRUCTIONS[instr]
                 PrimAsm.LOOKUP[op] = instr
+
+
+    def disassembleOpcode(opcode):
+        PrimAsm.createLookup()
         retbit = (opcode & 0x80) != 0
         opcode &= 0x7f
         s = PrimAsm.LOOKUP[opcode]
@@ -121,16 +125,17 @@ class PrimAsm:
 
 
     def disassemble(data):
+        PrimAsm.createLookup()
         i = 0
         s = ""
         while i < len(data):
             s += f"${i}: "
             retbit = (data[i] >> 7) & 1
             ir = data[i] & 0x7f
-            if ir == Prim.OP_PUSH:
+            if ir == PrimOpcodes.PUSH:
                 s += f"0x{data[i+1]+(data[i+2]<<8):x}"
                 i += 3
-            elif ir == Prim.OP_PUSH8:
+            elif ir == PrimOpcodes.PUSH8:
                 s += f"0x{data[i+1]:x}"
                 i += 2
             else:

@@ -2,6 +2,7 @@ import sys
 
 from prim import Prim, MemoryIf
 from primasm import PrimAsm
+from primconsts import *
 
 class Mif(MemoryIf):
     def __init__(self, init=None):
@@ -39,8 +40,8 @@ def test(asm, result, idx):
     print(f"Test {idx}: {asm}")
     prog = PrimAsm.assemble(asm)
     if len(prog) % 2 == 0:
-        prog.append(Prim.OP_SIMEND)
-    prog.append(Prim.OP_SIMEND)
+        prog.append(PrimOpcodes.SIMEND)
+    prog.append(PrimOpcodes.SIMEND)
     print(repr(PrimAsm.disassemble(prog)))
     mif = Mif(prog)
     global cpu
@@ -91,8 +92,8 @@ def main():
     test("6 nop call SIMEND nop 2.ret", Result(pc=5, T=2, dsp=0), 2)
     test("1 2 +", Result(T=3, dsp=0, pc=6), 3)
     test("4 jp SIMEND 0xff", Result(T=0xff, dsp=0, pc=7), 4)
-    test("6 0 jpz SIMEND 0xfe", Result(T=0xfe, pc=9), 5)
-    test("6 1 jpz SIMEND 0xfe", Result(pc=6), 6)
+    test("6 0 jz SIMEND 0xfe", Result(T=0xfe, pc=9), 5)
+    test("6 1 jz SIMEND 0xfe", Result(pc=6), 6)
     test("1 2 <", Result(T=0xffff, dsp=0, pc=6), 7)
     test("1 2 <u", Result(T=0xffff, dsp=0, pc=6), 8)
     test("2 1 <", Result(T=0, dsp=0, pc=6), 9)

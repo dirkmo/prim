@@ -1,2 +1,4 @@
-:if H $ffff , 3 c, ;
-:then H swap ! ;
+:if H @ $ffff , 3 c, ;
+:then H @ swap ! ;
+:print [ if ] 65 [ then ] 0xffff c! ;
+[ 66 0 print ]
