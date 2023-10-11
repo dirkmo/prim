@@ -24,6 +24,7 @@ class Mif(MemoryIf):
 
     def write8(self, addr, value):
         addr &= 0xffff
+        value &= 0xff
         if addr == 0xffff:
             print(f"uart-tx: {chr(value)}")
         else:

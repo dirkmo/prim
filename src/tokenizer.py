@@ -147,8 +147,8 @@ def tokenizeFragments(fragments):
 def initialFragments():
     fragments = []
     # add code fragments for comma
-    F_bytecomma = fragment(":c, 'H @ ! 'H @ 1 + 'H ! ;")
-    F_wordcomma = fragment(":, c, c, ;")
+    F_bytecomma = fragment(":c, 'H @ c! 'H @ 1 + 'H c! ;")
+    F_wordcomma = fragment(":, dup c, srw c, ;")
     for f in F_bytecomma + F_wordcomma:
         fragments.append(Fragment(f,0))
     return fragments
@@ -181,13 +181,14 @@ def convert(fn):
             fragments.append(Fragment(f, num+1))
     tokens.extend(tokenizeFragments(fragments))
 
+    print("\nTokens:")
     data = []
     for t in tokens:
         tokendata = t.generate()
         if t.tag == Token.WHITESPACE:
             print(f"WS tag:{t.tag}")
         else:
-            print(f"'{t.fragment.s}' tag:{t.tag} data:{tokendata}")
+            print(f"'{t.fragment.s}' {Token.tagnames[t.tag]} data:{tokendata}")
         data.extend(tokendata)
 
     return data

@@ -34,8 +34,8 @@ class Prim:
         self._pc = 0
         self._ds = [0] * Prim.DS_SIZE
         self._rs = [0] * Prim.RS_SIZE
-        self._dsp = Prim.DS_SIZE - 1
-        self._rsp = Prim.RS_SIZE - 1
+        self._dsp = 0
+        self._rsp = 0
         self._carry = 0
 
     def setLogLevel(self, level):
@@ -131,13 +131,21 @@ class Prim:
             self.dpush(N ^ T)
         elif ir == PrimOpcodes.NOT:
             self.dpush(~self.dpop())
-        elif ir == PrimOpcodes.LSR:
+        elif ir == PrimOpcodes.SR:
             T = self.dpop()
             self.dpush(T >> 1)
             self._carry = (T & 1) != 0
-        elif ir == PrimOpcodes.LSL:
+        elif ir == PrimOpcodes.SRW:
+            T = self.dpop()
+            self.dpush(T >> 8)
+            self._carry = (T & 1) != 0
+        elif ir == PrimOpcodes.SL:
             T = self.dpop()
             self.dpush(T << 1)
+            self._carry = (T & 0x10000) != 0
+        elif ir == PrimOpcodes.SLW:
+            T = self.dpop()
+            self.dpush(T << 8)
             self._carry = (T & 0x10000) != 0
         elif ir == PrimOpcodes.ADD:
             (T, N) = (self.dpop(), self.dpop())
