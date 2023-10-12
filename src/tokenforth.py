@@ -204,6 +204,10 @@ def main():
     with open(args.output_filename, mode="wb") as f:
         here = cpu._mif.read16(Consts.HERE)
         f.write(cpu._mif._mem[0:here])
+    
+    with open(args.output_filename + ".sym", mode="wt") as f:
+        for d in Dictionary.D:
+            f.write(f"{d[0]} 0x{d[1]:x}\n")
 
 
 if __name__ == "__main__":
