@@ -1,4 +1,5 @@
 :if 0x21 c, 'H @ $ffff , 0x10 c, 3 c, ;
 :then 'H @ swap ! ;
-:print [ if ] 65 [ then ] 0xffff c! ;
-[ 66 0 print ]
+:else 0x21 c, 'H @ >r $ffff , 2 c, 'H @ swap ! r> ;
+:print [ if ] 65 [ else ] 66 [ then ] 0xffff c! ;
+[ 1 print ]
