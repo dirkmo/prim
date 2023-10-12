@@ -126,34 +126,49 @@ class PrimAsm:
         return s
 
 
-    def disassemble(data):
+    def disassemble(data, offset = 0):
         PrimAsm.createLookup()
         i = 0
         s = ""
+        disasm = []
         while i < len(data):
-            s += f"${i}: "
             retbit = (data[i] >> 7) & 1
             ir = data[i] & 0x7f
             if ir == PrimOpcodes.PUSH:
-                s += f"0x{data[i+1]+(data[i+2]<<8):x}"
+                s = f"PUSH16 0x{data[i+1]+(data[i+2]<<8):x}"
+                if retbit:
+                    s += ".RET"
+                disasm.append((offset+i, (data[i], data[i+1], data[i+2]), s))
                 i += 3
             elif ir == PrimOpcodes.PUSH8:
-                s += f"0x{data[i+1]:x}"
+                s = f"PUSH8 0x{data[i+1]:x}"
+                if retbit:
+                    s += ".RET"
+                disasm.append((offset+i, (data[i], data[i+1],), s))
                 i += 2
             else:
-                s += f"{PrimAsm.LOOKUP[ir]}"
+                s = f"{PrimAsm.LOOKUP[ir]}"
+                if retbit:
+                    s += ".RET"
+                disasm.append((offset+i, (data[i],), s))
                 i += 1
-            if retbit:
-                s += ".RET "
-            else:
-                s += " "
-        return s[:-1]
+        return disasm
+
 
 def main():
     # PrimAsm.assembleFile("src/test.asm", "src/test.bin")
-    data = PrimAsm.assemble("123 nop call 0x1234 and or +.ret # kommentar")
-    print(data)
-    print(repr(PrimAsm.disassemble(data)))
+    # data = PrimAsm.assemble("123 nop call 0x1234 and or +.ret # kommentar")
+    # print(data)
+    with open("src/test.bin", "rb") as f:
+        data = f.read()
+    disasm = PrimAsm.disassemble(data[Consts.HERE+2:], Consts.HERE+2)
+    for d in disasm:
+        (addr, ops, ds) = d
+        sys.stdout.write(f"{addr:04x}: ")
+        for o in ops:
+            sys.stdout.write(f"{o:02x} ")
+        print(f"\t{ds}")
+
 
 if __name__ == "__main__":
     main()
