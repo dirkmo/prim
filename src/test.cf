@@ -2,4 +2,4 @@
 :then 'H @ swap ! ;
 :else 0x21 c, 'H @ >r $ffff , 2 c, 'H @ swap ! r> ;
 :print [ if ] 65 [ else ] 66 [ then ] 0xffff c! ;
-[ 1 print ]
+[ 0 print 1 print ]

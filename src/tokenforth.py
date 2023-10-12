@@ -75,7 +75,8 @@ def execute(cpu, opcodes):
     cpu._mif._mem[0xf000:0xf000+l] = opcodes
     cpu._pc = 0xf000
     while cpu.step():
-        cpu.status()
+        #cpu.status()
+        pass
 
 
 def compile_string(mif, s):
