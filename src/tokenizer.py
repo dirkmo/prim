@@ -63,6 +63,9 @@ def merge_comment_fragments(fragments):
 
 
 def isMnemonic(s):
+    s = s.upper()
+    if s[-4:] == ".RET":
+        s = s[0:-4]
     return s.upper() in primasm.PrimAsm.INSTRUCTIONS
 
 
@@ -134,7 +137,7 @@ def tokenizeFragments(fragments):
                         num = stringToNumber(t)
                         newTokens = TokenNumber(num, f)
                     except:
-                        assert False, f"ERROR on line {f.linenum}: Unknown word '{t[1:]}'"
+                        assert False, f"ERROR on line {f.linenum}: Unknown word '{t}'"
         else: # empty line or whitespace
             if len(t) and t != ' ': # ignore single space
                 if ord(t[0]) < 33:
