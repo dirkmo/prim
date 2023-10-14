@@ -117,7 +117,7 @@ class Prim:
             self._pc = addr
         elif ir == PrimOpcodes.JZ:
             retbit = 0
-            (f,addr) = (self.dpop(), self.dpop())
+            (addr, f) = (self.dpop(), self.dpop())
             if f == 0:
                 self._pc = addr
         elif ir == PrimOpcodes.AND:

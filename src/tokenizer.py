@@ -149,7 +149,7 @@ def initialFragments():
     # add code fragments for comma
     F_bytecomma = fragment(":c, 'H @ c! 'H @ 1 + 'H c! ;")
     F_wordcomma = fragment(":, dup c, srw c, ;")
-    F_ifcomma = fragment(f":if {PrimOpcodes.PUSH} c, 'H @ $ffff , {PrimOpcodes.SWAP} c, {PrimOpcodes.JZ} c, ;")
+    F_ifcomma = fragment(f":if {PrimOpcodes.PUSH} c, 'H @ $ffff , {PrimOpcodes.JZ} c, ;")
     F_elsecomma = fragment(f":else {PrimOpcodes.PUSH} c, 'H @ >r $ffff , {PrimOpcodes.JP} c, 'H @ swap ! r> ;")
     F_thencomma = fragment(":then 'H @ swap ! ;")
     for f in F_bytecomma + F_wordcomma + F_ifcomma + F_elsecomma + F_thencomma:
