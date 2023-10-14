@@ -171,6 +171,10 @@ class Prim:
             self.dpush(self.N())
         elif ir == PrimOpcodes.DUP:
             self.dpush(self.T())
+        elif ir == PrimOpcodes.NIP:
+            T  = self.dpop()
+            self.dpop()
+            self.dpush(T)
         elif ir == PrimOpcodes.ROT:
             (T, N, n2) = (self.dpop(), self.dpop(), self.dpop())
             self.dpush(N)

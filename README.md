@@ -12,14 +12,13 @@ The CPU has 8-bit opcodes, a 16-bit ALU, 8-bit and 16-bit memory accesses, 16-bi
 NOP
 CALL
 JP, JPZ
-AND, OR, XOR, NOT, LSR, LSL
+AND, OR, XOR, NOT, SR, SL, SRW, SLW
 +, -, CARRY
 <, <u
 SWAP, OVER, DUP, NIP, ROT, -ROT, DROP, RDROP
 >R, R>
 @, !, c@, c!
 PUSH8, PUSH
-INTR
 ```
 
 Only `PUSH` and `PUSH8` have immediate data.
@@ -33,9 +32,9 @@ is implemented in `primasm.py`.
 
 ### TokenForth
 
-A tokenizer (`tokenizer.py`) parses the source code and converts it into a binary representation. This is compiled then by the CPU. This compilation step creates the machine code that is run afterwards.
+A tokenizer (`tokenizer.py`) parses the source code and converts it into a binary representation. This is compiled then by `tokenforth.py`. Words in immediate mode are executed during compilation by the CPU.
 
-The TokenForth language recognizes the following tokens:
+The TokenForth language recognizes the following token types:
 
 #### DEFINITION
 Defines a word (word as understood in Forth context). Definitions are prefixed with `:` (colon).
@@ -140,4 +139,19 @@ A definition is used to label the address of the variable in memory.
 ```
 :myvar #1 \ #1 is a number literal
 :inc 'myvar @ 1 + 'myvar ! \ read variable from memory, increment, and store back to memory
+```
+
+### Build-in Words
+The following words are predefined:
+```forth
+2dup
+if else then
+while + repeat
+```
+
+### TokenForth Examples
+
+```forth
+:min ( n1 n2 -- n )
+    2dup < [ if ] drop [ else ] nip [ then ] ;
 ```
