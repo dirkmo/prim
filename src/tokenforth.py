@@ -26,7 +26,7 @@ class Mif(MemoryIf):
         addr &= 0xffff
         value &= 0xff
         if addr == 0xffff:
-            print(f"uart-tx: {chr(value)}")
+            print(f"uart-tx: {chr(value)} (0x{value:02x})")
         else:
             self._mem[addr] = int(value)
 
@@ -201,11 +201,12 @@ def main():
     cpu = Prim(mif)
     init(mif)
     interpret(tokendata, cpu)
+    cpu.status()
 
     with open(args.output_filename, mode="wb") as f:
         here = cpu._mif.read16(Consts.HERE)
         f.write(cpu._mif._mem[0:here])
-    
+
     with open(args.output_filename + ".sym", mode="wt") as f:
         for d in Dictionary.D:
             f.write(f"{d[0]} 0x{d[1]:x}\n")

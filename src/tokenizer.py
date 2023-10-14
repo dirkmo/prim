@@ -152,7 +152,12 @@ def initialFragments():
     F_ifcomma = fragment(f":if {PrimOpcodes.PUSH} c, 'H @ $ffff , {PrimOpcodes.JZ} c, ;")
     F_elsecomma = fragment(f":else {PrimOpcodes.PUSH} c, 'H @ >r $ffff , {PrimOpcodes.JP} c, 'H @ swap ! r> ;")
     F_thencomma = fragment(":then 'H @ swap ! ;")
-    for f in F_bytecomma + F_wordcomma + F_ifcomma + F_elsecomma + F_thencomma:
+    F_whilecomma = fragment(f":while 'H @ {PrimOpcodes.PUSH} c, 'H @ 0xffff , {PrimOpcodes.JZ} c, ;")
+    F_repeatcomma = fragment(f":repeat {PrimOpcodes.PUSH} c, swap , {PrimOpcodes.JP} c, 'H @ swap ! ;")
+    F_allcomma = F_bytecomma + F_wordcomma + F_ifcomma + F_elsecomma + F_thencomma
+    F_allcomma.extend(F_whilecomma)
+    F_allcomma.extend(F_repeatcomma)
+    for f in F_allcomma:
         fragments.append(Fragment(f,0))
     return fragments
 
