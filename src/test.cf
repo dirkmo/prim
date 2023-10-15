@@ -1,3 +1,1 @@
-:min ( n1 n2 -- n )
-    2dup < [ if ] drop [ else ] nip [ then ] ;
-[ 6 5 min ]
+:msg "Hallo Welt!" ;

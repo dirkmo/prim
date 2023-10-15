@@ -6,6 +6,7 @@ from prim import Prim, MemoryIf
 from primasm import PrimAsm
 from primconsts import *
 from tokens import Token, BuildIn
+import toml
 
 
 class Mif(MemoryIf):
@@ -43,6 +44,11 @@ class Dictionary:
         Dictionary.D.append((name, addr))
     def lookup(idx):
         return Dictionary.D[idx]
+    def map():
+        m = {}
+        for d in Dictionary.D:
+            m[d[0]] = d[1]
+        return m
 
 
 def init(mif):
@@ -207,9 +213,12 @@ def main():
         here = cpu._mif.read16(Consts.HERE)
         f.write(cpu._mif._mem[0:here])
 
-    with open(args.output_filename + ".sym", mode="wt") as f:
-        for d in Dictionary.D:
-            f.write(f"{d[0]} 0x{d[1]:x}\n")
+    tomldata = {}
+    tomldata["prog"] = cpu._mif._mem
+    tomldata["symbols"] = Dictionary.map()
+
+    with open(args.output_filename + ".toml", mode="wt") as f:
+        f.write(toml.dumps(tomldata))
 
 
 if __name__ == "__main__":
