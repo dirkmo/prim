@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 import argparse
+import os
 import sys
 from prim import Prim, MemoryIf
 from primasm import PrimAsm
@@ -37,26 +38,36 @@ class Mif(MemoryIf):
 
 
 class Dictionary:
-    D = []
-    def add(name, addr):
+    D = [] # definition names with addresses as tuple (name, addr)
+    S = [] # string literal addresses
+    N = [] # number literal addresses
+    def addNameDefinition(name, addr):
         if name == "H":
             addr = Consts.HERE
+            Dictionary.addNumberLiteral(addr)
         Dictionary.D.append((name, addr))
-    def lookup(idx):
+    def lookupNameDefinition(idx):
         return Dictionary.D[idx]
-    def map():
+    def nameDefinitionMap():
         m = {}
         for d in Dictionary.D:
             m[d[0]] = d[1]
         return m
+    def addStringLiteral(addr):
+        Dictionary.S.append(addr)
+    def addNumberLiteral(addr):
+        Dictionary.N.append(addr)
 
 
 def init(mif):
     mif.write16(Consts.HERE, Consts.HERE+2)
 
 
+def HERE(mif):
+    return mif.read16(Consts.HERE)
+
 def comma(mif, values):
-    here = mif.read16(Consts.HERE)
+    here = HERE(mif)
     if hasattr(values, '__iter__'):
         for v in values:
             mif.write8(here, v)
@@ -86,7 +97,11 @@ def execute(cpu, opcodes):
 
 
 def compile_string(mif, s):
+    # this compiles: [push str-addr] [push behind_strdata] [jp] [count,chars...] behind_strdata:
+    # so when this is executed, the string address is pushed on the stack and execution
+    # continues "behind" the string data.
     here = mif.read16(Consts.HERE)
+    Dictionary.addStringLiteral(here + 7)
     strbytes = s.encode("utf-8")
     ops = []
     ops.extend(getPushOps(here + 7, shrink=False)) # 3 bytes
@@ -111,7 +126,7 @@ def interpret(tokens, cpu):
         if tag == Token.WORD_CALL:
             di = tokens[idx] | (tokens[idx+1] << 8)
             idx += 2
-            (name, addr) = Dictionary.lookup(di)
+            (name, addr) = Dictionary.lookupNameDefinition(di)
             ops = getPushOps(addr)
             ops.append(PrimOpcodes.CALL)
             print(f"word call: {name}")
@@ -122,7 +137,7 @@ def interpret(tokens, cpu):
         elif tag == Token.WORD_ADDRESS:
             di = tokens[idx] | (tokens[idx+1] << 8)
             idx += 2
-            (name, addr) = Dictionary.lookup(di)
+            (name, addr) = Dictionary.lookupNameDefinition(di)
             ops = getPushOps(addr)
             print(f"word address: {name}")
             if mode == Token.MODE_COMPILE:
@@ -165,6 +180,7 @@ def interpret(tokens, cpu):
                 execute(cpu, ops)
         elif tag == Token.LIT_NUMBER:
             print(f"Literal number: {tokens[idx] | (tokens[idx+1] << 8)}")
+            Dictionary.addNumberLiteral(HERE())
             comma(cpu._mif, tokens[idx:idx+1])
             idx += 2
         elif tag == Token.LIT_STRING:
@@ -179,7 +195,7 @@ def interpret(tokens, cpu):
             name = tokens[idx+1:idx+1+l].decode("utf-8")
             idx += l + 1
             print(f"Definition: {name}")
-            Dictionary.add(name, cpu._mif.read16(Consts.HERE))
+            Dictionary.addNameDefinition(name, cpu._mif.read16(Consts.HERE))
         elif tag == Token.MODE:
             mode = tokens[idx]
             idx += 1
@@ -192,6 +208,17 @@ def interpret(tokens, cpu):
             idx += l + 1
         else:
             assert False, "Tag not handled!"
+
+
+def saveSymbolData(fn, memdata):
+    # save symbol data
+    tomldata = {}
+    tomldata["symbols"] = Dictionary.nameDefinitionMap()
+    tomldata["string-literals"] = Dictionary.S
+    tomldata["num-literals"] = Dictionary.N
+    tomldata["memory"] = memdata
+    with open(fn, mode="wt") as f:
+        f.write(toml.dumps(tomldata))
 
 
 def main():
@@ -209,16 +236,13 @@ def main():
     interpret(tokendata, cpu)
     cpu.status()
 
+    # save memory image
     with open(args.output_filename, mode="wb") as f:
         here = cpu._mif.read16(Consts.HERE)
         f.write(cpu._mif._mem[0:here])
 
-    tomldata = {}
-    tomldata["prog"] = cpu._mif._mem
-    tomldata["symbols"] = Dictionary.map()
-
-    with open(args.output_filename + ".toml", mode="wt") as f:
-        f.write(toml.dumps(tomldata))
+    fn = os.path.splitext(args.output_filename)[0] + ".sym"
+    saveSymbolData(fn, cpu._mif._mem[0:here])
 
 
 if __name__ == "__main__":
