@@ -144,9 +144,10 @@ A definition is used to label the address of the variable in memory.
 ### Build-in Words
 The following words are predefined:
 ```forth
-2dup
+2dup 2drop
 if else then
-while + repeat
+while repeat
+1+ 1-
 ```
 
 ### TokenForth Examples
@@ -154,4 +155,13 @@ while + repeat
 ```forth
 :min ( n1 n2 -- n )
     2dup < [ if ] drop [ else ] nip [ then ] ;
+```
+
+Hello World, for the time being implemented with "while repeat".
+```forth
+:msg "Hello, World!" ;
+:count dup 1+ swap c@ ;
+:tx $ffff c! ;
+:type dup [ while ] 1- >r dup c@ tx 1+ r> dup [ repeat ] 2drop ;
+[ msg count type ]
 ```

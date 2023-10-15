@@ -121,7 +121,7 @@ def interpret(tokens, cpu):
     mode = Token.MODE_COMPILE
     while idx < len(tokens):
         tag = tokens[idx]
-        print(f"tag: {Token.tagnames[tag]} ({tag})")
+        # print(f"tag: {Token.tagnames[tag]} ({tag})")
         idx += 1
         if tag == Token.WORD_CALL:
             di = tokens[idx] | (tokens[idx+1] << 8)
@@ -129,7 +129,7 @@ def interpret(tokens, cpu):
             (name, addr) = Dictionary.lookupNameDefinition(di)
             ops = getPushOps(addr)
             ops.append(PrimOpcodes.CALL)
-            print(f"word call: {name}")
+            # print(f"word call: {name}")
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, ops)
             else:
@@ -139,7 +139,7 @@ def interpret(tokens, cpu):
             idx += 2
             (name, addr) = Dictionary.lookupNameDefinition(di)
             ops = getPushOps(addr)
-            print(f"word address: {name}")
+            # print(f"word address: {name}")
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, ops)
             else:
@@ -148,7 +148,7 @@ def interpret(tokens, cpu):
             num = tokens[idx] | (tokens[idx+1] << 8)
             idx += 2
             ops = getPushOps(num)
-            print(f"number: {num}")
+            # print(f"number: {num}")
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, ops)
             else:
@@ -157,13 +157,13 @@ def interpret(tokens, cpu):
             l = tokens[idx]
             s = tokens[idx+1:idx+1+l].decode("utf-8")
             idx += l + 1
-            print(f"string: {s}")
+            # print(f"string: {s}")
             if mode == Token.MODE_COMPILE:
                 compile_string(cpu._mif, s)
             else:
                 execute_string(cpu, s)
         elif tag == Token.MNEMONIC:
-            print(f"mnemonic {PrimAsm.disassembleOpcode(tokens[idx])}")
+            # print(f"mnemonic {PrimAsm.disassembleOpcode(tokens[idx])}")
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, [tokens[idx]])
             else:
@@ -172,14 +172,14 @@ def interpret(tokens, cpu):
         elif tag == Token.BUILDIN:
             asm = BuildIn.lookupByIndex(tokens[idx])[1]
             ops = PrimAsm.assemble(asm)
-            print(f"buildin {tokens[idx]}: '{asm}' {ops}")
+            # print(f"buildin {tokens[idx]}: '{asm}' {ops}")
             idx += 1
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, ops)
             else:
                 execute(cpu, ops)
         elif tag == Token.LIT_NUMBER:
-            print(f"Literal number: {tokens[idx] | (tokens[idx+1] << 8)}")
+            # print(f"Literal number: {tokens[idx] | (tokens[idx+1] << 8)}")
             Dictionary.addNumberLiteral(HERE())
             comma(cpu._mif, tokens[idx:idx+1])
             idx += 2
@@ -187,22 +187,22 @@ def interpret(tokens, cpu):
             l = tokens[idx]
             name = tokens[idx+1:idx+1+l].decode("utf-8")
             idx += l + 1
-            print(f"Literal string: {name}")
+            # print(f"Literal string: {name}")
             comma(cpu._mif, [l])
             comma(cpu._mif, tokens[idx:idx+1])
         elif tag == Token.DEFINITION:
             l = tokens[idx]
             name = tokens[idx+1:idx+1+l].decode("utf-8")
             idx += l + 1
-            print(f"Definition: {name}")
+            # print(f"Definition: {name}")
             Dictionary.addNameDefinition(name, cpu._mif.read16(Consts.HERE))
         elif tag == Token.MODE:
             mode = tokens[idx]
             idx += 1
-            if mode == Token.MODE_COMPILE:
-                print("compile mode")
-            else:
-                print("immediate mode")
+            # if mode == Token.MODE_COMPILE:
+            #     print("compile mode")
+            # else:
+            #     print("immediate mode")
         elif tag in [Token.COMMENT_BACKSLASH, Token.COMMENT_BRACES, Token.WHITESPACE]:
             l = tokens[idx]
             idx += l + 1

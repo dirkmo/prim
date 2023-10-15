@@ -11,9 +11,10 @@ from primconsts import *
 def disassemble(td, out_fn):
     offset = td["symbols"]["H"]
     data = td["memory"]
-    symbols = td["symbols"]
     strlits = td["string-literals"]
     numlits = td["num-literals"]
+    symbols = td["symbols"]
+    symaddr = dict((addr,name) for name,addr in symbols.items())
     i = offset
     PrimAsm.createLookup()
     if len(out_fn):
@@ -21,6 +22,8 @@ def disassemble(td, out_fn):
     else:
         f =sys.stdout
     while i < len(data):
+        if i in symaddr:
+            f.write(f"{i:04x}:\t{symaddr[i]}\n")
         if i in strlits:
             l = data[i]
             s = '"' + bytes(data[i+1:i+1+l]).decode() + '"'
@@ -56,7 +59,7 @@ def main():
     parser = argparse.ArgumentParser(description='Prim Disassembler')
     parser.add_argument("-i", help="Input file", action="store", metavar="<toml input file>", type=str, required=False, dest="input_filename",default="src/test.sym")
     parser.add_argument("-o", help="Output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="")
-    
+
     args = parser.parse_args()
 
     tomldata = toml.load(args.input_filename)
