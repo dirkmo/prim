@@ -186,7 +186,7 @@ def initialFragments():
     F_deccomma = fragment(":1- 1 - ;")
     F_allcomma = F_bytecomma + F_wordcomma + F_ifcomma + F_elsecomma + F_thencomma
     F_allcomma += F_whilecomma + F_repeatcomma + F_2dupcomma + F_2dropcomma
-    f_allcomma += F_inccomma + F_deccomma
+    F_allcomma += F_inccomma + F_deccomma
     for f in F_allcomma:
         fragments.append(Fragment(f,0))
     return fragments

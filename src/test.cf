@@ -1,4 +1,19 @@
 :tx $ffff c! ;
-:do 'H @ $ffff 0x12 c, 0x21 c, 'H @ $ffff , 3 c, 0x19 c, ;
-:loop 0x1a c, 1- 'H @ !;
+
+:do 'H @
+    0x12 c,              ( dup )
+    0x21 c, 'H @ $ffff , ( $ffff )
+    3 c,                 ( jz )
+    0x19 c,              ( >r ) 
+    ;
+
+:loop 0x1a c,             ( r> )
+      0x20 c, 1 c, 0xd c, ( 1- )
+      0x21 c, swap , 2 c,  ( $ffff jp )
+      'H @ swap !
+      0x16 c,             ( drop )
+      ;
+
 :test 0 3 [ do ] dup tx 1+ [ loop ] ;
+
+[ test ]
