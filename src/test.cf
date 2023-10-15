@@ -1,5 +1,4 @@
-:msg "Hallo Welt!" ;
-:count dup 1+ swap c@ ;
 :tx $ffff c! ;
-:type ( a n ) dup [ while ] 1- >r dup c@ tx 1+ r> dup [ repeat ] 2drop ;
-[ msg count type ]
+:do 'H @ $ffff 0x12 c, 0x21 c, 'H @ $ffff , 3 c, 0x19 c, ;
+:loop 0x1a c, 1- 'H @ !;
+:test 0 3 [ do ] dup tx 1+ [ loop ] ;

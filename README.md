@@ -150,6 +150,20 @@ while repeat
 1+ 1-
 ```
 
+Next to implement:
+
+```
+:do ( count )
+:loop
+```
+
+```
+:for ( limit start -- )
+:i ( -- i )
+:next
+```
+
+
 ### TokenForth Examples
 
 ```forth
