@@ -61,6 +61,32 @@ def merge_comment_fragments(fragments):
         pass
     return fragments
 
+def merge_string_fragments(fragments):
+    ## merge strings like "Hello World" to single fragment
+    merge = []
+    nfl = [] # new fragment list
+    stringfragment = False
+    for i in range(len(fragments)):
+        f = fragments[i]
+        if (not stringfragment):
+            if (len(f) > 0) and (f[0] == '"'):
+                # start of string literal
+                stringfragment = True
+                merge = []
+                merge.append(f)
+            else:
+                nfl.append(f)
+        else:
+            if (len(f) > 0) and (f[-1] == '"'):
+                # end of string literal
+                merge.append(f)
+                nfl.append("".join(merge))
+                stringfragment = False
+            else:
+                merge.append(f)
+    assert stringfragment == False, f"ERROR: String literal {merge} missing double quote"
+    return nfl
+
 
 def isMnemonic(s):
     return s.upper() in primasm.PrimAsm.INSTRUCTIONS
@@ -185,6 +211,7 @@ def convert(fn):
 
     for num,line in enumerate(lines):
         frags = merge_comment_fragments(fragment(line))
+        frags = merge_string_fragments(frags)
         for f in frags:
             fragments.append(Fragment(f, num+1))
     tokens.extend(tokenizeFragments(fragments))
