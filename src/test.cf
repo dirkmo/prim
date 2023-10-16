@@ -1,5 +1,11 @@
 :tx $ffff c! ;
 
-:test 0 3 [ do ] dup tx 1+ [ loop ] ;
+:for  ;
+
+:next ;
+
+:i ;
+
+:test 68 65 [ for ] i tx [ next ] ;
 
 [ test ]
