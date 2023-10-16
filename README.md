@@ -4,7 +4,7 @@
 
 Implement a primitive stack machine and a ColorForth like language that I call __TokenForth__.
 
-### Stack Machine
+## Stack Machine
 
 The CPU has 8-bit opcodes, a 16-bit ALU, 8-bit and 16-bit memory accesses, 16-bit data and return stacks. It implements the basic Forth instructions.
 
@@ -30,13 +30,13 @@ Other instructions can be added easily, since there are a lot of unused opcodes.
 The CPU is implemented in file `prim.py`, a very primitive assembler/disassembler
 is implemented in `primasm.py`.
 
-### TokenForth
+## TokenForth
 
 A tokenizer (`tokenizer.py`) parses the source code and converts it into a binary representation. This is compiled then by `tokenforth.py`. Words in immediate mode are executed during compilation by the CPU.
 
 The TokenForth language recognizes the following token types:
 
-#### DEFINITION
+### DEFINITION
 Defines a word (word as understood in Forth context). Definitions are prefixed with `:` (colon).
 
 Example:
@@ -45,7 +45,7 @@ Example:
 ```
 This is basically like a label in a "normal" assembly language.
 
-#### LITERALS
+### LITERALS
 Literals compile raw data and are prefixed with `#`. There are two literal types, one for numbers, one for strings.
 
 Examples:
@@ -54,10 +54,10 @@ Examples:
 #"string literal"  \ compiles a counted string
 ```
 
-#### COMPILE
+### COMPILE
 Compilation tokens are compiled during compilation phase (...well, yes, it's true ;-) ).
 
-##### COMPILE NUMBER
+#### COMPILE NUMBER
 Compiles code that pushes a number on stack.
 
 Example:
@@ -65,10 +65,10 @@ Example:
 :word 1 2 3 \ define word that pushes numbers 1, 2, 3 on stack
 ```
 
-##### COMPILE_STRING
+#### COMPILE_STRING
 
 
-##### COMPILE DEFINITION CALL
+#### COMPILE DEFINITION CALL
 Compiles a call to a previously defined word.
 
 Example:
@@ -77,7 +77,7 @@ Example:
 :word2 word1 ; \ define word2 that calls word1 and returns
 ```
 
-##### COMPILE DEFINITION ADDRESS
+#### COMPILE DEFINITION ADDRESS
 Compiles code that pushes the address of a definition on stack.
 
 Example:
@@ -86,54 +86,51 @@ Example:
 :word2 'word1 ;  \ define word2 that pushes address of word1 on stack
 ```
 
-#### IMMEDIATES
+### IMMEDIATES
 Immediates are not compiled during compilation phase, but executed immediately.
 
 The syntax is like the compilation tokens, but immediate mode must be started with `[`. Immediate mode can be ended by `]`.
 
-##### IMMEDIATE NUMBER
+#### IMMEDIATE NUMBER
 ```
 :word1 1 [ 2 ] ; \ compile word that pushes 1 when executed.
 ```
 During compilation of `word1`, the compiler executes `2` resulting with a 2 on top of the data stack after the compilation. When `word1` is executed, 1 is pushed onto the data stack.
 
-##### IMMEDIATE STRING
+#### IMMEDIATE STRING
 
-##### IMMEDIATE WORD CALL
+#### IMMEDIATE WORD CALL
 ```
 :word1 1 [ word2 ] 2 ; \ executes word2 after compiling 1, but before compiling 2.
 ```
-##### IMMEDIATE WORD ADDRESS
+#### IMMEDIATE WORD ADDRESS
 ```
 :word1 [ 'word2 ] 1 ; \ push address of word2 on stack before compiling 1.
 ```
 
-#### MNEMONICS
+### MNEMONICS
 Mnemonics are the names of the CPU instructions.
 
-#### BUILDINS
+### BUILDINS
 Buildins are tokens that are understood by the tokenizer, and will be translated somehow to CPU instructions.
 
 |Buildin|Description|
 |-------|-----------|
 |`;`    |Return|
-|`,`    |Compile T as number|
 
 Semicolon (`;`) is used to return from a call to a word and, for the time being, compiles to `NOP.RET`.
 
-Comma (`,`) takes T from stack and compiles it as a number (not number literal).
-
-#### COMMENTS
+### COMMENTS
 ```
 :word1 1 2 and ; \ This is a comment
 :word2 1 ( this is a comment ) 2 and ;
 ```
 
 
-#### WHITE SPACE
+### WHITE SPACE
 There is also a token for white space. This is ignored by the compiler. It is included to be able to reconstruct the source code from the token representation.
 
-### Variables
+## Variables
 The initialization value of a variable is defined by a number literal.
 A definition is used to label the address of the variable in memory.
 ```
@@ -141,30 +138,50 @@ A definition is used to label the address of the variable in memory.
 :inc 'myvar @ 1 + 'myvar ! \ read variable from memory, increment, and store back to memory
 ```
 
-### Build-in Words
+## Build-in Words
 The following words are predefined:
+
 ```forth
+1+ 1-
 2dup 2drop
+```
+
+Looping words:
+```
 if else then
 while repeat
-1+ 1-
+do loop
 ```
 
-Next to implement:
+All looping words have to be executed immediately.
+
+### while repeat
+`while repeat` loops until the flag is 0. `while` will consume the flag.
 
 ```
-:do ( count )
-:loop
+:test flag [ while ] flag [ repeat ] ;
 ```
 
+### do loop
+`do loop` loops n times. The counter is kept on the return stack.
+
+This will execute 3 NOPs:
 ```
-:for ( limit start -- )
-:i ( -- i )
-:next
+:test 3 [ do ] nop [ loop ] ;
 ```
 
 
-### TokenForth Examples
+### for next
+not yet implemented
+
+`for next` works similar to a for loop in C. `for` consumes stop and start values. The loop counter can be retrieved with `i`.
+
+This will print ABC on UART (`tx` pops a value and send it via UART):
+```
+:test 3 0 [ for ] 65 i + tx [ next ] ;
+```
+
+## TokenForth Examples
 
 ```forth
 :min ( n1 n2 -- n )
