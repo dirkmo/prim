@@ -184,9 +184,12 @@ def initialFragments():
     F_2dropcomma = fragment(f":2drop drop drop ;")
     F_inccomma = fragment(":1+ 1 + ;")
     F_deccomma = fragment(":1- 1 - ;")
+    F_docomma = fragment(f":do 'H @ {PrimOpcodes.DUP} c, {PrimOpcodes.PUSH} c, 'H @ $ffff , {PrimOpcodes.JZ} c, {PrimOpcodes.TO_R} c, ;")
+    F_loopcomma = fragment(f":loop {PrimOpcodes.FROM_R} c, {PrimOpcodes.PUSH8} c, 1 c, {PrimOpcodes.SUB} c, {PrimOpcodes.PUSH} c, swap , {PrimOpcodes.JP} c, 'H @ swap ! {PrimOpcodes.DROP} c, ;")
+
     F_allcomma = F_bytecomma + F_wordcomma + F_ifcomma + F_elsecomma + F_thencomma
     F_allcomma += F_whilecomma + F_repeatcomma + F_2dupcomma + F_2dropcomma
-    F_allcomma += F_inccomma + F_deccomma
+    F_allcomma += F_inccomma + F_deccomma + F_docomma + F_loopcomma
     for f in F_allcomma:
         fragments.append(Fragment(f,0))
     return fragments
