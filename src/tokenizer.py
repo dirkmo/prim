@@ -173,24 +173,31 @@ def tokenizeFragments(fragments):
 def initialFragments():
     fragments = []
     # add code fragments for comma
-    F_bytecomma = fragment(":c, 'H @ c! 'H @ 1 + 'H c! ;")
-    F_wordcomma = fragment(":, dup c, srw c, ;")
-    F_ifcomma = fragment(f":if {PrimOpcodes.PUSH} c, 'H @ $ffff , {PrimOpcodes.JZ} c, ;")
-    F_elsecomma = fragment(f":else {PrimOpcodes.PUSH} c, 'H @ >r $ffff , {PrimOpcodes.JP} c, 'H @ swap ! r> ;")
-    F_thencomma = fragment(":then 'H @ swap ! ;")
-    F_whilecomma = fragment(f":while 'H @ {PrimOpcodes.PUSH} c, 'H @ 0xffff , {PrimOpcodes.JZ} c, ;")
-    F_repeatcomma = fragment(f":repeat {PrimOpcodes.PUSH} c, swap , {PrimOpcodes.JP} c, 'H @ swap ! ;")
-    F_2dupcomma = fragment(f":2dup over over ;")
-    F_2dropcomma = fragment(f":2drop drop drop ;")
-    F_inccomma = fragment(":1+ 1 + ;")
-    F_deccomma = fragment(":1- 1 - ;")
-    F_docomma = fragment(f":do 'H @ {PrimOpcodes.DUP} c, {PrimOpcodes.PUSH} c, 'H @ $ffff , {PrimOpcodes.JZ} c, {PrimOpcodes.TO_R} c, ;")
-    F_loopcomma = fragment(f":loop {PrimOpcodes.FROM_R} c, {PrimOpcodes.PUSH8} c, 1 c, {PrimOpcodes.SUB} c, {PrimOpcodes.PUSH} c, swap , {PrimOpcodes.JP} c, 'H @ swap ! {PrimOpcodes.DROP} c, ;")
+    F = fragment(":c, 'H @ c! 'H @ 1 + 'H c! ;")
+    F += fragment(":, dup c, srw c, ;")
 
-    F_allcomma = F_bytecomma + F_wordcomma + F_ifcomma + F_elsecomma + F_thencomma
-    F_allcomma += F_whilecomma + F_repeatcomma + F_2dupcomma + F_2dropcomma
-    F_allcomma += F_inccomma + F_deccomma + F_docomma + F_loopcomma
-    for f in F_allcomma:
+    F += fragment(f":push, {PrimOpcodes.PUSH} c, ;")
+    F += fragment(f":push8, {PrimOpcodes.PUSH8} c, ;")
+    F += fragment(f":jz, {PrimOpcodes.JZ} c, ;")
+    F += fragment(f":jp, {PrimOpcodes.JP} c, ;")
+    F += fragment(f":dup, {PrimOpcodes.DUP} c, ;")
+    F += fragment(f":>r, {PrimOpcodes.TO_R} c, ;")
+    F += fragment(f":r>, {PrimOpcodes.FROM_R} c, ;")
+    F += fragment(f":-, {PrimOpcodes.SUB} c, ;")
+    F += fragment(f":drop, {PrimOpcodes.DROP} c, ;")
+    F += fragment(f":if push, 'H @ $ffff , jz, ;")
+    F += fragment(f":else push, 'H @ >r $ffff , jp, 'H @ swap ! r> ;")
+    F += fragment(":then 'H @ swap ! ;")
+    F += fragment(f":while 'H @ push, 'H @ 0xffff , jz, ;")
+    F += fragment(f":repeat push, swap , jp, 'H @ swap ! ;")
+    F += fragment(f":2dup over over ;")
+    F += fragment(f":2drop drop drop ;")
+    F += fragment(":1+ 1 + ;")
+    F += fragment(":1- 1 - ;")
+    F += fragment(f":do 'H @ dup, push, 'H @ $ffff , jz, >r, ;")
+    F += fragment(f":loop r>, {PrimOpcodes.PUSH8} c, 1 c, {PrimOpcodes.SUB} c, push, swap , jp, 'H @ swap ! {PrimOpcodes.DROP} c, ;")
+
+    for f in F:
         fragments.append(Fragment(f,0))
     return fragments
 
