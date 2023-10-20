@@ -8,6 +8,9 @@ import toml
 from primasm import PrimAsm
 from primconsts import *
 
+def nextOpIsCall(data, i):
+    return (i < len(data)) and (data[i] == PrimOpcodes.CALL)
+
 def disassemble(td, out_fn):
     offset = td["symbols"]["H"]
     data = td["memory"]
@@ -23,7 +26,7 @@ def disassemble(td, out_fn):
         f =sys.stdout
     while i < len(data):
         if i in symaddr:
-            f.write(f"{i:04x}:\t{symaddr[i]}\n")
+            f.write(f"{i:04x}:\t\t\t:{symaddr[i]}\n")
         if i in strlits:
             l = data[i]
             s = '"' + bytes(data[i+1:i+1+l]).decode() + '"'
@@ -42,15 +45,25 @@ def disassemble(td, out_fn):
         retbit = (data[i] >> 7) & 1
         ret = ".RET" if retbit else ""
         if ir == PrimOpcodes.PUSH:
-            s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\tPUSH16{ret} 0x{data[i+1]+(data[i+2]<<8):x}"
+            addr = data[i+1] | (data[i+2] << 8)
+            if nextOpIsCall(data, i+3):
+                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x} {data[i+3]:02x}\t{symaddr[addr]}"
+                i += 4
+            else:
+                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\tPUSH16{ret} 0x{addr:x}"
+                i += 3
             f.write(s + "\n")
-            i += 3
         elif ir == PrimOpcodes.PUSH8:
-            s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x}\t\tPUSH8{ret} 0x{data[i+1]:x}"
+            addr = data[i+1]
+            if nextOpIsCall(data, i+2):
+                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\t{symaddr[addr]}"
+                i += 3
+            else:
+                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x}\t\tPUSH8{ret} 0x{addr:x}"
+                i += 2
             f.write(s + "\n")
-            i += 2
         else:
-            s = f"{i:04x}:\t{ir:02x}\t\t{PrimAsm.LOOKUP[ir]}{ret}"
+            s = f"{i:04x}:\t{data[i]:02x}\t\t{PrimAsm.LOOKUP[ir]}{ret}"
             f.write(s + "\n")
             i += 1
 
