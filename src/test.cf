@@ -2,4 +2,4 @@
 
 :test 0 3 [ do ] dup tx 1+ [ loop ] ;
 
-[ test ]
+\ [ test ]

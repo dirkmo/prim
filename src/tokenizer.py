@@ -43,8 +43,11 @@ def merge_comment_fragments(fragments):
     try:
         f = fragments.index("\\")
         merge = fragments[0:f] # fragments before "\""
-        merge.append("".join(fragments[f:-1])) # join fragments up to (but excluding) newline
-        merge.append(fragments[-1]) # append newline as separate fragment
+        if fragments[-1] == '\n':
+            merge.append("".join(fragments[f:-1])) # join fragments up to (but excluding) newline
+            merge.append(fragments[-1]) # append newline as separate fragment
+        else:
+            merge.append("".join(fragments[f:])) # join rest of line (there is no newline)
         fragments = merge
     except:
         pass
