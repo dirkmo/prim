@@ -120,6 +120,7 @@ def interpret(tokens, cpu):
     idx = 0
     mode = Token.MODE_COMPILE
     while idx < len(tokens):
+        # print(f"here: {HERE(cpu._mif)}")
         tag = tokens[idx]
         # print(f"tag: {Token.tagnames[tag]} ({tag})")
         idx += 1

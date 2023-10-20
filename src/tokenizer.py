@@ -176,7 +176,7 @@ def tokenizeFragments(fragments):
 def initialFragments():
     fragments = []
     # add code fragments for comma
-    F = fragment(":c, 'H @ c! 'H @ 1 + 'H c! ;")
+    F = fragment(":c, 'H @ c! 'H @ 1 + 'H ! ;")
     F += fragment(":, 'H @ ! 'H @ 2 + 'H ! ;")
     F += fragment(f":push, {PrimOpcodes.PUSH} c, ;")
     F += fragment(f":push8, {PrimOpcodes.PUSH8} c, ;")
@@ -198,7 +198,6 @@ def initialFragments():
     F += fragment(":1- 1 - ;")
     F += fragment(":do 'H @ dup, push, 'H @ $ffff , jz, >r, ;")
     F += fragment(":loop r>, push8, 1 c, -, push, swap , jp, 'H @ swap ! drop, ;")
-    F += fragment("dup")
 
     for f in F:
         fragments.append(Fragment(f,0))
