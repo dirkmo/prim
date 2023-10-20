@@ -174,8 +174,7 @@ def initialFragments():
     fragments = []
     # add code fragments for comma
     F = fragment(":c, 'H @ c! 'H @ 1 + 'H c! ;")
-    F += fragment(":, dup c, srw c, ;")
-
+    F += fragment(":, 'H @ ! 'H @ 2 + 'H ! ;")
     F += fragment(f":push, {PrimOpcodes.PUSH} c, ;")
     F += fragment(f":push8, {PrimOpcodes.PUSH8} c, ;")
     F += fragment(f":jz, {PrimOpcodes.JZ} c, ;")
@@ -196,6 +195,7 @@ def initialFragments():
     F += fragment(":1- 1 - ;")
     F += fragment(f":do 'H @ dup, push, 'H @ $ffff , jz, >r, ;")
     F += fragment(f":loop r>, {PrimOpcodes.PUSH8} c, 1 c, {PrimOpcodes.SUB} c, push, swap , jp, 'H @ swap ! {PrimOpcodes.DROP} c, ;")
+    F += fragment(f":loop2 r>, push8, 1 c, -, push, swap , jp, 'H @ swap ! drop, ;")
 
     for f in F:
         fragments.append(Fragment(f,0))

@@ -133,6 +133,7 @@ def interpret(tokens, cpu):
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, ops)
             else:
+                print(f"call {name} {addr} {ops}")
                 execute(cpu, ops)
         elif tag == Token.WORD_ADDRESS:
             di = tokens[idx] | (tokens[idx+1] << 8)
