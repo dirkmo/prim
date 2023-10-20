@@ -1,5 +1,5 @@
 :tx $ffff c! ;
 
-:test 0 3 [ do ] dup tx 1+ [ loop ] ;
+:test 0 3 [ do ] dup tx 1+ [ loop ] drop ;
 
-\ [ test ]
+[ test ]

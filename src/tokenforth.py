@@ -181,8 +181,8 @@ def interpret(tokens, cpu):
                 execute(cpu, ops)
         elif tag == Token.LIT_NUMBER:
             # print(f"Literal number: {tokens[idx] | (tokens[idx+1] << 8)}")
-            Dictionary.addNumberLiteral(HERE())
-            comma(cpu._mif, tokens[idx:idx+1])
+            Dictionary.addNumberLiteral(HERE(cpu._mif))
+            comma(cpu._mif, tokens[idx:idx+2])
             idx += 2
         elif tag == Token.LIT_STRING:
             l = tokens[idx]
