@@ -2,44 +2,82 @@
 
 import argparse
 import sys
+import os
+import toml
 
 from primasm import PrimAsm
-from primconsts import Consts
+from primconsts import *
 
-def disassemble(in_fn, out_fn, offset):
-    with open(in_fn, "rb") as f:
-        data = f.read()
-    with open(in_fn + ".sym", "rt") as f:
-        lines = f.readlines()
-        symbols = {}
-        for l in lines:
-            (name, saddr) = l.strip().split(" ")
-            addr = int(saddr,16)
-            symbols[addr] = name
-    disasm = PrimAsm.disassemble(data[offset:], Consts.HERE+2)
+def nextOpIsCall(data, i):
+    return (i < len(data)) and (data[i] == PrimOpcodes.CALL)
 
-    if out_fn == "":
-        stream = sys.stdout
+def disassemble(td, out_fn):
+    offset = td["symbols"]["H"]
+    data = td["memory"]
+    strlits = td["string-literals"]
+    numlits = td["num-literals"]
+    symbols = td["symbols"]
+    symaddr = dict((addr,name) for name,addr in symbols.items())
+    i = offset
+    PrimAsm.createLookup()
+    if len(out_fn):
+        f = open(out_fn, "wt")
     else:
-        stream = open(out_fn, "wt")
-    for d in disasm:
-        (addr, ops, ds) = d
-        if addr in symbols:
-            stream.write(f"{addr:04x}: {symbols[addr]}\n")
-        stream.write(f"{addr:04x}: ")
-        for o in ops:
-            stream.write(f"{o:02x} ")
-        stream.write(f"\t{ds}\n")
+        f =sys.stdout
+    while i < len(data):
+        if i in symaddr:
+            f.write(f"{i:04x}:\t\t\t:{symaddr[i]}\n")
+        if i in strlits:
+            l = data[i]
+            s = '"' + bytes(data[i+1:i+1+l]).decode() + '"'
+            f.write(f"{i:04x}:\t")
+            for d in data[i:i+l+1]:
+                f.write(f"{d:02x} ")
+            f.write(f"\t{s}\n")
+            i += l + 1
+            continue
+        if i in numlits:
+            num = data[i] | (data[i+1] << 8)
+            f.write(f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x}\t\tLiteral 0x{num:x}\n")
+            i += 2
+            continue
+        ir = data[i] & 0x7f
+        retbit = (data[i] >> 7) & 1
+        ret = ".RET" if retbit else ""
+        if ir == PrimOpcodes.PUSH:
+            addr = data[i+1] | (data[i+2] << 8)
+            if nextOpIsCall(data, i+3):
+                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x} {data[i+3]:02x}\t{symaddr[addr]}"
+                i += 4
+            else:
+                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\tPUSH16{ret} 0x{addr:x}"
+                i += 3
+            f.write(s + "\n")
+        elif ir == PrimOpcodes.PUSH8:
+            addr = data[i+1]
+            if nextOpIsCall(data, i+2):
+                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\t{symaddr[addr]}"
+                i += 3
+            else:
+                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x}\t\tPUSH8{ret} 0x{addr:x}"
+                i += 2
+            f.write(s + "\n")
+        else:
+            s = f"{i:04x}:\t{data[i]:02x}\t\t{PrimAsm.LOOKUP[ir]}{ret}"
+            f.write(s + "\n")
+            i += 1
 
 
 def main():
     parser = argparse.ArgumentParser(description='Prim Disassembler')
-    parser.add_argument("-i", help="Input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.bin")
+    parser.add_argument("-i", help="Input file", action="store", metavar="<toml input file>", type=str, required=False, dest="input_filename",default="src/test.sym")
     parser.add_argument("-o", help="Output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="")
-    parser.add_argument("-s", help="Offset", action="store", metavar="<offset>", type=int, required=False, dest="offset",default=Consts.HERE+2)
-    
+
     args = parser.parse_args()
-    disassemble(args.input_filename, args.output_filename, args.offset)
+
+    tomldata = toml.load(args.input_filename)
+
+    disassemble(tomldata, args.output_filename)
 
 
 if __name__ == "__main__":

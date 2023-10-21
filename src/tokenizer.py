@@ -43,8 +43,11 @@ def merge_comment_fragments(fragments):
     try:
         f = fragments.index("\\")
         merge = fragments[0:f] # fragments before "\""
-        merge.append("".join(fragments[f:-1])) # join fragments up to (but excluding) newline
-        merge.append(fragments[-1]) # append newline as separate fragment
+        if fragments[-1] == '\n':
+            merge.append("".join(fragments[f:-1])) # join fragments up to (but excluding) newline
+            merge.append(fragments[-1]) # append newline as separate fragment
+        else:
+            merge.append("".join(fragments[f:])) # join rest of line (there is no newline)
         fragments = merge
     except:
         pass
@@ -60,6 +63,32 @@ def merge_comment_fragments(fragments):
     except:
         pass
     return fragments
+
+def merge_string_fragments(fragments):
+    ## merge strings like "Hello World" to single fragment
+    merge = []
+    nfl = [] # new fragment list
+    stringfragment = False
+    for i in range(len(fragments)):
+        f = fragments[i]
+        if (not stringfragment):
+            if (len(f) > 0) and (f[0] == '"'):
+                # start of string literal
+                stringfragment = True
+                merge = []
+                merge.append(f)
+            else:
+                nfl.append(f)
+        else:
+            if (len(f) > 0) and (f[-1] == '"'):
+                # end of string literal
+                merge.append(f)
+                nfl.append("".join(merge))
+                stringfragment = False
+            else:
+                merge.append(f)
+    assert stringfragment == False, f"ERROR: String literal {merge} missing double quote"
+    return nfl
 
 
 def isMnemonic(s):
@@ -150,17 +179,30 @@ def tokenizeFragments(fragments):
 def initialFragments():
     fragments = []
     # add code fragments for comma
-    F_bytecomma = fragment(":c, 'H @ c! 'H @ 1 + 'H c! ;")
-    F_wordcomma = fragment(":, dup c, srw c, ;")
-    F_ifcomma = fragment(f":if {PrimOpcodes.PUSH} c, 'H @ $ffff , {PrimOpcodes.JZ} c, ;")
-    F_elsecomma = fragment(f":else {PrimOpcodes.PUSH} c, 'H @ >r $ffff , {PrimOpcodes.JP} c, 'H @ swap ! r> ;")
-    F_thencomma = fragment(":then 'H @ swap ! ;")
-    F_whilecomma = fragment(f":while 'H @ {PrimOpcodes.PUSH} c, 'H @ 0xffff , {PrimOpcodes.JZ} c, ;")
-    F_repeatcomma = fragment(f":repeat {PrimOpcodes.PUSH} c, swap , {PrimOpcodes.JP} c, 'H @ swap ! ;")
-    F_2dupcomma = fragment(f":2dup over over ;")
-    F_allcomma = F_bytecomma + F_wordcomma + F_ifcomma + F_elsecomma + F_thencomma
-    F_allcomma += F_whilecomma + F_repeatcomma + F_2dupcomma
-    for f in F_allcomma:
+    F = fragment(":c, 'H @ c! 'H @ 1 + 'H ! ;")
+    F += fragment(":, 'H @ ! 'H @ 2 + 'H ! ;")
+    F += fragment(f":push, {PrimOpcodes.PUSH} c, ;")
+    F += fragment(f":push8, {PrimOpcodes.PUSH8} c, ;")
+    F += fragment(f":jz, {PrimOpcodes.JZ} c, ;")
+    F += fragment(f":jp, {PrimOpcodes.JP} c, ;")
+    F += fragment(f":dup, {PrimOpcodes.DUP} c, ;")
+    F += fragment(f":>r, {PrimOpcodes.TO_R} c, ;")
+    F += fragment(f":r>, {PrimOpcodes.FROM_R} c, ;")
+    F += fragment(f":-, {PrimOpcodes.SUB} c, ;")
+    F += fragment(f":drop, {PrimOpcodes.DROP} c, ;")
+    F += fragment(":if push, 'H @ $ffff , jz, ;")
+    F += fragment(":else push, 'H @ >r $ffff , jp, 'H @ swap ! r> ;")
+    F += fragment(":then 'H @ swap ! ;")
+    F += fragment(":while 'H @ push, 'H @ 0xffff , jz, ;")
+    F += fragment(":repeat push, swap , jp, 'H @ swap ! ;")
+    F += fragment(":2dup over over ;")
+    F += fragment(":2drop drop drop ;")
+    F += fragment(":1+ 1 + ;")
+    F += fragment(":1- 1 - ;")
+    F += fragment(":do 'H @ dup, push, 'H @ $ffff , jz, >r, ;")
+    F += fragment(":loop r>, push8, 1 c, -, push, swap , jp, 'H @ swap ! drop, ;")
+
+    for f in F:
         fragments.append(Fragment(f,0))
     return fragments
 
@@ -188,6 +230,7 @@ def convert(fn):
 
     for num,line in enumerate(lines):
         frags = merge_comment_fragments(fragment(line))
+        frags = merge_string_fragments(frags)
         for f in frags:
             fragments.append(Fragment(f, num+1))
     tokens.extend(tokenizeFragments(fragments))
