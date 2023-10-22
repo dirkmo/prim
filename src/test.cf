@@ -1,7 +1,7 @@
-:for ( start stop )
->r, >r,        \ range auf rstack legen
+:for ( stop start )
+2>r,           \ range auf rstack legen
 'H @           \ next springt hier hin
-r>, r>, 2dup, >r, >r,
+2r>, 2dup, 2>r,
 =,             \ Schleife zuende?
 push,
 'H @           \ Hier push adresse-hinter-next
@@ -10,19 +10,20 @@ jz,            \ Sprung
 ;
 
 :next
-r>, \ 1+, >r,       \ Zähler holen und inkrementieren
+r>, 1+, >r,     \ Zähler holen und inkrementieren
 push, swap , jp,  \ Sprung zu for
 'H @ swap !       \ adresse-hinter-next schreiben
 rdrop, rdrop,
 ;
 
-:i r> r> r> \ r-a stop i
-\ TODO
-swap over \ i r-a i
->r >r ;
+:i
+r> r>     \ ret i
+swap over \ i ret i
+>r >r
+;
 
 :tx $ffff c! ;
 
-:test 0 3 [ for ] i tx [ next ] ;
+:test 3 0 [ for ] i tx [ next ] ;
 
 [ test ]

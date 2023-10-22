@@ -34,7 +34,7 @@ def disassemble(td, out_fn):
         f =sys.stdout
     while i < len(data):
         if i in symaddr:
-            f.write(f"{i:04x}:\t\t\t:{symaddr[i]}\n")
+            f.write(f"{i:04x}:\t\t\t\t:{symaddr[i]}\n")
         if i in strlits:
             l = data[i]
             s = '"' + bytes(data[i+1:i+1+l]).decode() + '"'
@@ -56,12 +56,8 @@ def disassemble(td, out_fn):
         if ir == PrimOpcodes.PUSH:
             addr = data[i+1] | (data[i+2] << 8)
             if nextOpIsCall(data, i+3):
-                try:
-                    s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x} {data[i+3]:02x}\t{symaddr[addr]}"
-                    i += 4
-                except:
-                    s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\tPUSH16{ret} 0x{addr:x}  NO SYMBOL!!!"
-                    i += 3
+                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x} {data[i+3]:02x}\t{symaddr[addr]}"
+                i += 4
             elif nextOpIsMemAccess(data, i+3):
                 ns = "'" + symaddr[addr] if addr in symaddr else f"0x{addr:x}"
                 s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x} {data[i+3]:02x}\t{ns} {disassembleOpcode(data[i+3])}"
