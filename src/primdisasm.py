@@ -11,6 +11,14 @@ from primconsts import *
 def nextOpIsCall(data, i):
     return (i < len(data)) and (data[i] == PrimOpcodes.CALL)
 
+def nextOpIsMemAccess(data, i):
+    return (i < len(data)) and (data[i] in [PrimOpcodes.FETCH, PrimOpcodes.BYTE_FETCH, PrimOpcodes.STORE, PrimOpcodes.BYTE_STORE])
+
+def disassembleOpcode(opcode):
+    ir = opcode & 0x7f
+    sr = ".RET" if opcode & 0x80 else ""
+    return PrimAsm.LOOKUP[ir] + sr
+
 def disassemble(td, out_fn):
     offset = td["symbols"]["H"]
     data = td["memory"]
@@ -41,6 +49,7 @@ def disassemble(td, out_fn):
             f.write(f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x}\t\tLiteral 0x{num:x}\n")
             i += 2
             continue
+
         ir = data[i] & 0x7f
         retbit = (data[i] >> 7) & 1
         ret = ".RET" if retbit else ""
@@ -53,6 +62,10 @@ def disassemble(td, out_fn):
                 except:
                     s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\tPUSH16{ret} 0x{addr:x}  NO SYMBOL!!!"
                     i += 3
+            elif nextOpIsMemAccess(data, i+3):
+                ns = "'" + symaddr[addr] if addr in symaddr else f"0x{addr:x}"
+                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x} {data[i+3]:02x}\t{ns} {disassembleOpcode(data[i+3])}"
+                i += 4
             else:
                 s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\tPUSH16{ret} 0x{addr:x}"
                 i += 3
@@ -61,6 +74,10 @@ def disassemble(td, out_fn):
             addr = data[i+1]
             if nextOpIsCall(data, i+2):
                 s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\t{symaddr[addr]}"
+                i += 3
+            elif nextOpIsMemAccess(data, i+2):
+                ns = "'" + symaddr[addr] if addr in symaddr else f"0x{addr:x}"
+                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\t{ns} {disassembleOpcode(data[i+2])}"
                 i += 3
             else:
                 s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x}\t\tPUSH8{ret} 0x{addr:x}"

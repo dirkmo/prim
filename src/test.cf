@@ -17,7 +17,7 @@ rdrop, rdrop,
 ;
 
 :i r> r> r> \ r-a stop i
-TODO
+\ TODO
 swap over \ i r-a i
 >r >r ;
 
