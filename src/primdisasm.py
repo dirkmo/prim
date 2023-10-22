@@ -47,8 +47,12 @@ def disassemble(td, out_fn):
         if ir == PrimOpcodes.PUSH:
             addr = data[i+1] | (data[i+2] << 8)
             if nextOpIsCall(data, i+3):
-                s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x} {data[i+3]:02x}\t{symaddr[addr]}"
-                i += 4
+                try:
+                    s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x} {data[i+3]:02x}\t{symaddr[addr]}"
+                    i += 4
+                except:
+                    s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\tPUSH16{ret} 0x{addr:x}  NO SYMBOL!!!"
+                    i += 3
             else:
                 s = f"{i:04x}:\t{data[i]:02x} {data[i+1]:02x} {data[i+2]:02x}\tPUSH16{ret} 0x{addr:x}"
                 i += 3
