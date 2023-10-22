@@ -61,9 +61,10 @@ class Token:
         ...
 
     def generateStringData(tag, s):
-        l = len(s) & 0xff
+        raw = s.encode()
+        l = len(raw) & 0xff
         data = [tag, l]
-        data.extend(s.encode())
+        data.extend(raw)
         return data
 
 
