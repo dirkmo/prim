@@ -197,7 +197,7 @@ def initialFragments():
     F += fragment(":if push, 'H @ $ffff , jz, ;")
     F += fragment(":else push, 'H @ >r $ffff , jp, 'H @ swap ! r> ;")
     F += fragment(":then 'H @ swap ! ;")
-    F += fragment(f":=, {PrimOpcodes.SUB} c, [ if ] 0 [ else ] -1 [ then ] ;")
+    F += fragment(f":=, {PrimOpcodes.SUB} c, ;")
     F += fragment(":while 'H @ push, 'H @ 0xffff , jz, ;")
     F += fragment(":repeat push, swap , jp, 'H @ swap ! ;")
     F += fragment(":2dup over over ;")
