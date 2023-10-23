@@ -10,7 +10,7 @@ jz,            \ Sprung
 ;
 
 :next
-r>, 1+, >r,     \ Zähler holen und inkrementieren
+2r>, 1+, 2>r,     \ Zähler holen und inkrementieren
 push, swap , jp,  \ Sprung zu for
 'H @ swap !       \ adresse-hinter-next schreiben
 rdrop, rdrop,
