@@ -25,10 +25,11 @@ class Prim:
     LOG_LEVEL_INF = 2
     LOG_LEVEL_DBG = 3
 
-    def __init__(self, mif):
+    def __init__(self, mif, debug=None):
         self._mif = mif # memory interface with read, write methodes
         self.reset()
         self._log_level = Prim.LOG_LEVEL_MUTE
+        self._debug = debug
 
     def reset(self):
         self._pc = 0
