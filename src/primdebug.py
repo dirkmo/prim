@@ -1,8 +1,11 @@
 #! /usr/bin/env python3
 
+import argparse
 from blessed import Terminal
 from prim import *
 import sys
+import toml
+
 
 class Mif(MemoryIf):
     def __init__(self, init=None):
@@ -36,23 +39,29 @@ class PrimDebug:
         self.cpu = cpu
         self.cpu._debug = self
         self.term = term
-        self.code_height = term.height - 4
 
-    def showStack(self, stack, sp, stacksize, term_y):
+    def generateStackViewStr(self, prefix, stack, sp, stacksize, w):
+        w -= len(prefix)
         s = self.term.bold + self.term.underline + f"{stack[sp]}" + self.term.normal
         for i in range(stacksize-1):
             ns = f"{stack[(sp-i) % stacksize]} "
-            if self.term.length(ns+s) >= self.term.width:
+            if self.term.length(ns+s) >= w:
                 break
             s = ns + s
-        with self.term.location(y=term_y):
+        return prefix + s
+    
+    def showDataStack(self, x1, x2, y):
+        s = self.generateStackViewStr("D: ", self.cpu._ds, self.cpu._dsp, Prim.DS_SIZE, x2 - x1)
+        with self.term.location(x=x1, y=y):
             print(s, end="")
 
-    def showDataStack(self):
-        self.showStack(self.cpu._ds, self.cpu._dsp, Prim.DS_SIZE, self.term.height-3)
-
-    def showReturnStack(self):
-        self.showStack(self.cpu._rs, self.cpu._rsp, Prim.RS_SIZE, self.term.height-2)
+    def showReturnStack(self, x1, x2, y):
+        s = self.generateStackViewStr("R: ", self.cpu._rs, self.cpu._rsp, Prim.RS_SIZE, x2 - x1)
+        with self.term.location(x=x1, y=y):
+            print(s, end="")
+    
+    def showCurrent(self, x1, x2, y):
+        print(self.term.move_xy(x1, y) + "PC: ", end='')
 
     def addrPrevInstruction(self, addr):
         if addr > 2:
@@ -64,41 +73,76 @@ class PrimDebug:
         return addr - 1
 
     def addrNextInstruction(self, addr):
-        if self.cpu._mif(addr) == PrimOpcodes.PUSH:
+        if self.cpu._mif.read8(addr) == PrimOpcodes.PUSH:
             return addr + 3
-        if self.cpu._mif(addr) == PrimOpcodes.PUSH8:
+        if self.cpu._mif.read8(addr) == PrimOpcodes.PUSH8:
             return addr + 2
         return 1
 
     def disassemble(self, addr):
         pass
 
-    def showCode(self):
+    def showCode(self, x1, y1, x2, y2):
+        h = y2 - y1
+        w = x2 - x1
         pc = self.cpu._pc
         start = pc
         linecount = 0
-        while start > 0 and linecount < self.code_height // 2:
+        while start > 0 and linecount < h // 2:
             start = self.addrPrevInstruction(start)
             linecount += 1
         stop = pc
-        while stop < 0x10000 and linecount < self.code_height:
+        while stop < 0x10000 and linecount < h:
             stop = self.addrNextInstruction(stop)
             linecount += 1
 
+    def showBox(self, x1, y1, x2, y2):
+        w = x2 - x1
+        print(self.term.move_xy(x1,y1) + "┌", end='')
+        print("─" * (w-2) + "┐", end='')
+        for y in range(y1+1, y2):
+            print(self.term.move_xy(x1, y) + "│", end='')
+            print(self.term.move_xy(x2, y) + "│", end='')
+        print(self.term.move_xy(x1,y2) + "└", end='')
+        print("─" * (w-2) + "┘", end='')
+        # ├ ┤ ┬ ┴
+
+    def showPrompt(self, x1, x2, y):
+        print(self.term.move_xy(x1, y) + "> ", end='')
+
+    def showHorizontalSplitline(self, x1, x2, y):
+        print(self.term.move_xy(x1, y) + "├", end='')
+        print("─" * (x2-x1-2) + "┤", end='')
+
     def show(self):
-        print(self.term.clear)
-        self.showCode()
-        self.showDataStack()
-        self.showReturnStack()
+        print(self.term.clear, end='')
+        self.showBox(0, 0, self.term.width, self.term.height-1)
+        print(self.term.move_xy(2, 0) + " Prim Debugger ", end='')
+        self.showCode(2, 1, self.term.width - 2, self.term.height-8)
+        self.showHorizontalSplitline(0, self.term.width, self.term.height - 7)
+        self.showDataStack(2, self.term.width - 2, self.term.height-6)
+        self.showReturnStack(2, self.term.width - 2, self.term.height-5)
+        self.showCurrent(2, self.term.width - 2, self.term.height-4)
+        self.showHorizontalSplitline(0, self.term.width, self.term.height - 3)
+        self.showPrompt(2, self.term.width - 2, self.term.height - 2)
+        sys.stdout.flush()
 
 
-def main():
+def debug(fn):
+    tomldata = toml.load(fn)
     term = Terminal()
-    cpu = Prim(Mif())
+    cpu = Prim(Mif(tomldata["memory"]))
     debug = PrimDebug(cpu, term)
     with term.fullscreen(), term.cbreak():
         debug.show()
         term.inkey()
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Prim Debugger')
+    parser.add_argument("-i", help="Input symbol file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.sym")
+    args = parser.parse_args()
+    debug(args.input_filename)
 
 
 if __name__ == "__main__":
