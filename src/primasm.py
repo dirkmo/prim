@@ -38,6 +38,8 @@ class PrimAsm:
         "C@": PrimOpcodes.BYTE_FETCH,
         "!": PrimOpcodes.STORE,
         "C!": PrimOpcodes.BYTE_STORE,
+        "PUSH8": PrimOpcodes.PUSH8,
+        "PUSH": PrimOpcodes.PUSH,
         "SIMEND": PrimOpcodes.SIMEND
     }
 

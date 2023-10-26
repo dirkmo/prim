@@ -3,6 +3,8 @@
 import argparse
 from blessed import Terminal
 from prim import *
+from primasm import *
+from primconsts import *
 import sys
 import toml
 
@@ -39,6 +41,7 @@ class PrimDebug:
         self.cpu = cpu
         self.cpu._debug = self
         self.term = term
+        PrimAsm.createLookup()
 
     def generateStackViewStr(self, prefix, stack, sp, stacksize, w):
         w -= len(prefix)
@@ -61,40 +64,76 @@ class PrimDebug:
             print(s, end="")
     
     def showCurrent(self, x1, x2, y):
-        print(self.term.move_xy(x1, y) + "PC: ", end='')
+        pc = self.cpu._pc
+        s = f"PC {pc:04x}: {self.disassemble(pc)}"
+        print(self.term.move_xy(x1, y) + s, end='')
+
+    def instructionLength(self, addr):
+        ir = self.cpu._mif.read8(addr) & 0x7f
+        if ir == PrimOpcodes.PUSH:
+            return 3
+        elif ir == PrimOpcodes.PUSH8:
+            return 2
+        return 1
 
     def addrPrevInstruction(self, addr):
         if addr > 2:
-            if self.cpu._mif(addr-3) == PrimOpcodes.PUSH:
+            if self.cpu._mif.read8(addr-3) == PrimOpcodes.PUSH:
                 return addr - 3
         if addr > 1:
-            if self.cpu._mif(addr-2) == PrimOpcodes.PUSH8:
+            if self.cpu._mif.read8(addr-2) == PrimOpcodes.PUSH8:
                 return addr - 2
         return addr - 1
 
     def addrNextInstruction(self, addr):
-        if self.cpu._mif.read8(addr) == PrimOpcodes.PUSH:
-            return addr + 3
-        if self.cpu._mif.read8(addr) == PrimOpcodes.PUSH8:
-            return addr + 2
-        return 1
+        return addr + self.instructionLength(addr)
 
     def disassemble(self, addr):
-        pass
+        opcode = self.cpu._mif.read8(addr)
+        (ir, retbit) = (opcode & 0x7f, opcode & 0x80)
+        s = PrimAsm.LOOKUP[ir] + (".RET" if retbit else "")
+        if ir == PrimOpcodes.PUSH8:
+            val = self.cpu._mif.read8(addr+1)
+            s += f" ${val:x}"
+        elif ir == PrimOpcodes.PUSH:
+            val = self.cpu._mif.read8(addr+1) | (self.cpu._mif.read8(addr+2) << 8)
+            s += f" ${val:x}"
+        return s
 
     def showCode(self, x1, y1, x2, y2):
-        h = y2 - y1
-        w = x2 - x1
-        pc = self.cpu._pc
-        start = pc
+        h = y2 - y1 + 1
+        w = x2 - x1 + 1
+        pc = self.cpu._pc+12
+        pc_is_on_line = -1
+        addr = pc
         linecount = 0
-        while start > 0 and linecount < h // 2:
-            start = self.addrPrevInstruction(start)
+        lines = []
+        while addr > 0 and linecount < h // 2:
+            da = f"{addr:04x}:"
+            for b in range(self.instructionLength(addr)):
+                da += f" {self.cpu._mif.read8(addr + b):02x}"
+            da += " " * (16 - len(da))
+            da += self.disassemble(addr)
+            lines.insert(0, da)
             linecount += 1
-        stop = pc
-        while stop < 0x10000 and linecount < h:
-            stop = self.addrNextInstruction(stop)
+            pc_is_on_line += 1
+            addr = self.addrPrevInstruction(addr)
+        addr = pc + 1
+        while addr < 0x10000 and linecount < h:
+            da = f"{addr:04x}:"
+            for b in range(self.instructionLength(addr)):
+                da += f" {self.cpu._mif.read8(addr + b):02x}"
+            da += " " * (16 - len(da))
+            da += self.disassemble(addr)
+            lines.append(da)
             linecount += 1
+            addr = self.addrNextInstruction(addr)
+
+        for i,l in enumerate(lines):
+            if i==pc_is_on_line:
+                print(self.term.reverse(self.term.move_xy(x1, y1 + i) + l), end='')
+            else:
+                print(self.term.move_xy(x1, y1 + i) + l, end='')
 
     def showBox(self, x1, y1, x2, y2):
         w = x2 - x1
