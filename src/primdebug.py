@@ -127,7 +127,6 @@ class PrimDebug:
         else:
             s += f" ${val:x}"
         return s
-        
 
     def showCode(self, x1, y1, x2, y2):
         h = y2 - y1 + 1
@@ -188,13 +187,13 @@ class PrimDebug:
     def showMemory(self, x1, y1, x2, y2, num=8):
         w = x2 - x1 + 1
         h = y2 - y1 + 1
-        if w < num * 3 + 7:
+        if w < num * 3 + 6:
             return
         start = self.cpu._pc - self.cpu._pc % 8
         s = ""
         for y in range(h):
             addr = start + y*8
-            s = f"{addr:04x}: "
+            s = f"{addr:04x}:"
             for a in range(8):
                 val = self.cpu._mif.read8(addr + a)
                 s += f" {val:02x}"
