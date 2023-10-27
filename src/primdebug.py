@@ -5,6 +5,7 @@ from blessed import Terminal
 from prim import *
 from primasm import *
 from primconsts import *
+import signal
 import sys
 import toml
 
@@ -49,9 +50,9 @@ class PrimDebug:
 
     def generateStackViewStr(self, prefix, stack, sp, stacksize, w):
         w -= len(prefix)
-        s = self.term.bold + self.term.underline + f"{stack[sp]}" + self.term.normal
-        for i in range(stacksize-1):
-            ns = f"{stack[(sp-i) % stacksize]} "
+        s = self.term.bold + self.term.underline + f"{stack[sp % stacksize]:x}" + self.term.normal
+        for i in range(1, stacksize):
+            ns = f"{stack[(sp-i) % stacksize]:x} "
             if self.term.length(ns+s) >= w:
                 break
             s = ns + s
@@ -119,7 +120,7 @@ class PrimDebug:
             return s
         if useSymbols:
             nextIr = self.cpu._mif.read8(self.addrNextInstruction(addr)) & 0x7f
-            if nextIr in [PrimOpcodes.JP, PrimOpcodes.JZ, PrimOpcodes.CALL, PrimOpcodes.BYTE_FETCH, PrimOpcodes.FETCH, PrimOpcodes.BYTE_STORE, PrimOpcodes.STORE]:
+            if nextIr in [PrimOpcodes.JP, PrimOpcodes.JZ, PrimOpcodes.CALL, PrimOpcodes.BYTE_FETCH, PrimOpcodes.FETCH, PrimOpcodes.BYTE_STORE, PrimOpcodes.STORE] and val in self.symbols:
                 s += " " + self.term.magenta(f"'{self.symbols[val]}") + f" (${val:x})"
             else:
                 s += f" ${val:x}"
@@ -184,34 +185,68 @@ class PrimDebug:
         print(self.term.move_xy(x1, y) + "├", end='')
         print("─" * (x2-x1-2) + "┤", end='')
 
+    def showMemory(self, x1, y1, x2, y2, num=8):
+        w = x2 - x1 + 1
+        h = y2 - y1 + 1
+        if w < num * 3 + 7:
+            return
+        start = self.cpu._pc - self.cpu._pc % 8
+        s = ""
+        for y in range(h):
+            addr = start + y*8
+            s = f"{addr:04x}: "
+            for a in range(8):
+                val = self.cpu._mif.read8(addr + a)
+                s += f" {val:02x}"
+            l = self.term.length(s)
+            s = self.term.move_xy(x2 - l - 1, y1+y) + s
+            print(s, end='')
+
     def show(self):
         print(self.term.clear, end='')
         self.showBox(0, 0, self.term.width, self.term.height-1)
         print(self.term.move_xy(2, 0) + " Prim Debugger ", end='')
-        self.showCode(2, 1, self.term.width - 2, self.term.height-8)
+        memshow_num = 8*3 + 7
+        if self.term.width < 40 + memshow_num:
+            x2_code = self.term.width - 4
+        else:
+            x2_code = self.term.width - memshow_num - 4
+        self.showCode(2, 1, x2_code, self.term.height-8)
         self.showHorizontalSplitline(0, self.term.width, self.term.height - 7)
         self.showDataStack(2, self.term.width - 2, self.term.height-6)
         self.showReturnStack(2, self.term.width - 2, self.term.height-5)
         self.showCurrent(2, self.term.width - 2, self.term.height-4)
         self.showHorizontalSplitline(0, self.term.width, self.term.height - 3)
+        self.showMemory(x2_code+1, 2, self.term.width-1, self.term.height-8)
         self.showPrompt(2, self.term.width - 2, self.term.height - 2)
         sys.stdout.flush()
-
 
 def debug(fn):
     tomldata = toml.load(fn)
     term = Terminal()
     cpu = Prim(Mif(tomldata["memory"]))
     debug = PrimDebug(cpu, term, tomldata["symbols"], tomldata["num-literals"], tomldata["string-literals"])
-    with term.fullscreen(), term.cbreak():
+    
+    def on_resize(sig, action):
         debug.show()
-        term.inkey()
+    signal.signal(signal.SIGWINCH, on_resize)
+
+    with term.fullscreen(), term.cbreak():
+        while True:
+            debug.show()
+            key = term.inkey()
+            print(repr(key))
+            if key.code == term.KEY_ESCAPE or key == '\x04': # 4: ctrl+d
+                break
+            if key.code == term.KEY_RIGHT:
+                cpu.step()
 
 
 def main():
     parser = argparse.ArgumentParser(description='Prim Debugger')
     parser.add_argument("-i", help="Input symbol file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.sym")
     args = parser.parse_args()
+    
     debug(args.input_filename)
 
 
