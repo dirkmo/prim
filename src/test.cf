@@ -27,3 +27,8 @@ swap over \ i ret i
 :test 3 0 [ for ] i tx [ next ] ;
 
 [ test ]
+
+[
+0x21 0 c! 'test 1 ! \ push 'test
+2 3 c!              \ jp
+]

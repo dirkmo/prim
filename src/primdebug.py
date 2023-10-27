@@ -92,7 +92,22 @@ class PrimDebug:
     def addrNextInstruction(self, addr):
         return addr + self.instructionLength(addr)
 
+    def addrInStrLiterals(self, addr):
+        # falls addr in a string literal range?
+        for sladdr in self.strlits:
+            if addr < sladdr:
+                continue
+            # range of string literal (cnt + chars)
+            cnt = self.cpu._mif.read8(sladdr) # read string length
+            if addr < sladdr + cnt + 1:
+                return True
+        return False
+
     def disassemble(self, addr, useSymbols=True):
+        if addr in self.numlits:
+            return f"LIT #{self.cpu._mif.read16(addr):x}"
+        if self.addrInStrLiterals(addr):
+            return "STR-LIT"
         opcode = self.cpu._mif.read8(addr)
         (ir, retbit) = (opcode & 0x7f, opcode & 0x80)
         s = PrimAsm.LOOKUP[ir] + (".RET" if retbit else "")
@@ -116,8 +131,6 @@ class PrimDebug:
     def showCode(self, x1, y1, x2, y2):
         h = y2 - y1 + 1
         w = x2 - x1 + 1
-        self.cpu._pc = 0x1a
-
         addr = self.cpu._pc
         linecount = 0
         lines = []
@@ -133,7 +146,7 @@ class PrimDebug:
                 lines.insert(0, f"{addr:04x}           " + self.term.red(":" + self.symbols[addr]))
                 linecount += 1
             addr = self.addrPrevInstruction(addr)
-        addr = self.cpu._pc + 1
+        addr = self.addrNextInstruction(self.cpu._pc)
         while addr < 0x10000 and linecount < h:
             if addr in self.symbols:
                 lines.append(f"{addr:04x}           " + self.term.red(":" + self.symbols[addr]))
