@@ -47,7 +47,7 @@ def test(asm, result, idx):
     global cpu
     cpu = Prim(mif)
     count = 0
-    while cpu.step():
+    while cpu.step() != PrimOpcodes.BREAK:
         # cpu.status()
         count += 1
         assert count < 10, "Test took too many steps"

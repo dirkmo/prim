@@ -9,6 +9,12 @@ import signal
 import sys
 import toml
 
+# TODO
+# breakpoint highlight in code
+# memory view: set location
+# read/write memory via prompt
+# step back
+
 
 class Mif(MemoryIf):
     def __init__(self, init=None):
@@ -52,7 +58,9 @@ class PrimDebug:
         self.numlits = numlits if numlits is not None else []
         self.messages = [] # messages shown in message area
         self.input = "" # user input
-        self.breakpoints = [] # list of active breakpoints
+        self.breakpoints = set() # active breakpoints
+        self.silentBreakpoints = set() # silent breakpoints for step-over
+        self.run = False
         self.redrawEverything()
         PrimAsm.createLookup()
 
@@ -271,7 +279,7 @@ class PrimDebug:
                 self.breakpoints.remove(addr)
                 self.appendMessage(f"Removed breakpoint at ${cmd[1]}")
             else:
-                self.breakpoints.append(addr)
+                self.breakpoints.add(addr)
                 self.appendMessage(f"Set breakpoint at ${cmd[1]}")
                 
     def redrawEverything(self):
@@ -319,6 +327,8 @@ class PrimDebug:
             self.breakpointCmd(cmd)
         elif cmd[0] == "help":
             self.printHelp()
+        elif cmd[0] == "run":
+            self.run = True
         else:
             self.appendMessage(f'Invalid command "{cmd[0]}"')
         self.redraw.add(PrimDebug.SHOW_MESSAGES)
@@ -331,6 +341,15 @@ class PrimDebug:
             self.input = self.input[0:-1]
         elif not key.is_sequence:
             self.input += key
+
+    def onSilentBreakpoint(self):
+        if self.cpu._pc in self.silentBreakpoints:
+            self.silentBreakpoints.remove(self.cpu._pc)
+            return True
+        return False
+
+    def onBreakpoint(self):
+        return self.cpu._pc in self.breakpoints
 
 
 def debug(fn):
@@ -351,6 +370,20 @@ def debug(fn):
 
     with term.fullscreen(), term.cbreak():
         while True:
+            if debug.run:
+                while True:
+                    ir = cpu.step()
+                    kbhit = term.kbhit(0)
+                    bp = debug.onSilentBreakpoint() or debug.onBreakpoint()
+                    if kbhit or (ir == PrimOpcodes.BREAK) or bp:
+                        if kbhit:
+                            term.inkey()
+                        debug.run = False
+                        debug.redrawEverything()
+                        break
+                    debug.redraw.add(PrimDebug.SHOW_CODE)
+                    debug.redraw.add(PrimDebug.SHOW_STACKS)
+                    debug.show()
             debug.show()
             key = term.inkey()
             if key.code == term.KEY_ESCAPE or key == '\x04': # 4: ctrl+d
@@ -360,6 +393,15 @@ def debug(fn):
                 debug.redraw.add(PrimDebug.SHOW_CODE)
                 debug.redraw.add(PrimDebug.SHOW_STACKS)
                 debug.redraw.add(PrimDebug.SHOW_MEMORY)
+            elif key.code == term.KEY_DOWN:
+                if cpu._mif.read8(cpu._pc) == PrimOpcodes.CALL:
+                    debug.silentBreakpoints.add(debug.addrNextInstruction(debug.cpu._pc))
+                    debug.run = True
+                else:
+                    cpu.step()
+                    debug.redraw.add(PrimDebug.SHOW_CODE)
+                    debug.redraw.add(PrimDebug.SHOW_STACKS)
+                    debug.redraw.add(PrimDebug.SHOW_MEMORY)
             else:
                 debug.handleInput(key)
 

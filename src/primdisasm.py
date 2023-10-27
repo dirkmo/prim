@@ -2,7 +2,6 @@
 
 import argparse
 import sys
-import os
 import toml
 
 from primasm import PrimAsm

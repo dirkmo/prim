@@ -219,10 +219,9 @@ class Prim:
 
     def step(self):
         ir = self.fetch8()
-        if ir == PrimOpcodes.SIMEND:
-            return False
-        self.execute(ir)
-        return True
+        if ir != PrimOpcodes.BREAK:
+            self.execute(ir)
+        return ir & 0x7f
 
     def status(self):
         print(f"pc: {self._pc:04x}")

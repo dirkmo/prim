@@ -36,4 +36,4 @@ class PrimOpcodes:
     BYTE_STORE = 0x1f
     PUSH8  = 0x20
     PUSH = 0x21
-    SIMEND = 0x22
+    BREAK = 0x22

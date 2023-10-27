@@ -87,11 +87,11 @@ def getPushOps(num, shrink=True):
 
 
 def execute(cpu, opcodes):
-    opcodes.append(PrimOpcodes.SIMEND)
+    opcodes.append(PrimOpcodes.BREAK)
     l = len(opcodes)
     cpu._mif._mem[0xf000:0xf000+l] = opcodes
     cpu._pc = 0xf000
-    while cpu.step():
+    while cpu.step() != PrimOpcodes.BREAK:
         #cpu.status()
         pass
 

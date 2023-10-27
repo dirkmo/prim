@@ -24,7 +24,7 @@ swap over \ i ret i
 
 :tx $ffff c! ;
 
-:test 3 0 [ for ] i tx [ next ] ;
+:test 3 0 break [ for ] i tx [ next ] ;
 
 [ test ]
 

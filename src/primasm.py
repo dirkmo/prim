@@ -40,7 +40,7 @@ class PrimAsm:
         "C!": PrimOpcodes.BYTE_STORE,
         "PUSH8": PrimOpcodes.PUSH8,
         "PUSH": PrimOpcodes.PUSH,
-        "SIMEND": PrimOpcodes.SIMEND
+        "BREAK": PrimOpcodes.BREAK
     }
 
     LOOKUP = None
