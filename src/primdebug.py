@@ -184,39 +184,48 @@ class PrimDebug:
         print(self.term.move_xy(x1, y) + "├", end='')
         print("─" * (x2-x1-2) + "┤", end='')
 
+    def showVerticalSplitline(self, x, y1, y2):
+        print(self.term.move_xy(x, y1) + "┬", end='')
+        for y in range(y1+1, y2):
+            print(self.term.move_xy(x, y) + "│", end='')
+        print(self.term.move_xy(x, y2) + "┴", end='')
+
+    def showMessageArea(self, x1, y1, x2, y2):
+        pass
+
     def showMemory(self, x1, y1, x2, y2, num=8):
         w = x2 - x1 + 1
         h = y2 - y1 + 1
-        if w < num * 3 + 6:
-            return
         start = self.cpu._pc - self.cpu._pc % 8
         s = ""
         for y in range(h):
             addr = start + y*8
             s = f"{addr:04x}:"
+            chars = ""
             for a in range(8):
                 val = self.cpu._mif.read8(addr + a)
                 s += f" {val:02x}"
-            l = self.term.length(s)
-            s = self.term.move_xy(x2 - l - 1, y1+y) + s
-            print(s, end='')
+                chars += '.' if val < 32 else chr(val)
+            s = s + " " + chars
+            print(self.term.move_xy(x1 + 2, y1 + y) + s[0:w-3], end='')
 
     def show(self):
         print(self.term.clear, end='')
         self.showBox(0, 0, self.term.width, self.term.height-1)
         print(self.term.move_xy(2, 0) + " Prim Debugger ", end='')
-        memshow_num = 8*3 + 7
-        if self.term.width < 40 + memshow_num:
-            x2_code = self.term.width - 4
-        else:
-            x2_code = self.term.width - memshow_num - 4
+        memshow_num = 8*3 + 7 # num of bytes per line
+        memViewHeight = 16
+        x2_code = min(self.term.width // 2, 40)
         self.showCode(2, 1, x2_code, self.term.height-8)
         self.showHorizontalSplitline(0, self.term.width, self.term.height - 7)
+        self.showVerticalSplitline(x2_code + 1, 0, self.term.height - 7)
         self.showDataStack(2, self.term.width - 2, self.term.height-6)
         self.showReturnStack(2, self.term.width - 2, self.term.height-5)
         self.showCurrent(2, self.term.width - 2, self.term.height-4)
         self.showHorizontalSplitline(0, self.term.width, self.term.height - 3)
-        self.showMemory(x2_code+1, 2, self.term.width-1, self.term.height-8)
+        self.showMemory(x2_code+1, 1, self.term.width-1, 1+memViewHeight)
+        self.showHorizontalSplitline(x2_code + 1, self.term.width, 2+memViewHeight)
+        self.showMessageArea(x2_code+1, 10, 3+memViewHeight, self.term.height - 8)
         self.showPrompt(2, self.term.width - 2, self.term.height - 2)
         sys.stdout.flush()
 
