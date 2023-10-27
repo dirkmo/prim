@@ -64,7 +64,11 @@ class PrimDebug:
             if self.term.length(ns+s) >= w:
                 break
             s = ns + s
-        return prefix + s
+        s = prefix + s
+        l = self.term.length(s)
+        if l < w:
+            s += " " * (w - l)
+        return s
     
     def showDataStack(self, x1, x2, y):
         s = self.generateStackViewStr("D: ", self.cpu._ds, self.cpu._dsp, Prim.DS_SIZE, x2 - x1)
@@ -77,8 +81,12 @@ class PrimDebug:
             print(s, end="")
     
     def showCurrent(self, x1, x2, y):
+        w = x2 - x1 + 1
         pc = self.cpu._pc
         s = f"PC {pc:04x}: {self.disassemble(pc)}"
+        l = self.term.length(s)
+        if l < w:
+            s += " " * (w - l)
         print(self.term.move_xy(x1, y) + s, end='')
 
     def instructionLength(self, addr):
@@ -351,6 +359,7 @@ def debug(fn):
                 cpu.step()
                 debug.redraw.add(PrimDebug.SHOW_CODE)
                 debug.redraw.add(PrimDebug.SHOW_STACKS)
+                debug.redraw.add(PrimDebug.SHOW_MEMORY)
             else:
                 debug.handleInput(key)
 
