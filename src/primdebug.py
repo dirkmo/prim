@@ -38,14 +38,22 @@ class Mif(MemoryIf):
 
 
 class PrimDebug:
+    SHOW_CODE = 0
+    SHOW_STACKS = 1
+    SHOW_MESSAGES = 2
+    SHOW_MEMORY = 3
     def __init__(self, cpu, term, symbols=None, numlits=None, strlits=None):
         self.cpu = cpu
         self.cpu._debug = self
         self.term = term
-        # self.symbolDict = symbols if symbols is not None else {}
-        self.symbols = dict((addr,name) for name,addr in symbols.items())
+        self.symbolNamesDict = symbols # (name: addr) dictionary
+        self.symbols = dict((addr,name) for name,addr in symbols.items()) # (addr, names) dictionary
         self.strlits = strlits if strlits is not None else []
         self.numlits = numlits if numlits is not None else []
+        self.messages = [] # messages shown in message area
+        self.input = "" # user input
+        self.breakpoints = [] # list of active breakpoints
+        self.redrawEverything()
         PrimAsm.createLookup()
 
     def generateStackViewStr(self, prefix, stack, sp, stacksize, w):
@@ -160,11 +168,11 @@ class PrimDebug:
             linecount += 1
             addr = self.addrNextInstruction(addr)
         for i,l in enumerate(lines):
+            s = self.term.move_xy(x1, y1 + i) + l + " " * (w-self.term.length(l))
             if int(l[0:4],base=16) == self.cpu._pc:
-                print(self.term.reverse(self.term.move_xy(x1, y1 + i) + l), end='')
-                print(self.term.reverse(" " * (w-self.term.length(l))), end='')
+                print(self.term.reverse(s), end='')
             else:
-                print(self.term.move_xy(x1, y1 + i) + l, end='')
+                print(s, end='')
 
     def showBox(self, x1, y1, x2, y2):
         w = x2 - x1
@@ -178,7 +186,16 @@ class PrimDebug:
         # ├ ┤ ┬ ┴
 
     def showPrompt(self, x1, x2, y):
-        print(self.term.move_xy(x1, y) + "> ", end='')
+        w = x2 - x1
+        prompt = "> " + self.input
+        l = len(prompt)
+        if l < w:
+            prompt += " " * (w - l)
+        else:
+            prompt = prompt[l-w:]
+            l = w
+        print(self.term.move_xy(x1, y) + prompt, end='')
+        print(self.term.move_xy(x1 + l, y), end='')
 
     def showHorizontalSplitline(self, x1, x2, y):
         print(self.term.move_xy(x1, y) + "├", end='')
@@ -189,9 +206,6 @@ class PrimDebug:
         for y in range(y1+1, y2):
             print(self.term.move_xy(x, y) + "│", end='')
         print(self.term.move_xy(x, y2) + "┴", end='')
-
-    def showMessageArea(self, x1, y1, x2, y2):
-        pass
 
     def showMemory(self, x1, y1, x2, y2, num=8):
         w = x2 - x1 + 1
@@ -209,25 +223,107 @@ class PrimDebug:
             s = s + " " + chars
             print(self.term.move_xy(x1 + 2, y1 + y) + s[0:w-3], end='')
 
+    def appendMessage(self, msg):
+        self.messages.append(msg)
+        if len(self.messages) > 200:
+            self.messages = self.messages[-200:]
+
+    def showMessageArea(self, x1, y1, x2, y2):
+        w = x2 - x1 + 1
+        h = y2 - y1 + 1
+        start = 0
+        num = len(self.messages)
+        if num - start > h:
+            start = num - h
+        for i in range(h):
+            if start+i >= num:
+                break
+            print(self.term.move_xy(x1+2,y1+i) + self.messages[start+i][0:w-3], end='')
+    
+    def breakpointCmd(self, cmd):
+        l = len(cmd)
+        if l == 1:
+            self.appendMessage("")
+            self.appendMessage("List of breakpoints:")
+            for bp in self.breakpoints:
+                s = f"${bp:x}"
+                if bp in self.symbols:
+                    s+= " (" + self.symbols[bp] + ")"
+                self.appendMessage(s)
+        elif l == 2:
+            if cmd[1] in self.symbolNamesDict:
+                addr = self.symbolNamesDict[cmd[1]]
+            else:
+                try:
+                    addr = int(cmd[1], 16)
+                except:
+                    self.appendMessage(f"Invalid address ${cmd[1]}")
+                    return
+            if addr in self.breakpoints:
+                self.breakpoints.remove(addr)
+                self.appendMessage(f"Removed breakpoint at ${cmd[1]}")
+            else:
+                self.breakpoints.append(addr)
+                self.appendMessage(f"Set breakpoint at ${cmd[1]}")
+                
+    def redrawEverything(self):
+        self.redraw = set((PrimDebug.SHOW_CODE, PrimDebug.SHOW_STACKS, PrimDebug.SHOW_MESSAGES, PrimDebug.SHOW_MEMORY))
+        
     def show(self):
-        print(self.term.clear, end='')
-        self.showBox(0, 0, self.term.width, self.term.height-1)
-        print(self.term.move_xy(2, 0) + " Prim Debugger ", end='')
         memshow_num = 8*3 + 7 # num of bytes per line
         memViewHeight = 16
         x2_code = min(self.term.width // 2, 40)
-        self.showCode(2, 1, x2_code, self.term.height-8)
-        self.showHorizontalSplitline(0, self.term.width, self.term.height - 7)
-        self.showVerticalSplitline(x2_code + 1, 0, self.term.height - 7)
-        self.showDataStack(2, self.term.width - 2, self.term.height-6)
-        self.showReturnStack(2, self.term.width - 2, self.term.height-5)
-        self.showCurrent(2, self.term.width - 2, self.term.height-4)
-        self.showHorizontalSplitline(0, self.term.width, self.term.height - 3)
-        self.showMemory(x2_code+1, 1, self.term.width-1, 1+memViewHeight)
-        self.showHorizontalSplitline(x2_code + 1, self.term.width, 2+memViewHeight)
-        self.showMessageArea(x2_code+1, 10, 3+memViewHeight, self.term.height - 8)
+        code = PrimDebug.SHOW_CODE in self.redraw
+        mem = PrimDebug.SHOW_MEMORY in self.redraw
+        msgs = PrimDebug.SHOW_MESSAGES in self.redraw
+        stacks = PrimDebug.SHOW_STACKS in self.redraw
+        if len(self.redraw) == 4:
+            print(self.term.clear, end='')
+            self.showBox(0, 0, self.term.width, self.term.height-1)
+            print(self.term.move_xy(2, 0) + " Prim Debugger ", end='')
+            self.showHorizontalSplitline(0, self.term.width, self.term.height - 7)
+            self.showVerticalSplitline(x2_code + 1, 0, self.term.height - 7)
+            self.showHorizontalSplitline(0, self.term.width, self.term.height - 3)
+            self.showHorizontalSplitline(x2_code + 1, self.term.width, 2+memViewHeight)
+        if code:
+            self.showCode(2, 1, x2_code, self.term.height-8)
+        if stacks:
+            self.showDataStack(2, self.term.width - 2, self.term.height-6)
+            self.showReturnStack(2, self.term.width - 2, self.term.height-5)
+            self.showCurrent(2, self.term.width - 2, self.term.height-4)
+        if mem:
+            self.showMemory(x2_code+1, 1, self.term.width-1, 1+memViewHeight)
+        if msgs:
+            self.showMessageArea(x2_code+1, 3+memViewHeight, self.term.width -1, self.term.height - 8)
         self.showPrompt(2, self.term.width - 2, self.term.height - 2)
         sys.stdout.flush()
+        self.redraw = set()
+
+    def printHelp(self):
+        self.appendMessage('"break [addr|symbol]"  Set/remove/list breakpoints')
+
+    def userCommand(self):
+        cmd = self.input.strip().split(' ')
+        if len(cmd) < 1:
+            return
+        cmd[0] = cmd[0].lower()
+        if cmd[0] == "break":
+            self.breakpointCmd(cmd)
+        elif cmd[0] == "help":
+            self.printHelp()
+        else:
+            self.appendMessage(f'Invalid command "{cmd[0]}"')
+        self.redraw.add(PrimDebug.SHOW_MESSAGES)
+
+    def handleInput(self, key):
+        if key.code == self.term.KEY_ENTER:
+            self.userCommand()
+            self.input = ""
+        elif key.code == self.term.KEY_BACKSPACE:
+            self.input = self.input[0:-1]
+        elif not key.is_sequence:
+            self.input += key
+
 
 def debug(fn):
     tomldata = toml.load(fn)
@@ -236,18 +332,27 @@ def debug(fn):
     debug = PrimDebug(cpu, term, tomldata["symbols"], tomldata["num-literals"], tomldata["string-literals"])
     
     def on_resize(sig, action):
+        debug.redrawEverything()
         debug.show()
     signal.signal(signal.SIGWINCH, on_resize)
+
+    debug.appendMessage("Welcome to Prim CPU Debugger.")
+    debug.appendMessage("")
+    debug.appendMessage('Type "help" for instructions.')
+    debug.appendMessage("")
 
     with term.fullscreen(), term.cbreak():
         while True:
             debug.show()
             key = term.inkey()
-            print(repr(key))
             if key.code == term.KEY_ESCAPE or key == '\x04': # 4: ctrl+d
                 break
-            if key.code == term.KEY_RIGHT:
+            elif key.code == term.KEY_RIGHT:
                 cpu.step()
+                debug.redraw.add(PrimDebug.SHOW_CODE)
+                debug.redraw.add(PrimDebug.SHOW_STACKS)
+            else:
+                debug.handleInput(key)
 
 
 def main():
