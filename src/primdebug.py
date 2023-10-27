@@ -186,9 +186,10 @@ class PrimDebug:
         for i,l in enumerate(lines):
             s = self.term.move_xy(x1, y1 + i) + l + " " * (w-self.term.length(l))
             if int(l[0:4],base=16) == self.cpu._pc:
-                print(self.term.reverse(s), end='')
-            else:
-                print(s, end='')
+                s = self.term.reverse(s)
+            if int(l[0:4],base=16) in self.breakpoints:
+                s = self.term.blue(s)
+            print(s, end='')
 
     def showBox(self, x1, y1, x2, y2):
         w = x2 - x1
@@ -260,12 +261,15 @@ class PrimDebug:
         l = len(cmd)
         if l == 1:
             self.appendMessage("")
-            self.appendMessage("List of breakpoints:")
-            for bp in self.breakpoints:
-                s = f"${bp:x}"
-                if bp in self.symbols:
-                    s+= " (" + self.symbols[bp] + ")"
-                self.appendMessage(s)
+            if len(self.breakpoints) == 0:
+                self.appendMessage("No breakpoints set.")
+            else:
+                self.appendMessage("List of breakpoints:")
+                for bp in self.breakpoints:
+                    s = f"${bp:x}"
+                    if bp in self.symbols:
+                        s+= " (" + self.symbols[bp] + ")"
+                    self.appendMessage(s)
         elif l == 2:
             if cmd[1] in self.symbolNamesDict:
                 addr = self.symbolNamesDict[cmd[1]]
@@ -286,7 +290,6 @@ class PrimDebug:
         self.redraw = set((PrimDebug.SHOW_CODE, PrimDebug.SHOW_STACKS, PrimDebug.SHOW_MESSAGES, PrimDebug.SHOW_MEMORY))
         
     def show(self):
-        memshow_num = 8*3 + 7 # num of bytes per line
         memViewHeight = 16
         x2_code = min(self.term.width // 2, 40)
         code = PrimDebug.SHOW_CODE in self.redraw
@@ -325,6 +328,7 @@ class PrimDebug:
         cmd[0] = cmd[0].lower()
         if cmd[0] == "break":
             self.breakpointCmd(cmd)
+            self.redraw.add(PrimDebug.SHOW_CODE)
         elif cmd[0] == "help":
             self.printHelp()
         elif cmd[0] == "run":
