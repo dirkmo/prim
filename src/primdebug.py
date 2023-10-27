@@ -37,10 +37,14 @@ class Mif(MemoryIf):
 
 
 class PrimDebug:
-    def __init__(self, cpu, term):
+    def __init__(self, cpu, term, symbols=None, numlits=None, strlits=None):
         self.cpu = cpu
         self.cpu._debug = self
         self.term = term
+        # self.symbolDict = symbols if symbols is not None else {}
+        self.symbols = dict((addr,name) for name,addr in symbols.items())
+        self.strlits = strlits if strlits is not None else []
+        self.numlits = numlits if numlits is not None else []
         PrimAsm.createLookup()
 
     def generateStackViewStr(self, prefix, stack, sp, stacksize, w):
@@ -88,27 +92,36 @@ class PrimDebug:
     def addrNextInstruction(self, addr):
         return addr + self.instructionLength(addr)
 
-    def disassemble(self, addr):
+    def disassemble(self, addr, useSymbols=True):
         opcode = self.cpu._mif.read8(addr)
         (ir, retbit) = (opcode & 0x7f, opcode & 0x80)
         s = PrimAsm.LOOKUP[ir] + (".RET" if retbit else "")
         if ir == PrimOpcodes.PUSH8:
             val = self.cpu._mif.read8(addr+1)
-            s += f" ${val:x}"
         elif ir == PrimOpcodes.PUSH:
             val = self.cpu._mif.read8(addr+1) | (self.cpu._mif.read8(addr+2) << 8)
+        else:
+            return s
+        if useSymbols:
+            nextIr = self.cpu._mif.read8(self.addrNextInstruction(addr)) & 0x7f
+            if nextIr in [PrimOpcodes.JP, PrimOpcodes.JZ, PrimOpcodes.CALL, PrimOpcodes.BYTE_FETCH, PrimOpcodes.FETCH, PrimOpcodes.BYTE_STORE, PrimOpcodes.STORE]:
+                s += " " + self.term.magenta(f"'{self.symbols[val]}") + f" (${val:x})"
+            else:
+                s += f" ${val:x}"
+        else:
             s += f" ${val:x}"
         return s
+        
 
     def showCode(self, x1, y1, x2, y2):
         h = y2 - y1 + 1
         w = x2 - x1 + 1
-        pc = self.cpu._pc+12
-        pc_is_on_line = -1
-        addr = pc
+        self.cpu._pc = 0x1a
+
+        addr = self.cpu._pc
         linecount = 0
         lines = []
-        while addr > 0 and linecount < h // 2:
+        while addr >= 0 and linecount < h // 2:
             da = f"{addr:04x}:"
             for b in range(self.instructionLength(addr)):
                 da += f" {self.cpu._mif.read8(addr + b):02x}"
@@ -116,10 +129,15 @@ class PrimDebug:
             da += self.disassemble(addr)
             lines.insert(0, da)
             linecount += 1
-            pc_is_on_line += 1
+            if addr in self.symbols:
+                lines.insert(0, f"{addr:04x}           " + self.term.red(":" + self.symbols[addr]))
+                linecount += 1
             addr = self.addrPrevInstruction(addr)
-        addr = pc + 1
+        addr = self.cpu._pc + 1
         while addr < 0x10000 and linecount < h:
+            if addr in self.symbols:
+                lines.append(f"{addr:04x}           " + self.term.red(":" + self.symbols[addr]))
+                linecount += 1
             da = f"{addr:04x}:"
             for b in range(self.instructionLength(addr)):
                 da += f" {self.cpu._mif.read8(addr + b):02x}"
@@ -128,10 +146,10 @@ class PrimDebug:
             lines.append(da)
             linecount += 1
             addr = self.addrNextInstruction(addr)
-
         for i,l in enumerate(lines):
-            if i==pc_is_on_line:
+            if int(l[0:4],base=16) == self.cpu._pc:
                 print(self.term.reverse(self.term.move_xy(x1, y1 + i) + l), end='')
+                print(self.term.reverse(" " * (w-self.term.length(l))), end='')
             else:
                 print(self.term.move_xy(x1, y1 + i) + l, end='')
 
@@ -171,7 +189,7 @@ def debug(fn):
     tomldata = toml.load(fn)
     term = Terminal()
     cpu = Prim(Mif(tomldata["memory"]))
-    debug = PrimDebug(cpu, term)
+    debug = PrimDebug(cpu, term, tomldata["symbols"], tomldata["num-literals"], tomldata["string-literals"])
     with term.fullscreen(), term.cbreak():
         debug.show()
         term.inkey()
