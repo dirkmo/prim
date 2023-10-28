@@ -1,8 +1,7 @@
 :tx $ffff c! ;
+:rx $ffff c@ ;
 
-:test 3 0 [ for ] i tx [ next ] ;
-
-[ test ]
+:test 5 [ do ] rx tx [ loop ] ;
 
 [
 0x21 0 c! 'test 1 ! \ push 'test

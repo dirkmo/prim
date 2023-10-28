@@ -17,13 +17,17 @@ import toml
 
 
 class Mif(MemoryIf):
-    def __init__(self, init=None):
+    def __init__(self, init=None, tx=None, uart_rx_init=None):
         self._mem = bytearray(0x10000)
         self._resetmem = None
+        self._tx = tx
+        self.uart_fifo_rx = []
         if init is not None:
             l = len(init)
             self._mem[0:l] = init
             self._resetmem = bytearray(self._mem)
+        if uart_rx_init:
+            self.uart_fifo_rx = list(uart_rx_init)
 
     def reset(self):
         if self._resetmem is not None:
@@ -31,6 +35,10 @@ class Mif(MemoryIf):
 
     def read8(self, addr):
         addr &= 0xffff
+        if addr == 0xfffe:
+            return len(self.uart_fifo_rx) > 0
+        elif addr == 0xffff:
+            return self.uart_fifo_rx.pop(0) if len(self.uart_fifo_rx) else 0
         return self._mem[addr]
 
     def read16(self, addr):
@@ -40,13 +48,17 @@ class Mif(MemoryIf):
         addr &= 0xffff
         value &= 0xff
         if addr == 0xffff:
-            print(f"uart-tx: {chr(value)} (0x{value:02x})")
+            if self._tx is not None:
+                self._tx(value)
         else:
             self._mem[addr] = int(value)
 
     def write16(self, addr, value):
         self.write8(addr, value & 0xff)
         self.write8(addr+1, (value >> 8) & 0xff)
+    
+    def uart_rx(self, dat):
+        self.uart_fifo_rx.append(dat)
 
 
 class PrimDebug:
@@ -71,8 +83,13 @@ class PrimDebug:
         self.memViewHeight = 16
         self.memViewNumBytes = 8
         self.memViewHightlight = set() # addresses being highlighted in memory view
+        self.cpu._mif._tx = self.uart_rx_cb
         self.redrawEverything()
         PrimAsm.createLookup()
+
+    def uart_rx_cb(self, dat):
+        self.appendMessage(f"uart: {chr(dat)} ({dat:02x})")
+        self.redraw.add(PrimDebug.SHOW_MESSAGES)
 
     def generateStackViewStr(self, prefix, stack, sp, stacksize, w):
         w -= len(prefix)
@@ -470,6 +487,12 @@ class PrimDebug:
                 pass
         return count > 0
 
+    def uartSendCmd(self, s):
+        s = s.strip()
+        s = s[s.index(' ')+1:]
+        for c in s:
+            self.cpu._mif.uart_rx(c)
+
     def userCommand(self):
         cmd = self.input.strip().split(' ')
         if len(cmd) < 1:
@@ -495,6 +518,8 @@ class PrimDebug:
             self.userReadMemoryCmd(cmd)
         elif cmd[0] == "w":
             self.userWriteMemoryCmd(cmd)
+        elif cmd[0] == "uart":
+            self.uartSendCmd(self.input)
         elif self.userPrimExecute(cmd):
             pass
         else:
@@ -519,11 +544,59 @@ class PrimDebug:
     def onBreakpoint(self):
         return self.cpu._pc in self.breakpoints
 
+    def debug(self):
+        self.appendMessage("Welcome to Prim CPU Debugger.")
+        self.appendMessage("")
+        self.appendMessage('Type "help" for instructions.')
+        self.appendMessage("")
+        with self.term.fullscreen(), self.term.cbreak():
+            while True:
+                while self.run:
+                    ir = self.cpu.step()
+                    kbhit = self.term.kbhit(0)
+                    bp = self.onSilentBreakpoint() or self.onBreakpoint()
+                    if kbhit or (ir == PrimOpcodes.BREAK) or bp:
+                        if kbhit:
+                            self.term.inkey()
+                        self.run = False
+                        self.redrawEverything()
+                        break
+                    self.redraw.add(PrimDebug.SHOW_CODE)
+                    self.redraw.add(PrimDebug.SHOW_STACKS)
+                    self.show()
+                self.show()
+                key = self.term.inkey()
+                if key.code == self.term.KEY_ESCAPE or key == '\x04': # 4: ctrl+d
+                    break
+                elif key.code == self.term.KEY_RIGHT:
+                    self.cpu.step()
+                    self.redraw.add(PrimDebug.SHOW_CODE)
+                    self.redraw.add(PrimDebug.SHOW_STACKS)
+                    self.redraw.add(PrimDebug.SHOW_MEMORY)
+                elif key.code == self.term.KEY_DOWN:
+                    if self.cpu._mif.read8(self.cpu._pc) == PrimOpcodes.CALL:
+                        self.silentBreakpoints.add(self.addrNextInstruction(self.cpu._pc))
+                        self.run = True
+                    else:
+                        self.cpu.step()
+                        self.redraw.add(PrimDebug.SHOW_CODE)
+                        self.redraw.add(PrimDebug.SHOW_STACKS)
+                        self.redraw.add(PrimDebug.SHOW_MEMORY)
+                else:
+                    self.handleInput(key)
 
-def debug(fn):
+
+def debug(fn, uartfn):
     tomldata = toml.load(fn)
     term = Terminal()
-    cpu = Prim(Mif(tomldata["memory"]))
+
+    try:
+        with open(uartfn,"rb") as f:
+            uart_data = f.read()
+    except:
+        uart_data = None
+
+    cpu = Prim(Mif(tomldata["memory"], uart_rx_init=uart_data))
     debug = PrimDebug(cpu, term, tomldata["symbols"], tomldata["num-literals"], tomldata["string-literals"])
 
     def on_resize(sig, action):
@@ -531,55 +604,16 @@ def debug(fn):
         debug.show()
     signal.signal(signal.SIGWINCH, on_resize)
 
-    debug.appendMessage("Welcome to Prim CPU Debugger.")
-    debug.appendMessage("")
-    debug.appendMessage('Type "help" for instructions.')
-    debug.appendMessage("")
-
-    with term.fullscreen(), term.cbreak():
-        while True:
-            if debug.run:
-                while True:
-                    ir = cpu.step()
-                    kbhit = term.kbhit(0)
-                    bp = debug.onSilentBreakpoint() or debug.onBreakpoint()
-                    if kbhit or (ir == PrimOpcodes.BREAK) or bp:
-                        if kbhit:
-                            term.inkey()
-                        debug.run = False
-                        debug.redrawEverything()
-                        break
-                    debug.redraw.add(PrimDebug.SHOW_CODE)
-                    debug.redraw.add(PrimDebug.SHOW_STACKS)
-                    debug.show()
-            debug.show()
-            key = term.inkey()
-            if key.code == term.KEY_ESCAPE or key == '\x04': # 4: ctrl+d
-                break
-            elif key.code == term.KEY_RIGHT:
-                cpu.step()
-                debug.redraw.add(PrimDebug.SHOW_CODE)
-                debug.redraw.add(PrimDebug.SHOW_STACKS)
-                debug.redraw.add(PrimDebug.SHOW_MEMORY)
-            elif key.code == term.KEY_DOWN:
-                if cpu._mif.read8(cpu._pc) == PrimOpcodes.CALL:
-                    debug.silentBreakpoints.add(debug.addrNextInstruction(debug.cpu._pc))
-                    debug.run = True
-                else:
-                    cpu.step()
-                    debug.redraw.add(PrimDebug.SHOW_CODE)
-                    debug.redraw.add(PrimDebug.SHOW_STACKS)
-                    debug.redraw.add(PrimDebug.SHOW_MEMORY)
-            else:
-                debug.handleInput(key)
+    debug.debug()
 
 
 def main():
     parser = argparse.ArgumentParser(description='Prim Debugger')
     parser.add_argument("-i", help="Input symbol file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.sym")
+    parser.add_argument("-u", help="UART input file", action="store", metavar="<input file>", type=str, required=False, dest="uart_filename",default="src/test.tok")
     args = parser.parse_args()
 
-    debug(args.input_filename)
+    debug(args.input_filename, args.uart_filename)
 
 
 if __name__ == "__main__":
