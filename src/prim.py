@@ -12,6 +12,8 @@ class MemoryIf:
         ...
     def write16(self, addr, value):
         ...
+    def reset(self):
+        ...
 
 class Prim:
     # stack sizes
@@ -79,12 +81,16 @@ class Prim:
         self._rs[self._rsp] = value & 0xffff
 
     def dpop(self):
+        dat = self._ds[self._dsp]
+        self._ds[self._dsp] = 0
         self._dsp = (self._dsp - 1) % Prim.DS_SIZE
-        return self._ds[(self._dsp + 1) % Prim.DS_SIZE]
+        return dat
 
     def rpop(self):
+        dat = self._rs[self._rsp]
+        self._rs[self._rsp] = 0
         self._rsp = (self._rsp - 1) % Prim.RS_SIZE
-        return self._rs[(self._rsp + 1) % Prim.RS_SIZE]
+        return dat
 
     def T(self):
         return self._ds[self._dsp]

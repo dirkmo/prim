@@ -19,9 +19,15 @@ import toml
 class Mif(MemoryIf):
     def __init__(self, init=None):
         self._mem = bytearray(0x10000)
+        self._resetmem = None
         if init is not None:
             l = len(init)
             self._mem[0:l] = init
+            self._resetmem = bytearray(self._mem)
+
+    def reset(self):
+        if self._resetmem is not None:
+            self._mem = bytearray(self._resetmem)
 
     def read8(self, addr):
         addr &= 0xffff
@@ -61,6 +67,10 @@ class PrimDebug:
         self.breakpoints = set() # active breakpoints
         self.silentBreakpoints = set() # silent breakpoints for step-over
         self.run = False
+        self.memViewAddr = 0
+        self.memViewHeight = 16
+        self.memViewNumBytes = 8
+        self.memViewHightlight = set() # addresses being highlighted in memory view
         self.redrawEverything()
         PrimAsm.createLookup()
 
@@ -77,7 +87,7 @@ class PrimDebug:
         if l < w:
             s += " " * (w - l)
         return s
-    
+
     def showDataStack(self, x1, x2, y):
         s = self.generateStackViewStr("D: ", self.cpu._ds, self.cpu._dsp, Prim.DS_SIZE, x2 - x1)
         with self.term.location(x=x1, y=y):
@@ -87,7 +97,7 @@ class PrimDebug:
         s = self.generateStackViewStr("R: ", self.cpu._rs, self.cpu._rsp, Prim.RS_SIZE, x2 - x1)
         with self.term.location(x=x1, y=y):
             print(s, end="")
-    
+
     def showCurrent(self, x1, x2, y):
         w = x2 - x1 + 1
         pc = self.cpu._pc
@@ -224,21 +234,30 @@ class PrimDebug:
             print(self.term.move_xy(x, y) + "│", end='')
         print(self.term.move_xy(x, y2) + "┴", end='')
 
-    def showMemory(self, x1, y1, x2, y2, num=8):
+    def showMemory(self, x1, y1, x2, y2):
         w = x2 - x1 + 1
         h = y2 - y1 + 1
-        start = self.cpu._pc - self.cpu._pc % 8
+        start = max(0, self.memViewAddr)
+        if start + h * self.memViewNumBytes > 0xffff:
+            start = 0x10000 - h * self.memViewNumBytes
         s = ""
         for y in range(h):
-            addr = start + y*8
+            addr = start + y * self.memViewNumBytes
             s = f"{addr:04x}:"
             chars = ""
-            for a in range(8):
-                val = self.cpu._mif.read8(addr + a)
-                s += f" {val:02x}"
-                chars += '.' if val < 32 else chr(val)
+            for a in range(self.memViewNumBytes):
+                byteaddr = addr + a
+                val = self.cpu._mif.read8(byteaddr)
+                s += " "
+                if byteaddr in self.memViewHightlight:
+                    s += self.term.green(f"{val:02x}")
+                    chars += self.term.green('.' if val < 32 else chr(val))
+                else:
+                    s += f"{val:02x}"
+                    chars += '.' if val < 32 else chr(val)
             s = s + " " + chars
             print(self.term.move_xy(x1 + 2, y1 + y) + s[0:w-3], end='')
+            print(self.term.normal, end='')
 
     def appendMessage(self, msg):
         self.messages.append(msg)
@@ -256,7 +275,7 @@ class PrimDebug:
             if start+i >= num:
                 break
             print(self.term.move_xy(x1+2,y1+i) + self.messages[start+i][0:w-3], end='')
-    
+
     def breakpointCmd(self, cmd):
         l = len(cmd)
         if l == 1:
@@ -285,12 +304,11 @@ class PrimDebug:
             else:
                 self.breakpoints.add(addr)
                 self.appendMessage(f"Set breakpoint at ${cmd[1]}")
-                
+
     def redrawEverything(self):
         self.redraw = set((PrimDebug.SHOW_CODE, PrimDebug.SHOW_STACKS, PrimDebug.SHOW_MESSAGES, PrimDebug.SHOW_MEMORY))
-        
+
     def show(self):
-        memViewHeight = 16
         x2_code = min(self.term.width // 2, 40)
         code = PrimDebug.SHOW_CODE in self.redraw
         mem = PrimDebug.SHOW_MEMORY in self.redraw
@@ -303,7 +321,7 @@ class PrimDebug:
             self.showHorizontalSplitline(0, self.term.width, self.term.height - 7)
             self.showVerticalSplitline(x2_code + 1, 0, self.term.height - 7)
             self.showHorizontalSplitline(0, self.term.width, self.term.height - 3)
-            self.showHorizontalSplitline(x2_code + 1, self.term.width, 2+memViewHeight)
+            self.showHorizontalSplitline(x2_code + 1, self.term.width, 2+self.memViewHeight)
         if code:
             self.showCode(2, 1, x2_code, self.term.height-8)
         if stacks:
@@ -311,15 +329,66 @@ class PrimDebug:
             self.showReturnStack(2, self.term.width - 2, self.term.height-5)
             self.showCurrent(2, self.term.width - 2, self.term.height-4)
         if mem:
-            self.showMemory(x2_code+1, 1, self.term.width-1, 1+memViewHeight)
+            self.showMemory(x2_code+1, 1, self.term.width-1, 1+self.memViewHeight)
         if msgs:
-            self.showMessageArea(x2_code+1, 3+memViewHeight, self.term.width -1, self.term.height - 8)
+            self.showMessageArea(x2_code+1, 3+self.memViewHeight, self.term.width -1, self.term.height - 8)
         self.showPrompt(2, self.term.width - 2, self.term.height - 2)
         sys.stdout.flush()
         self.redraw = set()
 
     def printHelp(self):
+        self.appendMessage('LEFT for single step')
+        self.appendMessage('DOWN for step over')
         self.appendMessage('"break [addr|symbol]"  Set/remove/list breakpoints')
+        self.appendMessage('"reset"                Reset CPU and memory')
+        self.appendMessage('"run"                  Run program')
+        self.appendMessage('"view <addr>"          Set memory view address')
+        self.appendMessage('"hl [addr] [len]"      (Un-)highlight range in memory view')
+
+    def setupMemoryView(self, cmd):
+        self.redraw.add(PrimDebug.SHOW_MEMORY)
+        if len(cmd) < 2:
+            self.appendMessage("Missing address")
+            return
+        try:
+            addr = int(cmd[1], 16)
+        except:
+            self.appendMessage(f"Invalid address {cmd[1]}")
+            return
+        self.memViewAddr = addr
+
+    def memoryViewMakeAddrVisible(self, addr):
+        # move mem view base address so that addr is visible
+        mvl = self.memViewHeight * self.memViewNumBytes
+        start = self.memViewAddr
+        stop = self.memViewAddr + mvl
+        if addr < start or addr >= stop:
+            self.memViewAddr = max(0, addr - mvl // 2)
+
+    def highlightMemory(self, cmd):
+        self.redraw.add(PrimDebug.SHOW_MEMORY)
+        if len(cmd) < 2:
+            self.memViewHightlight = set()
+            return
+        try:
+            addr = int(cmd[1], 16)
+        except:
+            self.appendMessage(f"Invalid address {cmd[1]}")
+            return
+        cnt = 1
+        if len(cmd) == 3:
+            try:
+                cnt = int(cmd[2], 16)
+            except:
+                self.appendMessage(f"Invalid length {cmd[2]}")
+                return
+        for a in range(addr, addr+cnt):
+            if a in self.memViewHightlight:
+                self.memViewHightlight.remove(a)
+            else:
+                self.memViewHightlight.add(a)
+                if a == addr:
+                    self.memoryViewMakeAddrVisible(a)
 
     def userCommand(self):
         cmd = self.input.strip().split(' ')
@@ -333,6 +402,15 @@ class PrimDebug:
             self.printHelp()
         elif cmd[0] == "run":
             self.run = True
+        elif cmd[0] == "reset":
+            self.appendMessage("Reset CPU and memory.")
+            self.cpu.reset()
+            self.cpu._mif.reset()
+            self.redrawEverything()
+        elif cmd[0] == "view":
+            self.setupMemoryView(cmd)
+        elif cmd[0] == "hl":
+            self.highlightMemory(cmd)
         else:
             self.appendMessage(f'Invalid command "{cmd[0]}"')
         self.redraw.add(PrimDebug.SHOW_MESSAGES)
@@ -361,7 +439,7 @@ def debug(fn):
     term = Terminal()
     cpu = Prim(Mif(tomldata["memory"]))
     debug = PrimDebug(cpu, term, tomldata["symbols"], tomldata["num-literals"], tomldata["string-literals"])
-    
+
     def on_resize(sig, action):
         debug.redrawEverything()
         debug.show()
@@ -414,7 +492,7 @@ def main():
     parser = argparse.ArgumentParser(description='Prim Debugger')
     parser.add_argument("-i", help="Input symbol file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.sym")
     args = parser.parse_args()
-    
+
     debug(args.input_filename)
 
 
