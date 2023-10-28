@@ -1,32 +1,8 @@
-:for ( stop start )
-2>r,           \ range auf rstack legen
-'H @           \ next springt hier hin
-2r>, 2dup, 2>r,
--,             \ Schleife zuende?
-push,
-'H @           \ Hier push adresse-hinter-next
-$ffff ,        \ Adresse, muss von next überschrieben werden
-jz,            \ Sprung
-;
-
-:next
-r>, 1+, >r,       \ Zähler holen und inkrementieren
-push, swap , jp,  \ Sprung zu for
-'H @ swap !       \ adresse-hinter-next schreiben
-rdrop, rdrop,
-;
-
-:i
-r> r> swap     \ i ret
-over            \ i ret i
->r >r
-;
-
 :tx $ffff c! ;
 
 :test 3 0 [ for ] i tx [ next ] ;
 
-[ test break ]
+[ test ]
 
 [
 0x21 0 c! 'test 1 ! \ push 'test
