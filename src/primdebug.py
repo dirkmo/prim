@@ -237,27 +237,29 @@ class PrimDebug:
     def showMemory(self, x1, y1, x2, y2):
         w = x2 - x1 + 1
         h = y2 - y1 + 1
+        self.memViewAddr -= self.memViewAddr % self.memViewNumBytes # align
         start = max(0, self.memViewAddr)
         if start + h * self.memViewNumBytes > 0xffff:
             start = 0x10000 - h * self.memViewNumBytes
-        s = ""
+        total = ""
         for y in range(h):
             addr = start + y * self.memViewNumBytes
-            s = f"{addr:04x}:"
+            s = self.term.move_xy(x1 + 2, y1 + y) + f"{addr:04x}:"
             chars = ""
             for a in range(self.memViewNumBytes):
                 byteaddr = addr + a
                 val = self.cpu._mif.read8(byteaddr)
                 s += " "
                 if byteaddr in self.memViewHightlight:
-                    s += self.term.green(f"{val:02x}")
-                    chars += self.term.green('.' if val < 32 else chr(val))
+                    s += self.term.black_on_cyan(f"{val:02x}")
+                    chars += self.term.black_on_cyan(chr(val) if chr(val).isprintable() else '.')
                 else:
                     s += f"{val:02x}"
-                    chars += '.' if val < 32 else chr(val)
+                    chars += (chr(val) if chr(val).isprintable() else '.')
             s = s + " " + chars
-            print(self.term.move_xy(x1 + 2, y1 + y) + s[0:w-3], end='')
-            print(self.term.normal, end='')
+            total += self.term.truncate(s, w-3)
+        print(total, end='')
+        print(self.term.normal, end='')
 
     def appendMessage(self, msg):
         self.messages.append(msg)
