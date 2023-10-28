@@ -211,6 +211,10 @@ def initialFragments():
     F += fragment(":repeat push, swap , jp, 'H @ swap ! ;")
     F += fragment(":do 'H @ dup, push, 'H @ $ffff , jz, >r, ;")
     F += fragment(":loop r>, push8, 1 c, -, push, swap , jp, 'H @ swap ! drop, ;")
+    F += fragment(":for 2>r, 'H @ 2r>, 2dup, 2>r, -, push, 'H @ $ffff , jz, ;")
+    F += fragment(":next r>, 1+, >r, push, swap , jp, 'H @ swap ! rdrop, rdrop, ;")
+    F += fragment(":i r> r> swap over >r >r ;")
+
     for f in F:
         fragments.append(Fragment(f,0))
     return fragments
