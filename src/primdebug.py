@@ -339,8 +339,8 @@ class PrimDebug:
         self.redraw = set()
 
     def printHelp(self):
-        self.appendMessage('LEFT for single step')
-        self.appendMessage('DOWN for step over')
+        self.appendMessage('Available commands:')
+        self.appendMessage()
         self.appendMessage('"break [addr|symbol]"  Set/remove/list breakpoints')
         self.appendMessage('"reset"                Reset CPU and memory')
         self.appendMessage('"run"                  Run program')
@@ -348,6 +348,12 @@ class PrimDebug:
         self.appendMessage('"hl [addr] [len]"      (Un-)highlight range in memory view')
         self.appendMessage('"r <addr> [len]"       Read from memory')
         self.appendMessage('"w <addr> <byte>..."   Write to memory')
+        self.appendMessage()
+        self.appendMessage('LEFT for single step')
+        self.appendMessage('DOWN for step over')
+        self.appendMessage('Prim mnemonics for direct execution (like "drop")')
+        self.appendMessage('Enter number to push on data stack')
+        self.appendMessage()
 
     def setupMemoryView(self, cmd):
         self.redraw.add(PrimDebug.SHOW_MEMORY)
@@ -394,7 +400,7 @@ class PrimDebug:
                 if a == addr:
                     self.memoryViewMakeAddrVisible(a)
 
-    def userReadCmd(self, cmd):
+    def userReadMemoryCmd(self, cmd):
         if len(cmd) < 2:
             self.appendMessage(f"Missing address")
             return
@@ -417,7 +423,7 @@ class PrimDebug:
         self.appendMessage(s)
         self.appendMessage()
 
-    def userWriteCmd(self, cmd):
+    def userWriteMemoryCmd(self, cmd):
         self.redraw.add(PrimDebug.SHOW_MEMORY)
         if len(cmd) < 3:
             self.appendMessage(f"Missing parameters")
@@ -444,6 +450,26 @@ class PrimDebug:
         self.appendMessage(f"{s[:-1]}")
         self.appendMessage()
 
+    def userPrimExecute(self, cmd):
+        self.redrawEverything()
+        count = 0
+        for c in cmd:
+            try:
+                val = int(c, 16)
+                self.cpu.dpush(val)
+                count += 1
+                continue
+            except:
+                pass
+            try:
+                opcodes = PrimAsm.assemble(c)
+                for op in opcodes:
+                    self.cpu.execute(op)
+                count += 1
+            except:
+                pass
+        return count > 0
+
     def userCommand(self):
         cmd = self.input.strip().split(' ')
         if len(cmd) < 1:
@@ -466,9 +492,11 @@ class PrimDebug:
         elif cmd[0] == "hl":
             self.highlightMemory(cmd)
         elif cmd[0] == "r":
-            self.userReadCmd(cmd)
+            self.userReadMemoryCmd(cmd)
         elif cmd[0] == "w":
-            self.userWriteCmd(cmd)
+            self.userWriteMemoryCmd(cmd)
+        elif self.userPrimExecute(cmd):
+            pass
         else:
             self.appendMessage(f'Invalid command "{cmd[0]}"')
         self.redraw.add(PrimDebug.SHOW_MESSAGES)
