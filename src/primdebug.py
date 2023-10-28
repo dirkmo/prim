@@ -261,7 +261,7 @@ class PrimDebug:
         print(total, end='')
         print(self.term.normal, end='')
 
-    def appendMessage(self, msg):
+    def appendMessage(self, msg=""):
         self.messages.append(msg)
         if len(self.messages) > 200:
             self.messages = self.messages[-200:]
@@ -346,6 +346,8 @@ class PrimDebug:
         self.appendMessage('"run"                  Run program')
         self.appendMessage('"view <addr>"          Set memory view address')
         self.appendMessage('"hl [addr] [len]"      (Un-)highlight range in memory view')
+        self.appendMessage('"r <addr> [len]"       Read from memory')
+        self.appendMessage('"w <addr> <byte>..."   Write to memory')
 
     def setupMemoryView(self, cmd):
         self.redraw.add(PrimDebug.SHOW_MEMORY)
@@ -392,6 +394,32 @@ class PrimDebug:
                 if a == addr:
                     self.memoryViewMakeAddrVisible(a)
 
+    def userReadCmd(self, cmd):
+        if len(cmd) < 2:
+            self.appendMessage(f"Missing address")
+            return
+        try:
+            addr = int(cmd[1], 16)
+        except:
+            self.appendMessage(f"Invalid address {cmd[1]}")
+            return
+        l = 1
+        if len(cmd) > 2:
+            try:
+                l = int(cmd[2], 16)
+            except:
+                pass
+        self.appendMessage(f"Reading {l} bytes from {addr:x}:")
+        s = ""
+        for a in range(addr, addr+l):
+            val = self.cpu._mif.read8(a)
+            s += f"{val:02x} "
+        self.appendMessage(s)
+        self.appendMessage("")
+
+    def userWriteCmd(self, cmd):
+        pass
+
     def userCommand(self):
         cmd = self.input.strip().split(' ')
         if len(cmd) < 1:
@@ -413,6 +441,10 @@ class PrimDebug:
             self.setupMemoryView(cmd)
         elif cmd[0] == "hl":
             self.highlightMemory(cmd)
+        elif cmd[0] == "r":
+            self.userReadCmd(cmd)
+        elif cmd[0] == "w":
+            self.userWriteCmd(cmd)
         else:
             self.appendMessage(f'Invalid command "{cmd[0]}"')
         self.redraw.add(PrimDebug.SHOW_MESSAGES)
