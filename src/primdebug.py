@@ -409,16 +409,40 @@ class PrimDebug:
                 l = int(cmd[2], 16)
             except:
                 pass
-        self.appendMessage(f"Reading {l} bytes from {addr:x}:")
+        self.appendMessage(f"Reading {l} bytes from ${addr:x}:")
         s = ""
         for a in range(addr, addr+l):
             val = self.cpu._mif.read8(a)
             s += f"{val:02x} "
         self.appendMessage(s)
-        self.appendMessage("")
+        self.appendMessage()
 
     def userWriteCmd(self, cmd):
-        pass
+        self.redraw.add(PrimDebug.SHOW_MEMORY)
+        if len(cmd) < 3:
+            self.appendMessage(f"Missing parameters")
+            return
+        try:
+            addr = int(cmd[1], 16)
+        except:
+            self.appendMessage(f"Invalid address {cmd[1]}")
+            return
+        data = []
+        for c in cmd[2:]:
+            try:
+                data.append(int(c, 16))
+            except:
+                self.appendMessage(f"Invalid hex number {c}")
+                return
+        waddr = addr
+        s = ""
+        for d in data:
+            s += f"{d:02x} "
+            self.cpu._mif.write8(waddr, d)
+            waddr += 1
+        self.appendMessage(f"Writing to ${addr}:")
+        self.appendMessage(f"{s[:-1]}")
+        self.appendMessage()
 
     def userCommand(self):
         cmd = self.input.strip().split(' ')
