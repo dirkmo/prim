@@ -38,9 +38,9 @@ class Token:
     MODE_COMPILE = 0
     MODE_IMMEDIATE = 1
 
-    D = {}
-    Didx = 0
     mode = MODE_COMPILE
+
+    definition_num = 0 # number of definitions
 
     tagnames = ["WORD_CALL", "WORD_ADDRESS", "NUMBER", "STRING", "MNEMONIC", "BUILDIN", "LIT_NUMBER", "LIT_STRING", "DEFINITION", "MODE", "COMMENT_BRACES", "COMMENT_BACKSLASH", "WHITESPACE"]
 
@@ -48,14 +48,11 @@ class Token:
         self.tag = tag
         self.fragment = fragment
 
-    def addDefinition(name):
-        assert not name in Token.D, f"{name} already defined"
-        print(f"Definition {Token.Didx}: {name}")
-        Token.D[name] = Token.Didx
-        Token.Didx += 1
+    def addDefinition():
+        Token.definition_num += 1
 
-    def definitionAvailable(name):
-        return name in Token.D
+    def numDefinitions():
+        return Token.definition_num
 
     def generate(self):
         ...
@@ -69,13 +66,12 @@ class Token:
 
 
 class TokenDefinition(Token):
-    def __init__(self, name, fragment):
+    def __init__(self, fragment):
         super().__init__(self.DEFINITION, fragment)
-        self.name = name
-        Token.addDefinition(name)
+        Token.addDefinition()
 
     def generate(self):
-        return Token.generateStringData(self.tag, self.name)
+        return [self.tag]
 
 
 class TokenMode(Token):
@@ -93,32 +89,30 @@ class TokenMode(Token):
 
 
 class TokenWordCall(Token):
-    def __init__(self, s, fragment):
+    def __init__(self, idx, fragment):
         super().__init__(self.WORD_CALL, fragment)
         if Token.mode == Token.MODE_IMMEDIATE:
             sys.stdout.write("Immediate ")
-        print(f"Word Call {s}")
-        self.name = s
+        self.idx = idx
+        print(f"Word Call {idx}")
 
     def generate(self):
-        addr = Token.D[self.name]
         data = [self.tag]
-        data.extend(lohi(addr))
+        data.extend(lohi(self.idx))
         return data
 
 
 class TokenWordAddress(Token):
-    def __init__(self, s, fragment):
+    def __init__(self, idx, fragment):
         super().__init__(self.WORD_ADDRESS, fragment)
         if Token.mode == Token.MODE_IMMEDIATE:
             sys.stdout.write("Immediate ")
-        print(f"Word Address {s}")
-        self.name = s
+        self.idx = idx
+        print(f"Word Address {idx}")
 
     def generate(self):
-        addr = Token.D[self.name]
         data = [self.tag]
-        data.extend(lohi(addr))
+        data.extend(lohi(self.idx))
         return data
 
 

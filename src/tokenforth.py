@@ -38,23 +38,28 @@ class Mif(MemoryIf):
 
 
 class Dictionary:
-    D = [] # definition names with addresses as tuple (name, addr)
+    D = [] # definition addresses
     S = [] # string literal addresses
     N = [] # number literal addresses
-    def addNameDefinition(name, addr):
-        if name == "H":
+
+    def addDefinition(addr):
+        if len(Dictionary.D) == 0:
             addr = Consts.HERE
             Dictionary.addNumberLiteral(addr)
-        Dictionary.D.append((name, addr))
-    def lookupNameDefinition(idx):
+        Dictionary.D.append(addr)
+
+    def lookupDefinition(idx):
         return Dictionary.D[idx]
+
     def nameDefinitionMap():
         m = {}
         for d in Dictionary.D:
             m[d[0]] = d[1]
         return m
+
     def addStringLiteral(addr):
         Dictionary.S.append(addr)
+
     def addNumberLiteral(addr):
         Dictionary.N.append(addr)
 
@@ -128,7 +133,7 @@ def interpret(tokens, cpu):
         if tag == Token.WORD_CALL:
             di = tokens[idx] | (tokens[idx+1] << 8)
             idx += 2
-            (name, addr) = Dictionary.lookupNameDefinition(di)
+            addr = Dictionary.lookupDefinition(di)
             ops = getPushOps(addr)
             ops.append(PrimOpcodes.CALL)
             # print(f"word call: {name}")
@@ -140,7 +145,7 @@ def interpret(tokens, cpu):
         elif tag == Token.WORD_ADDRESS:
             di = tokens[idx] | (tokens[idx+1] << 8)
             idx += 2
-            (name, addr) = Dictionary.lookupNameDefinition(di)
+            addr = Dictionary.lookupDefinition(di)
             ops = getPushOps(addr)
             # print(f"word address: {name}")
             if mode == Token.MODE_COMPILE:
@@ -194,11 +199,8 @@ def interpret(tokens, cpu):
             comma(cpu._mif, [l])
             comma(cpu._mif, tokens[idx:idx+1])
         elif tag == Token.DEFINITION:
-            l = tokens[idx]
-            name = tokens[idx+1:idx+1+l].decode("utf-8")
-            idx += l + 1
             # print(f"Definition: {name}")
-            Dictionary.addNameDefinition(name, cpu._mif.read16(Consts.HERE))
+            Dictionary.addDefinition(cpu._mif.read16(Consts.HERE))
         elif tag == Token.MODE:
             mode = tokens[idx]
             idx += 1

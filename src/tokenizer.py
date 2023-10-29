@@ -115,6 +115,7 @@ def stringToNumber(s):
 def tokenizeFragments(fragments):
     tokens = []
     immediate = False
+    definitions = [ 'H' ]
     for f in fragments:
         t = f.s
         newTokens = None
@@ -128,11 +129,13 @@ def tokenizeFragments(fragments):
                 immediate = False
             elif t[0] == ":": # add name to (virtual) dictionary ":name"
                 assert not immediate, f"ERROR on line {f.linenum}: Definition {t[1:]} not possible in immediate mode."
-                newTokens = TokenDefinition(t[1:], f)
+                assert t[1:0] not in definitions, f"ERROR on line {f.linenum}: Multiple definition of '{t[1:]}'."
+                definitions.append(t[1:])
+                newTokens = TokenDefinition(f)
             elif isMnemonic(t):
                 newTokens = TokenMnemonic(t, f)
                 pass
-            elif isBuildin(t): # ";", ","
+            elif isBuildin(t): # ";"
                 newTokens = TokenBuildin(t, f)
             elif t[0] == "#":
                 assert not immediate, f"ERROR on line {f.linenum}: Literal {t} not possible in immediate mode."
@@ -144,9 +147,9 @@ def tokenizeFragments(fragments):
                         newTokens = TokenLiteralNumber(num, f)
                     except:
                         assert False, f"ERROR on line {f.linenum}: Unknown word '{t[1:]}'"
-            elif t[0] == "'" and len(t) > 2: # 'name
-                assert Token.definitionAvailable(t[1:]), f"ERROR on line {f.linenum}: Definition '{t[1:]}' not found."
-                newTokens = TokenWordAddress(t[1:], f)
+            elif t[0] == "'" and len(t) > 1: # 'name
+                assert t[1:] in definitions, f"ERROR on line {f.linenum}: Definition '{t[1:]}' not found."
+                newTokens = TokenWordAddress(definitions.index(t[1:]), f)
             elif t[0] == '"' and len(t) > 2 and t[-1] == '"': # '"str"'
                 assert not immediate, f"ERROR on line {f.linenum}: String {t} not possible in immediate mode."
                 newTokens = TokenString(t[1:-1], f)
@@ -154,12 +157,10 @@ def tokenizeFragments(fragments):
                 newTokens = TokenCommentBackslash(t, f)
             elif t[0:2] == "( ": # "( comment )"
                 newTokens = TokenCommentBraces(t, f)
-            elif t[0] == "'": # "'name"
-                newTokens = TokenWordAddress(t[1:], f)
             else: # "name", "123", "$1a2b"
                 # compile word
-                if Token.definitionAvailable(t): # "name"
-                    newTokens = TokenWordCall(t, f)
+                if t in definitions: # "name"
+                    newTokens = TokenWordCall(definitions.index(t), f)
                 else:
                     # compile literal
                     try:
@@ -179,7 +180,10 @@ def tokenizeFragments(fragments):
 def initialFragments():
     fragments = []
     # add code fragments for comma
-    F = fragment(":c, 'H @ c! 'H @ 1 + 'H ! ;")
+    F = fragment(":DICT #$fefe [ 0 'DICT ! ]")
+    F += fragment(":LATEST #$fefe")
+    F += fragment(":DICTAPPEND 'LATEST @ ! 'LATEST @ 2 - 'LATEST ! ;")
+    F += fragment(":c, 'H @ c! 'H @ 1 + 'H ! ;")
     F += fragment(":, 'H @ ! 'H @ 2 + 'H ! ;")
     F += fragment(f":push, {PrimOpcodes.PUSH} c, ;")
     F += fragment(f":push8, {PrimOpcodes.PUSH8} c, ;")
@@ -223,7 +227,7 @@ def initialFragments():
 def initialTokens():
     tokens = []
     # add definition for H, needed for comma
-    T_here = TokenDefinition("H", Fragment("H", 0))
+    T_here = TokenDefinition(Fragment("H", 0))
     tokens.append(T_here)
     return tokens
 
