@@ -89,7 +89,8 @@ def getPushOps(num, shrink=True):
 def execute(cpu, opcodes):
     opcodes.append(PrimOpcodes.BREAK)
     l = len(opcodes)
-    cpu._mif._mem[0xf000:0xf000+l] = opcodes
+    assert l < 0xf0, f"too much immediate code"
+    cpu._mif._mem[0xff00:0xf000+l] = opcodes
     cpu._pc = 0xf000
     while cpu.step() != PrimOpcodes.BREAK:
         #cpu.status()
