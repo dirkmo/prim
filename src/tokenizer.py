@@ -145,8 +145,8 @@ def tokenizeFragments(fragments):
                     except:
                         assert False, f"ERROR on line {f.linenum}: Unknown word '{t[1:]}'"
             elif t[0] == "'" and len(t) > 2: # 'name
-                if Token.definitionAvailable(t[1:]):
-                    newTokens = TokenWordAddress(t[1:], f)
+                assert Token.definitionAvailable(t[1:]), f"ERROR on line {f.linenum}: Definition '{t[1:]}' not found."
+                newTokens = TokenWordAddress(t[1:], f)
             elif t[0] == '"' and len(t) > 2 and t[-1] == '"': # '"str"'
                 assert not immediate, f"ERROR on line {f.linenum}: String {t} not possible in immediate mode."
                 newTokens = TokenString(t[1:-1], f)
