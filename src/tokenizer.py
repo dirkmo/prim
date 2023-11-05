@@ -139,7 +139,7 @@ def tokenizeFragments(fragments):
                 if (len(t) > 3) and (t[1] == '"') and t[-1] == '"':
                     newTokens = TokenLiteralString(t[2:-1],f)
                 #elif (len(t) > 2) and (t[1] == "'") and Token.definitionAvailable(t[2:]):
-                #   pass    
+                #   pass
                 else:
                     try:
                         num = stringToNumber(t[1:])
@@ -182,7 +182,7 @@ def initialFragments():
     fragments = []
     # add code fragments for comma
     F = []
-    # F += fragment(":c, 'H @ c! 'H @ 1 + 'H ! ;")
+    F += fragment(":c, 'H @ c! 'H @ 1 + 'H ! ;")
     # F += fragment(":, 'H @ ! 'H @ 2 + 'H ! ;")
     # F += fragment(f":push, {PrimOpcodes.PUSH} c, ;")
     # F += fragment(f":push8, {PrimOpcodes.PUSH8} c, ;")
@@ -228,7 +228,7 @@ def convert(sourcefn, symbolsfn):
         with open(symbolsfn, "r") as f:
             symbols = [s.strip() for s in f.readlines()]
     except:
-        symbols = ["DICT", "H"]
+        symbols = ["H", "DICT"]
     for sym in symbols:
         Token.addDefinition(sym)
     # load colorforth source file
@@ -272,7 +272,7 @@ def main():
     # write to file
     with open(args.output_filename, mode="wb") as f:
         f.write(bytes(data))
-    
+
     symbols = [""] * len(Token.D)
     for key,value in Token.D.items():
         symbols[value] = key

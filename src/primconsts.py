@@ -1,8 +1,9 @@
 class Consts:
     HERE = 10
+    LATEST = 12
     DICT = 0xFEFE
     AREA = DICT + 2
-    
+
     iHERE = 0
     iLATEST = 1
 

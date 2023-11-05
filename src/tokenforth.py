@@ -14,8 +14,11 @@ class Mif(MemoryIf):
     def __init__(self, init=None):
         self._mem = bytearray(0x10000)
         if init is not None:
-            l = len(init)
-            self._mem[0:l] = init
+            self.init(init)
+
+    def init(self, mem):
+        l = len(mem)
+        self._mem[0:l] = mem
 
     def read8(self, addr):
         addr &= 0xffff
@@ -42,12 +45,6 @@ class Dictionary:
     S = [] # string literal addresses
     N = [] # number literal addresses
     def addNameDefinition(name, addr):
-        if name == "H":
-            addr = Consts.DICT-2 # TODO
-            Dictionary.addNumberLiteral(addr)
-        elif name == "DICT":
-            addr = Consts.DICT
-            Dictionary.addNumberLiteral(addr)
         Dictionary.D.append((name, addr))
     def loadDefinitions(fn):
         with open(fn, mode="rt") as f:
@@ -72,28 +69,30 @@ def init(mif):
     # Index 0: HERE pointer
     mif.write16(Consts.HERE, Consts.HERE+2)
     mif.write16(Consts.DICT, Consts.HERE)
+    Dictionary.addNameDefinition("H", 10)
     # Index 1: LATEST pointer, which points behind the last dict entry
-    appendToWordDict(mif, HERE_FETCH(mif))
-    comma(mif, Consts.DICT)
+    comma16(mif, Consts.DICT-2)
+    appendToIndex(mif, HERE_FETCH(mif)-2)
+    Dictionary.addNameDefinition("LATEST", 12)
 
-def fetchFromWordDict(mif, idx):
+def fetchFromIndex(mif, idx):
     return mif.read16(Consts.DICT-idx*2)
 
 def HERE_FETCH(mif):
-    return mif.read16(fetchFromWordDict(mif, Consts.iHERE))
+    return mif.read16(Consts.HERE)
 
 def HERE_STORE(mif, val):
-    mif.write16(fetchFromWordDict(mif, Consts.iHERE), val)
+    mif.write16(Consts.HERE, val)
 
 def LATEST_FETCH(mif):
-    return fetchFromWordDict(mif, Consts.iLATEST)
+    return mif.read16(Consts.LATEST)
 
-def appendToWordDict(mif, addr):
+def appendToIndex(mif, addr):
     latest = LATEST_FETCH(mif)
-    print(f"append: {latest:x}: {addr:x}")
+    idx = (Consts.DICT - latest) // 2
+    print(f"append: idx {idx}: addr 0x{addr:04x}")
     mif.write16(latest, addr)
-    mif.write16(Consts.DICT, latest - 2)
-
+    mif.write16(Consts.LATEST, latest - 2)
 
 def comma(mif, values):
     here = HERE_FETCH(mif)
@@ -106,6 +105,11 @@ def comma(mif, values):
         here += 1
     HERE_STORE(mif, here)
 
+def comma16(mif, values):
+    here = HERE_FETCH(mif)
+    mif.write16(here, values)
+    here += 2
+    HERE_STORE(mif, here)
 
 def getPushOps(num, shrink=True):
     if shrink and (num < 0x100):
@@ -228,7 +232,7 @@ def interpret(tokens, cpu):
             idx += l + 1
             print(f"Definition: {name}")
             Dictionary.addNameDefinition(name, HERE_FETCH(cpu._mif))
-            appendToWordDict(cpu._mif, HERE_FETCH(cpu._mif))
+            appendToIndex(cpu._mif, HERE_FETCH(cpu._mif))
         elif tag == Token.MODE:
             mode = tokens[idx]
             idx += 1
@@ -258,6 +262,7 @@ def main():
     parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
     parser.add_argument("-i", help="Token input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.tok")
     parser.add_argument("-d", help="Dictionary file", action="store", metavar="<input file>", type=str, required=False, dest="dict_filename",default="")
+    parser.add_argument("-g", help="Memory image file", action="store", metavar="<input file>", type=str, required=False, dest="image_filename",default="")
     parser.add_argument("-o", help="Binary token output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="src/test.bin")
     args = parser.parse_args()
 
@@ -265,16 +270,24 @@ def main():
         tokendata = f.read()
 
     mif = Mif()
+    try:
+        with open(args.image_filename, "rb") as f:
+            memory = f.read()
+        print(f"Using memory image file '{args.image_filename}")
+        mif.init(memory)
+    except:
+        init(mif)
+
     cpu = Prim(mif)
-    
+
     # load symbols
     try:
         with open(args.dict_filename, "r") as f:
             symbols = [s.strip() for s in f.readlines()]
     except:
-        # H und DICT definieren
-        init(mif)
-    
+        # no symbols
+        pass
+
     interpret(tokendata, cpu)
     cpu.status()
 
