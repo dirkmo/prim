@@ -43,9 +43,17 @@ class Dictionary:
     N = [] # number literal addresses
     def addNameDefinition(name, addr):
         if name == "H":
-            addr = Consts.HERE
+            addr = Consts.DICT-2 # TODO
+            Dictionary.addNumberLiteral(addr)
+        elif name == "DICT":
+            addr = Consts.DICT
             Dictionary.addNumberLiteral(addr)
         Dictionary.D.append((name, addr))
+    def loadDefinitions(fn):
+        with open(fn, mode="rt") as f:
+            symbols = f.readlines()
+        for idx,sym in enumerate(symbols):
+            Dictionary.addNameDefinition(sym, idx)
     def lookupNameDefinition(idx):
         return Dictionary.D[idx]
     def nameDefinitionMap():
@@ -60,14 +68,35 @@ class Dictionary:
 
 
 def init(mif):
+    # The word dictionary starts at address Consts.DICT and grows to lower addresses
+    # Index 0: HERE pointer
     mif.write16(Consts.HERE, Consts.HERE+2)
+    mif.write16(Consts.DICT, Consts.HERE)
+    # Index 1: LATEST pointer, which points behind the last dict entry
+    appendToWordDict(mif, HERE_FETCH(mif))
+    comma(mif, Consts.DICT)
 
+def fetchFromWordDict(mif, idx):
+    return mif.read16(Consts.DICT-idx*2)
 
-def HERE(mif):
-    return mif.read16(Consts.HERE)
+def HERE_FETCH(mif):
+    return mif.read16(fetchFromWordDict(mif, Consts.iHERE))
+
+def HERE_STORE(mif, val):
+    mif.write16(fetchFromWordDict(mif, Consts.iHERE), val)
+
+def LATEST_FETCH(mif):
+    return fetchFromWordDict(mif, Consts.iLATEST)
+
+def appendToWordDict(mif, addr):
+    latest = LATEST_FETCH(mif)
+    print(f"append: {latest:x}: {addr:x}")
+    mif.write16(latest, addr)
+    mif.write16(Consts.DICT, latest - 2)
+
 
 def comma(mif, values):
-    here = HERE(mif)
+    here = HERE_FETCH(mif)
     if hasattr(values, '__iter__'):
         for v in values:
             mif.write8(here, v)
@@ -75,7 +104,7 @@ def comma(mif, values):
     else:
         mif.write8(here, values)
         here += 1
-    mif.write16(Consts.HERE, here)
+    HERE_STORE(mif, here)
 
 
 def getPushOps(num, shrink=True):
@@ -90,7 +119,7 @@ def execute(cpu, opcodes):
     opcodes.append(PrimOpcodes.BREAK)
     l = len(opcodes)
     assert l < 0xf0, f"too much immediate code"
-    cpu._mif._mem[0xff00:0xf000+l] = opcodes
+    cpu._mif._mem[Consts.AREA:0xf000+l] = opcodes
     cpu._pc = 0xf000
     while cpu.step() != PrimOpcodes.BREAK:
         #cpu.status()
@@ -101,7 +130,7 @@ def compile_string(mif, s):
     # this compiles: [push str-addr] [push behind_strdata] [jp] [count,chars...] behind_strdata:
     # so when this is executed, the string address is pushed on the stack and execution
     # continues "behind" the string data.
-    here = mif.read16(Consts.HERE)
+    here = HERE_FETCH(mif)
     Dictionary.addStringLiteral(here + 7)
     strbytes = s.encode("utf-8")
     ops = []
@@ -183,7 +212,7 @@ def interpret(tokens, cpu):
                 execute(cpu, ops)
         elif tag == Token.LIT_NUMBER:
             # print(f"Literal number: {tokens[idx] | (tokens[idx+1] << 8)}")
-            Dictionary.addNumberLiteral(HERE(cpu._mif))
+            Dictionary.addNumberLiteral(HERE_FETCH(cpu._mif))
             comma(cpu._mif, tokens[idx:idx+2])
             idx += 2
         elif tag == Token.LIT_STRING:
@@ -197,8 +226,9 @@ def interpret(tokens, cpu):
             l = tokens[idx]
             name = tokens[idx+1:idx+1+l].decode("utf-8")
             idx += l + 1
-            # print(f"Definition: {name}")
-            Dictionary.addNameDefinition(name, cpu._mif.read16(Consts.HERE))
+            print(f"Definition: {name}")
+            Dictionary.addNameDefinition(name, HERE_FETCH(cpu._mif))
+            appendToWordDict(cpu._mif, HERE_FETCH(cpu._mif))
         elif tag == Token.MODE:
             mode = tokens[idx]
             idx += 1
@@ -227,6 +257,7 @@ def saveSymbolData(fn, memdata):
 def main():
     parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
     parser.add_argument("-i", help="Token input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.tok")
+    parser.add_argument("-d", help="Dictionary file", action="store", metavar="<input file>", type=str, required=False, dest="dict_filename",default="")
     parser.add_argument("-o", help="Binary token output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="src/test.bin")
     args = parser.parse_args()
 
@@ -235,7 +266,15 @@ def main():
 
     mif = Mif()
     cpu = Prim(mif)
-    init(mif)
+    
+    # load symbols
+    try:
+        with open(args.dict_filename, "r") as f:
+            symbols = [s.strip() for s in f.readlines()]
+    except:
+        # H und DICT definieren
+        init(mif)
+    
     interpret(tokendata, cpu)
     cpu.status()
 

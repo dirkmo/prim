@@ -50,7 +50,7 @@ class Token:
 
     def addDefinition(name):
         assert not name in Token.D, f"{name} already defined"
-        print(f"Definition {Token.Didx}: {name}")
+        # print(f"Definition {Token.Didx}: {name}")
         Token.D[name] = Token.Didx
         Token.Didx += 1
 
@@ -83,10 +83,10 @@ class TokenMode(Token):
         super().__init__(self.MODE, fragment)
         assert mode in [self.MODE_COMPILE, self.MODE_IMMEDIATE], f"Invalid mode {mode}"
         self.mode = mode
-        if mode == Token.MODE_COMPILE:
-            print("Compile Mode")
-        else:
-            print("Immediate Mode")
+        # if mode == Token.MODE_COMPILE:
+        #     print("Compile Mode")
+        # else:
+        #     print("Immediate Mode")
 
     def generate(self):
         return [self.tag, self.mode]
@@ -97,7 +97,7 @@ class TokenWordCall(Token):
         super().__init__(self.WORD_CALL, fragment)
         if Token.mode == Token.MODE_IMMEDIATE:
             sys.stdout.write("Immediate ")
-        print(f"Word Call {s}")
+        # print(f"Word Call {s}")
         self.name = s
 
     def generate(self):
@@ -110,9 +110,9 @@ class TokenWordCall(Token):
 class TokenWordAddress(Token):
     def __init__(self, s, fragment):
         super().__init__(self.WORD_ADDRESS, fragment)
-        if Token.mode == Token.MODE_IMMEDIATE:
-            sys.stdout.write("Immediate ")
-        print(f"Word Address {s}")
+        # if Token.mode == Token.MODE_IMMEDIATE:
+        #     sys.stdout.write("Immediate ")
+        # print(f"Word Address {s}")
         self.name = s
 
     def generate(self):
@@ -125,9 +125,9 @@ class TokenWordAddress(Token):
 class TokenNumber(Token):
     def __init__(self, num, fragment):
         super().__init__(self.NUMBER, fragment)
-        if Token.mode == Token.MODE_IMMEDIATE:
-            sys.stdout.write("Immediate ")
-        print(f"Compile Number {num}")
+        # if Token.mode == Token.MODE_IMMEDIATE:
+        #     sys.stdout.write("Immediate ")
+        # print(f"Compile Number {num}")
         self.value = num
 
     def generate(self):
@@ -139,9 +139,9 @@ class TokenNumber(Token):
 class TokenString(Token):
     def __init__(self, s, fragment):
         super().__init__(self.STRING, fragment)
-        if Token.mode == Token.MODE_IMMEDIATE:
-            sys.stdout.write("Immediate ")
-        print(f"String {s}")
+        # if Token.mode == Token.MODE_IMMEDIATE:
+        #     sys.stdout.write("Immediate ")
+        # print(f"String {s}")
         self.s = s
 
     def generate(self):
@@ -152,9 +152,9 @@ class TokenMnemonic(Token):
     def __init__(self, s, fragment):
         super().__init__(self.MNEMONIC, fragment)
         self.mnemonic = s
-        if Token.mode == Token.MODE_IMMEDIATE:
-            sys.stdout.write("Immediate ")
-        print(f"Mnemonic {s}")
+        # if Token.mode == Token.MODE_IMMEDIATE:
+        #     sys.stdout.write("Immediate ")
+        # print(f"Mnemonic {s}")
 
     def generate(self):
         data = [self.tag]
@@ -166,9 +166,9 @@ class TokenBuildin(Token):
     def __init__(self, s, fragment):
         super().__init__(self.BUILDIN, fragment)
         self.name = s
-        if Token.mode == Token.MODE_IMMEDIATE:
-            sys.stdout.write("Immediate ")
-        print(f"Buildin {s}")
+        # if Token.mode == Token.MODE_IMMEDIATE:
+        #     sys.stdout.write("Immediate ")
+        # print(f"Buildin {s}")
 
     def generate(self):
         buildin = BuildIn.getIndexByName(self.name)
@@ -181,7 +181,7 @@ class TokenLiteralNumber(Token):
     def __init__(self, num, fragment):
         super().__init__(self.LIT_NUMBER, fragment)
         self.value = num
-        print(f"literal number: {self.value}")
+        # print(f"literal number: {self.value}")
 
     def generate(self):
         data = [self.tag]
@@ -193,7 +193,7 @@ class TokenLiteralString(Token):
     def __init__(self, s, fragment):
         super().__init__(self.LIT_STRING, fragment)
         self.s = s
-        print(f"Literal string '{s}'")
+        # print(f"Literal string '{s}'")
 
     def generate(self):
         return Token.generateStringData(self.tag, self.s)
@@ -203,7 +203,7 @@ class TokenCommentBraces(Token):
     def __init__(self, s, fragment):
         super().__init__(self.COMMENT_BRACES, fragment)
         self.comment = s
-        print(f"Comment {self.comment}")
+        # print(f"Comment {self.comment}")
 
     def generate(self):
         return Token.generateStringData(self.tag, self.comment)
@@ -213,7 +213,7 @@ class TokenCommentBackslash(Token):
     def __init__(self, s, fragment):
         super().__init__(self.COMMENT_BACKSLASH, fragment)
         self.comment = s
-        print(f"Comment {self.comment}")
+        # print(f"Comment {self.comment}")
 
     def generate(self):
         return Token.generateStringData(self.tag, self.comment)
@@ -223,7 +223,7 @@ class TokenWhitespace(Token):
     def __init__(self, s, fragment):
         super().__init__(self.WHITESPACE, fragment)
         self.ws = s
-        print(f"Whitespace")
+        # print(f"Whitespace")
 
     def generate(self):
         return Token.generateStringData(self.tag, self.ws)

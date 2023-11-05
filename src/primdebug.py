@@ -10,10 +10,7 @@ import sys
 import toml
 
 # TODO
-# breakpoint highlight in code
-# memory view: set location
-# read/write memory via prompt
-# step back
+# - step back
 
 
 class Mif(MemoryIf):
