@@ -123,8 +123,8 @@ def execute(cpu, opcodes):
     opcodes.append(PrimOpcodes.BREAK)
     l = len(opcodes)
     assert l < 0xf0, f"too much immediate code"
-    cpu._mif._mem[Consts.AREA:0xf000+l] = opcodes
-    cpu._pc = 0xf000
+    cpu._mif._mem[Consts.AREA:Consts.AREA+l] = opcodes
+    cpu._pc = Consts.AREA
     while cpu.step() != PrimOpcodes.BREAK:
         #cpu.status()
         pass
@@ -156,7 +156,7 @@ def interpret(tokens, cpu):
     while idx < len(tokens):
         # print(f"here: {HERE(cpu._mif)}")
         tag = tokens[idx]
-        # print(f"tag: {Token.tagnames[tag]} ({tag})")
+        print(f"tag: {Token.tagnames[tag]} ({tag})")
         idx += 1
         if tag == Token.WORD_CALL:
             di = tokens[idx] | (tokens[idx+1] << 8)
