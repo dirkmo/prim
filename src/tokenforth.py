@@ -41,23 +41,22 @@ class Mif(MemoryIf):
 
 
 class Dictionary:
-    D = [] # definition names with addresses as tuple (name, addr)
+    D = [] # definition names
     S = [] # string literal addresses
     N = [] # number literal addresses
-    def addNameDefinition(name, addr):
-        Dictionary.D.append((name, addr))
+    def addNameDefinition(name):
+        if name == "H":
+            assert len(Dictionary.D) == 0, "Definition of 'H' must be first."
+        if name == "LATEST":
+            assert len(Dictionary.D) == 1, "Definition of 'LATEST' must be second."
+        Dictionary.D.append(name)
     def loadDefinitions(fn):
         with open(fn, mode="rt") as f:
             symbols = f.readlines()
-        for idx,sym in enumerate(symbols):
-            Dictionary.addNameDefinition(sym, idx)
+        for sym in symbols:
+            Dictionary.addNameDefinition(sym)
     def lookupNameDefinition(idx):
         return Dictionary.D[idx]
-    def nameDefinitionMap():
-        m = {}
-        for d in Dictionary.D:
-            m[d[0]] = d[1]
-        return m
     def addStringLiteral(addr):
         Dictionary.S.append(addr)
     def addNumberLiteral(addr):
@@ -69,11 +68,11 @@ def init(mif):
     # Index 0: HERE pointer
     mif.write16(Consts.HERE, Consts.HERE+2)
     mif.write16(Consts.DICT, Consts.HERE)
-    Dictionary.addNameDefinition("H", 10)
+    # Dictionary.addNameDefinition("H")
     # Index 1: LATEST pointer, which points behind the last dict entry
     comma16(mif, Consts.DICT-2)
     appendToIndex(mif, HERE_FETCH(mif)-2)
-    Dictionary.addNameDefinition("LATEST", 12)
+    # Dictionary.addNameDefinition("LATEST")
 
 def fetchFromIndex(mif, idx):
     return mif.read16(Consts.DICT-idx*2)
@@ -156,26 +155,26 @@ def interpret(tokens, cpu):
     while idx < len(tokens):
         # print(f"here: {HERE(cpu._mif)}")
         tag = tokens[idx]
-        print(f"tag: {Token.tagnames[tag]} ({tag})")
+        # print(f"tag: {Token.tagnames[tag]} ({tag})")
         idx += 1
         if tag == Token.WORD_CALL:
             di = tokens[idx] | (tokens[idx+1] << 8)
             idx += 2
-            (name, addr) = Dictionary.lookupNameDefinition(di)
+            #(name, addr) = Dictionary.lookupNameDefinition(di)
+            addr = fetchFromIndex(cpu._mif, di)
             ops = getPushOps(addr)
             ops.append(PrimOpcodes.CALL)
-            # print(f"word call: {name}")
+            # print(f"call {Dictionary.D[di]}")
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, ops)
             else:
-                print(f"call {name} {addr} {ops}")
                 execute(cpu, ops)
         elif tag == Token.WORD_ADDRESS:
             di = tokens[idx] | (tokens[idx+1] << 8)
             idx += 2
-            (name, addr) = Dictionary.lookupNameDefinition(di)
+            addr = fetchFromIndex(cpu._mif, di)
             ops = getPushOps(addr)
-            # print(f"word address: {name}")
+            # print(f"word address: {Dictionary.D[di]}")
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, ops)
             else:
@@ -230,8 +229,8 @@ def interpret(tokens, cpu):
             l = tokens[idx]
             name = tokens[idx+1:idx+1+l].decode("utf-8")
             idx += l + 1
-            print(f"Definition: {name}")
-            Dictionary.addNameDefinition(name, HERE_FETCH(cpu._mif))
+            print(f"Definition: {name} @ {HERE_FETCH(cpu._mif)}")
+            Dictionary.addNameDefinition(name)
             appendToIndex(cpu._mif, HERE_FETCH(cpu._mif))
         elif tag == Token.MODE:
             mode = tokens[idx]
@@ -247,22 +246,28 @@ def interpret(tokens, cpu):
             assert False, "Tag not handled!"
 
 
-def saveSymbolData(fn, memdata):
+def saveData(fn, mif):
     # save symbol data
     tomldata = {}
-    tomldata["symbols"] = Dictionary.nameDefinitionMap()
+    symbolMap = {}
+    for idx,sym in enumerate(Dictionary.D):
+        symbolMap[sym] = fetchFromIndex(mif, idx)
+    tomldata["symbols"] = symbolMap
     tomldata["string-literals"] = Dictionary.S
     tomldata["num-literals"] = Dictionary.N
-    tomldata["memory"] = memdata
-    with open(fn, mode="wt") as f:
+    tomldata["memory"] = mif._mem
+    with open(fn+".toml", mode="wt") as f:
         f.write(toml.dumps(tomldata))
+    with open(fn+".sym", mode="wt") as f:
+        for sym in Dictionary.D:
+            f.write(sym+"\n")
 
 
 def main():
     parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
     parser.add_argument("-i", help="Token input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.tok")
-    parser.add_argument("-d", help="Dictionary file", action="store", metavar="<input file>", type=str, required=False, dest="dict_filename",default="")
-    parser.add_argument("-g", help="Memory image file", action="store", metavar="<input file>", type=str, required=False, dest="image_filename",default="")
+    parser.add_argument("-d", help="Dictionary file", action="store", metavar="<input file>", type=str, required=False, dest="dict_filename",default="src/base.tok.sym")
+    parser.add_argument("-g", help="Memory image file", action="store", metavar="<input file>", type=str, required=False, dest="image_filename",default="src/base.bin")
     parser.add_argument("-o", help="Binary token output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="src/test.bin")
     args = parser.parse_args()
 
@@ -273,7 +278,7 @@ def main():
     try:
         with open(args.image_filename, "rb") as f:
             memory = f.read()
-        print(f"Using memory image file '{args.image_filename}")
+        print(f"Using memory image file '{args.image_filename}'")
         mif.init(memory)
     except:
         init(mif)
@@ -281,6 +286,7 @@ def main():
     cpu = Prim(mif)
 
     # load symbols
+    symbols = []
     try:
         with open(args.dict_filename, "r") as f:
             symbols = [s.strip() for s in f.readlines()]
@@ -288,16 +294,18 @@ def main():
         # no symbols
         pass
 
+    for idx,sym in enumerate(symbols):
+        Dictionary.addNameDefinition(sym)
+
+
     interpret(tokendata, cpu)
     cpu.status()
 
     # save memory image
     with open(args.output_filename, mode="wb") as f:
-        here = cpu._mif.read16(Consts.HERE)
-        f.write(cpu._mif._mem[0:here])
+        f.write(cpu._mif._mem)
 
-    fn = os.path.splitext(args.output_filename)[0] + ".sym"
-    saveSymbolData(fn, cpu._mif._mem[0:here])
+    saveData(args.output_filename, cpu._mif)
 
 
 if __name__ == "__main__":

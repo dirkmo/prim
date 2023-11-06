@@ -182,7 +182,7 @@ def initialFragments():
     fragments = []
     # add code fragments for comma
     F = []
-    F += fragment(":c, 'H @ c! 'H @ 1 + 'H ! ;")
+    # F += fragment(":c, 'H @ c! 'H @ 1 + 'H ! ;")
     # F += fragment(":, 'H @ ! 'H @ 2 + 'H ! ;")
     # F += fragment(f":push, {PrimOpcodes.PUSH} c, ;")
     # F += fragment(f":push8, {PrimOpcodes.PUSH8} c, ;")
@@ -217,10 +217,10 @@ def initialFragments():
     # F += fragment(":for 2>r, 'H @ 2r>, 2dup, 2>r, -, push, 'H @ $ffff , jz, ;")
     # F += fragment(":next r>, 1+, >r, push, swap , jp, 'H @ swap ! rdrop, rdrop, ;")
     # F += fragment(":i r> r> swap over >r >r ;")
-
     for f in F:
         fragments.append(Fragment(f,0))
     return fragments
+
 
 def convert(sourcefn, symbolsfn):
     # load symbols
@@ -228,7 +228,7 @@ def convert(sourcefn, symbolsfn):
         with open(symbolsfn, "r") as f:
             symbols = [s.strip() for s in f.readlines()]
     except:
-        symbols = ["H", "DICT"]
+        symbols = ["H", "LATEST"]
     for sym in symbols:
         Token.addDefinition(sym)
     # load colorforth source file
@@ -265,7 +265,7 @@ def convert(sourcefn, symbolsfn):
 def main():
     parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
     parser.add_argument("-i", help="Assembly input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.cf")
-    parser.add_argument("-d", help="Dictionary file", action="store", metavar="<input file>", type=str, required=False, dest="dict_filename",default="src/test.dict")
+    parser.add_argument("-d", help="Dictionary file", action="store", metavar="<input file>", type=str, required=False, dest="dict_filename",default="src/base.bin.sym")
     parser.add_argument("-o", help="Binary token output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="src/test.tok")
     args = parser.parse_args()
     data = convert(args.input_filename, args.dict_filename)
