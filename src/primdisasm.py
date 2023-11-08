@@ -86,7 +86,7 @@ def disassemble(td, out_fn):
 
 def main():
     parser = argparse.ArgumentParser(description='Prim Disassembler')
-    parser.add_argument("-i", help="Input file", action="store", metavar="<toml input file>", type=str, required=False, dest="input_filename",default="src/test.sym")
+    parser.add_argument("-i", help="Input file", action="store", metavar="<toml input file>", type=str, required=False, dest="input_filename",default="src/test.bin.toml")
     parser.add_argument("-o", help="Output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="")
 
     args = parser.parse_args()

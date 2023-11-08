@@ -38,7 +38,7 @@ class Token:
     MODE_COMPILE = 0
     MODE_IMMEDIATE = 1
 
-    D = {}
+    D = {} # TODO: repleace with list
     Didx = 0
     mode = MODE_COMPILE
 

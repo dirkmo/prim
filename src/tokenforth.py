@@ -229,7 +229,7 @@ def interpret(tokens, cpu):
             l = tokens[idx]
             name = tokens[idx+1:idx+1+l].decode("utf-8")
             idx += l + 1
-            print(f"Definition: {name} @ {HERE_FETCH(cpu._mif)}")
+            print(f"Definition: {name} @ 0x{HERE_FETCH(cpu._mif):x}")
             Dictionary.addNameDefinition(name)
             appendToIndex(cpu._mif, HERE_FETCH(cpu._mif))
         elif tag == Token.MODE:
@@ -265,10 +265,10 @@ def saveData(fn, mif):
 
 def main():
     parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
-    parser.add_argument("-i", help="Token input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.tok")
-    parser.add_argument("-d", help="Dictionary file", action="store", metavar="<input file>", type=str, required=False, dest="dict_filename",default="src/base.tok.sym")
-    parser.add_argument("-g", help="Memory image file", action="store", metavar="<input file>", type=str, required=False, dest="image_filename",default="src/base.bin")
-    parser.add_argument("-o", help="Binary token output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="src/test.bin")
+    parser.add_argument("-i", help="Token input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="")
+    parser.add_argument("-d", help="Dictionary input file", action="store", metavar="<input file>", type=str, required=False, dest="dict_filename",default="")
+    parser.add_argument("-g", help="Memory image input file", action="store", metavar="<input file>", type=str, required=False, dest="image_filename",default="")
+    parser.add_argument("-o", help="Memory image output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="")
     args = parser.parse_args()
 
     with open(args.input_filename, mode="rb") as f:
