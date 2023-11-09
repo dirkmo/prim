@@ -179,19 +179,7 @@ def tokenizeFragments(fragments):
             tokens.append(newTokens)
     return tokens
 
-def convert(sourcefn, inputtoml):
-    # load symbols from toml file
-    try:
-        tomldata = toml.load(inputtoml)
-        symbols = tomldata["symbols"]
-        tomlTypeIsCorrent = ("type" in tomldata) and (tomldata["type"] != "tokenizer")
-    except:
-        symbols = ["H", "LATEST"]
-        tomlTypeIsCorrent = True
-
-    if not tomlTypeIsCorrent:
-        raise Exception("Wrong TOML type (cannot use tokenizer TOML files)")
-
+def convert(sourcefn, symbols):
     for sym in symbols:
         Token.addDefinition(sym)
 
@@ -232,11 +220,30 @@ def main():
     parser.add_argument("-ot", help="Output TOML filename", metavar="<output filename>", action="store", type=str, required=True, dest="output_toml_filename",default="")
     args = parser.parse_args()
 
-    data = convert(args.input_filename, args.input_toml_filename)
+    try:
+        inTomlData = toml.load(args.input_toml_filename)
+        symbols = inTomlData["symbols"]
+        tomlTypeIsCorrent = ("type" in inTomlData) and (inTomlData["type"] != "tokenizer")
+    except:
+        symbols = ["H", "LATEST"]
+        tomlTypeIsCorrent = True
 
+    if not tomlTypeIsCorrent:
+        raise Exception("Wrong TOML type (cannot use tokenizer TOML files)")
+
+    # create token data
+    tokendata = convert(args.input_filename, symbols)
+
+    # make list from symbol dictionary
     symbols = [""] * len(Token.D)
     for key,value in Token.D.items():
         symbols[value] = key
+
+    # memory
+    try:
+        memory = inTomlData["memory"]
+    except:
+        memory = []
 
     # compile data to write toml file
     tomldata = { "title": f"Tokenized {args.input_filename}",
@@ -244,7 +251,8 @@ def main():
                  "input-toml": f"{args.input_toml_filename}",
                  "type": "tokenizer",
                  "symbols": symbols,
-                 "tokens": data }
+                 "tokens": tokendata,
+                 "memory": memory }
 
     # write to file
     with open(args.output_toml_filename, mode="wt") as f:
