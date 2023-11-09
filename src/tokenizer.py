@@ -177,51 +177,6 @@ def tokenizeFragments(fragments):
             tokens.append(newTokens)
     return tokens
 
-
-def initialFragments():
-    fragments = []
-    # add code fragments for comma
-    F = []
-    # F += fragment(":c, 'H @ c! 'H @ 1 + 'H ! ;")
-    # F += fragment(":, 'H @ ! 'H @ 2 + 'H ! ;")
-    # F += fragment(f":push, {PrimOpcodes.PUSH} c, ;")
-    # F += fragment(f":push8, {PrimOpcodes.PUSH8} c, ;")
-    # F += fragment(f":jz, {PrimOpcodes.JZ} c, ;")
-    # F += fragment(f":jp, {PrimOpcodes.JP} c, ;")
-    # F += fragment(f":dup, {PrimOpcodes.DUP} c, ;")
-    # F += fragment(f":>r, {PrimOpcodes.TO_R} c, ;")
-    # F += fragment(f":2>r, {PrimOpcodes.SWAP} c, {PrimOpcodes.TO_R} c, {PrimOpcodes.TO_R} c, ;")
-    # F += fragment(f":r>, {PrimOpcodes.FROM_R} c, ;")
-    # F += fragment(f":2r>, {PrimOpcodes.FROM_R} c, {PrimOpcodes.FROM_R} c, {PrimOpcodes.SWAP} c, ;")
-    # F += fragment(f":-, {PrimOpcodes.SUB} c, ;")
-    # F += fragment(f":+, {PrimOpcodes.ADD} c, ;")
-    # F += fragment(f":drop, {PrimOpcodes.DROP} c, ;")
-    # F += fragment(f":over, {PrimOpcodes.OVER} c, ;")
-    # F += fragment(f":not, {PrimOpcodes.NOT} c, ;")
-    # F += fragment(f":rdrop, {PrimOpcodes.RDROP} c, ;")
-    # F += fragment(f":=, {PrimOpcodes.SUB} c, not, ;")
-    # F += fragment(f":2dup, over, over, ;")
-    # F += fragment(":2dup over over ;")
-    # F += fragment(":2drop drop drop ;")
-    # F += fragment(":1+ 1 + ;")
-    # F += fragment(":1+, push8, 1 c, +, ;")
-    # F += fragment(":1- 1 - ;")
-    # F += fragment(":1-, push8, 1 c, -, ;")
-    # F += fragment(":if push, 'H @ $ffff , jz, ;")
-    # F += fragment(":else push, 'H @ >r $ffff , jp, 'H @ swap ! r> ;")
-    # F += fragment(":then 'H @ swap ! ;")
-    # F += fragment(":while 'H @ push, 'H @ 0xffff , jz, ;")
-    # F += fragment(":repeat push, swap , jp, 'H @ swap ! ;")
-    # F += fragment(":do 'H @ dup, push, 'H @ $ffff , jz, >r, ;")
-    # F += fragment(":loop r>, push8, 1 c, -, push, swap , jp, 'H @ swap ! drop, ;")
-    # F += fragment(":for 2>r, 'H @ 2r>, 2dup, 2>r, -, push, 'H @ $ffff , jz, ;")
-    # F += fragment(":next r>, 1+, >r, push, swap , jp, 'H @ swap ! rdrop, rdrop, ;")
-    # F += fragment(":i r> r> swap over >r >r ;")
-    for f in F:
-        fragments.append(Fragment(f,0))
-    return fragments
-
-
 def convert(sourcefn, symbolsfn):
     # load symbols
     try:
@@ -240,7 +195,6 @@ def convert(sourcefn, symbolsfn):
         return None
 
     fragments = []
-    fragments.extend(initialFragments())
     for num,line in enumerate(lines):
         frags = merge_comment_fragments(fragment(line))
         frags = merge_string_fragments(frags)
