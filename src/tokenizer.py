@@ -6,6 +6,7 @@ import sys
 from tokens import *
 import primasm
 import toml
+import tomlfix
 
 class Fragment:
     def __init__(self, _s, _linenum):
@@ -222,7 +223,7 @@ def main():
 
     try:
         inTomlData = toml.load(args.input_toml_filename)
-        symbols = inTomlData["symbols"]
+        symbols = tomlfix.workaround(inTomlData["symbols"])
         tomlTypeIsCorrent = ("type" in inTomlData) and (inTomlData["type"] == "tokenforth")
     except:
         symbols = ["H", "LATEST"]

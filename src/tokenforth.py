@@ -9,7 +9,7 @@ from primasm import PrimAsm
 from primconsts import *
 from tokens import Token, BuildIn
 import toml
-
+import tomlfix
 
 class Mif(MemoryIf):
     def __init__(self, init=None):
@@ -266,8 +266,6 @@ def saveData(infn, outfn, mif):
     with open(outfn, mode="wt") as f:
         f.write(toml.dumps(tomldata))
 
-
-
 def main():
     parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
     parser.add_argument("-i", help="Input TOML filename", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="")
@@ -277,7 +275,7 @@ def main():
     inTomlData = toml.load(args.input_filename)
     tokendata = inTomlData["tokens"]
     memory = inTomlData["memory"]
-    symbols = inTomlData["symbols"]
+    symbols = tomlfix.workaround(inTomlData["symbols"])
     strlits = inTomlData["string-literals"]
     numlits = inTomlData["num-literals"]
 
