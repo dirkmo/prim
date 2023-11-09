@@ -217,13 +217,13 @@ def main():
     parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
     parser.add_argument("-i", help="Assembly input filename", action="store", metavar="<input filename>", type=str, required=True, dest="input_filename",default="")
     parser.add_argument("-it", help="Input TOML filename", action="store", metavar="<input filename>", type=str, required=False, dest="input_toml_filename",default="")
-    parser.add_argument("-ot", help="Output TOML filename", metavar="<output filename>", action="store", type=str, required=True, dest="output_toml_filename",default="")
+    parser.add_argument("-o", help="Output TOML filename", metavar="<output filename>", action="store", type=str, required=True, dest="output_toml_filename",default="")
     args = parser.parse_args()
 
     try:
         inTomlData = toml.load(args.input_toml_filename)
         symbols = inTomlData["symbols"]
-        tomlTypeIsCorrent = ("type" in inTomlData) and (inTomlData["type"] != "tokenizer")
+        tomlTypeIsCorrent = ("type" in inTomlData) and (inTomlData["type"] == "tokenforth")
     except:
         symbols = ["H", "LATEST"]
         tomlTypeIsCorrent = True
@@ -239,11 +239,20 @@ def main():
     for key,value in Token.D.items():
         symbols[value] = key
 
+    # carry over data if exists
     # memory
     try:
         memory = inTomlData["memory"]
     except:
         memory = []
+    try:
+        strlits = inTomlData["string-literals"]
+    except:
+        strlits = []
+    try:
+        numlits = inTomlData["num-literals"]
+    except:
+        numlits = []
 
     # compile data to write toml file
     tomldata = { "title": f"Tokenized {args.input_filename}",
@@ -251,6 +260,8 @@ def main():
                  "input-toml": f"{args.input_toml_filename}",
                  "type": "tokenizer",
                  "symbols": symbols,
+                 "string-literals": strlits,
+                 "num-literals": numlits,
                  "tokens": tokendata,
                  "memory": memory }
 

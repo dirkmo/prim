@@ -7,7 +7,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src",
             "program": "tokenizer.py",
-            "args": ["-i", "base.cf", "-ot", "base.tok.toml"],
+            "args": ["-i", "base.cf", "-o", "base.tok.toml"],
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -17,7 +17,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src",
             "program": "tokenforth.py",
-            "args": ["-i", "base.tok", "-o", "base.bin", "-d", "base.tok.sym"],
+            "args": ["-i", "base.tok.toml", "-o", "base.tf.toml"],
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -27,7 +27,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src",
             "program": "tokenizer.py",
-            "args": ["-i", "test.cf", "-o", "test.tok", "-d", "base.tok.sym"],
+            "args": ["-i", "test.cf", "-o", "test.tok.toml", "-it", "base.tf.toml"],
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -37,7 +37,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src",
             "program": "tokenforth.py",
-            "args": ["-i", "test.tok", "-o", "test.bin", "-d", "test.tok.sym"],
+            "args": ["-i", "test.tok.toml", "-o", "test.tf.toml"],
             "console": "integratedTerminal",
             "justMyCode": true
         },

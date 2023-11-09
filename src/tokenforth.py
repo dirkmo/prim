@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 import argparse
+from datetime import datetime
 import os
 import sys
 from prim import Prim, MemoryIf
@@ -227,7 +228,8 @@ def interpret(tokens, cpu):
             comma(cpu._mif, tokens[idx:idx+1])
         elif tag == Token.DEFINITION:
             l = tokens[idx]
-            name = tokens[idx+1:idx+1+l].decode("utf-8")
+            name_ba = bytearray(tokens[idx+1:idx+1+l])
+            name = name_ba.decode("utf-8")
             idx += l + 1
             print(f"Definition: {name} @ 0x{HERE_FETCH(cpu._mif):x}")
             Dictionary.addNameDefinition(name)
@@ -246,66 +248,64 @@ def interpret(tokens, cpu):
             assert False, "Tag not handled!"
 
 
-def saveData(fn, mif):
-    # save symbol data
-    tomldata = {}
-    symbolMap = {}
-    for idx,sym in enumerate(Dictionary.D):
-        symbolMap[sym] = fetchFromIndex(mif, idx)
-    tomldata["symbols"] = symbolMap
-    tomldata["string-literals"] = Dictionary.S
-    tomldata["num-literals"] = Dictionary.N
-    tomldata["memory"] = mif._mem
-    with open(fn+".toml", mode="wt") as f:
+def saveData(infn, outfn, mif):
+    # symbolMap = {}
+    # for idx,sym in enumerate(Dictionary.D):
+    #     symbolMap[sym] = fetchFromIndex(mif, idx)
+
+    tomldata = {
+        "title": f"tokenforthed {infn}",
+        "date": f"{datetime.now().strftime('%d.%m.%Y %H:%M:%S')}",
+        "input-toml": f"{infn}",
+        "type": "tokenforth",
+        "symbols": Dictionary.D,
+        "string-literals": Dictionary.S,
+        "num-literals": Dictionary.N,
+        "memory": mif._mem
+    }
+    with open(outfn, mode="wt") as f:
         f.write(toml.dumps(tomldata))
-    with open(fn+".sym", mode="wt") as f:
-        for sym in Dictionary.D:
-            f.write(sym+"\n")
+
 
 
 def main():
     parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
-    parser.add_argument("-i", help="Token input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="")
-    parser.add_argument("-d", help="Dictionary input file", action="store", metavar="<input file>", type=str, required=False, dest="dict_filename",default="")
-    parser.add_argument("-g", help="Memory image input file", action="store", metavar="<input file>", type=str, required=False, dest="image_filename",default="")
-    parser.add_argument("-o", help="Memory image output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="")
+    parser.add_argument("-i", help="Input TOML filename", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="")
+    parser.add_argument("-o", help="Output TOML filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="")
     args = parser.parse_args()
 
-    with open(args.input_filename, mode="rb") as f:
-        tokendata = f.read()
+    inTomlData = toml.load(args.input_filename)
+    tokendata = inTomlData["tokens"]
+    memory = inTomlData["memory"]
+    symbols = inTomlData["symbols"]
+    strlits = inTomlData["string-literals"]
+    numlits = inTomlData["num-literals"]
+
+    for sym in symbols:
+        Dictionary.addNameDefinition(sym)
+
+    for lit in strlits:
+        Dictionary.S.append(lit)
+
+    for lit in numlits:
+        Dictionary.N.append(lit)
 
     mif = Mif()
     try:
         with open(args.image_filename, "rb") as f:
             memory = f.read()
-        print(f"Using memory image file '{args.image_filename}'")
+        print(f"Using memory from tomldata in '{args.image_filename}'")
         mif.init(memory)
     except:
         init(mif)
 
     cpu = Prim(mif)
 
-    # load symbols
-    symbols = []
-    try:
-        with open(args.dict_filename, "r") as f:
-            symbols = [s.strip() for s in f.readlines()]
-    except:
-        # no symbols
-        pass
-
-    for idx,sym in enumerate(symbols):
-        Dictionary.addNameDefinition(sym)
-
-
     interpret(tokendata, cpu)
+
     cpu.status()
 
-    # save memory image
-    with open(args.output_filename, mode="wb") as f:
-        f.write(cpu._mif._mem)
-
-    saveData(args.output_filename, cpu._mif)
+    saveData(args.input_filename, args.output_filename, cpu._mif)
 
 
 if __name__ == "__main__":
