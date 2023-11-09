@@ -7,7 +7,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src",
             "program": "tokenizer.py",
-            "args": ["-i", "base.cf", "-o", "base.tok"],
+            "args": ["-i", "base.cf", "-o", "base.tok.toml"],
             "console": "integratedTerminal",
             "justMyCode": true
         },

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
+from datetime import datetime
 import sys
 from tokens import *
 import primasm
+import toml
 
 class Fragment:
     def __init__(self, _s, _linenum):
@@ -177,10 +179,10 @@ def tokenizeFragments(fragments):
             tokens.append(newTokens)
     return tokens
 
-def convert(sourcefn, symbolsfn):
+def convert(sourcefn, inputtoml):
     # load symbols
     try:
-        with open(symbolsfn, "r") as f:
+        with open(inputtoml, "r") as f:
             symbols = [s.strip() for s in f.readlines()]
     except:
         symbols = ["H", "LATEST"]
@@ -218,21 +220,27 @@ def convert(sourcefn, symbolsfn):
 
 def main():
     parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
-    parser.add_argument("-i", help="Assembly input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="")
-    parser.add_argument("-d", help="Dictionary file", action="store", metavar="<input file>", type=str, required=False, dest="dict_filename",default="")
-    parser.add_argument("-o", help="Binary token output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="")
+    parser.add_argument("-i", help="Assembly input filename", action="store", metavar="<input filename>", type=str, required=True, dest="input_filename",default="")
+    parser.add_argument("-it", help="Input TOML filename", action="store", metavar="<input filename>", type=str, required=False, dest="input_toml_filename",default="")
+    parser.add_argument("-ot", help="Output TOML filename", metavar="<output filename>", action="store", type=str, required=True, dest="output_toml_filename",default="")
     args = parser.parse_args()
-    data = convert(args.input_filename, args.dict_filename)
-    # write to file
-    with open(args.output_filename, mode="wb") as f:
-        f.write(bytes(data))
+
+    data = convert(args.input_filename, args.input_toml_filename)
 
     symbols = [""] * len(Token.D)
     for key,value in Token.D.items():
         symbols[value] = key
-    with open(args.output_filename+".sym", mode="wt") as f:
-        for sym in symbols:
-            f.write(sym + "\n")
+
+    # compile data to write toml file
+    tomldata = { "title": f"Tokenized {args.input_filename}",
+                 "input-toml": f"{args.input_toml_filename}",
+                 "date": f"{datetime.now().strftime('%d.%m.%Y %H:%M:%S')}",
+                 "symbols": symbols,
+                 "tokens": data }
+
+    # write to file
+    with open(args.output_toml_filename, mode="wt") as f:
+        f.write(toml.dumps(tomldata))
 
 if __name__ == "__main__":
     sys.exit(main())
