@@ -1,5 +1,11 @@
 class Consts:
-    HERE = 10 # here is at this address
+    HERE = 10
+    LATEST = 12
+    DICT = 0xFEFE
+    AREA = DICT + 2
+
+    iHERE = 0
+    iLATEST = 1
 
 class PrimOpcodes:
     NOP = 0x00

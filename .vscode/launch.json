@@ -2,10 +2,42 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: tokenizer.py",
+            "name": "tokenizer base.cf",
             "type": "python",
             "request": "launch",
-            "program": "src/tokenizer.py",
+            "cwd": "${workspaceFolder}/src",
+            "program": "tokenizer.py",
+            "args": ["-i", "base.cf", "-o", "base.tok"],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "tokenforth base.tok",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/src",
+            "program": "tokenforth.py",
+            "args": ["-i", "base.tok", "-o", "base.bin", "-d", "base.tok.sym"],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "tokenizer test.cf",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/src",
+            "program": "tokenizer.py",
+            "args": ["-i", "test.cf", "-o", "test.tok", "-d", "base.tok.sym"],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "tokenforth test.tok",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/src",
+            "program": "tokenforth.py",
+            "args": ["-i", "test.tok", "-o", "test.bin", "-d", "test.tok.sym"],
             "console": "integratedTerminal",
             "justMyCode": true
         },
