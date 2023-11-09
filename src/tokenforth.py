@@ -232,7 +232,7 @@ def interpret(tokens, cpu):
             name = name_ba.decode("utf-8")
             idx += l + 1
             print(f"Definition: {name} @ 0x{HERE_FETCH(cpu._mif):x}")
-            Dictionary.addNameDefinition(name)
+            # Dictionary.addNameDefinition(name)
             appendToIndex(cpu._mif, HERE_FETCH(cpu._mif))
         elif tag == Token.MODE:
             mode = tokens[idx]
@@ -289,12 +289,9 @@ def main():
         Dictionary.N.append(lit)
 
     mif = Mif()
-    try:
-        with open(args.image_filename, "rb") as f:
-            memory = f.read()
-        print(f"Using memory from tomldata in '{args.image_filename}'")
+    if len(memory) > 0:
         mif.init(memory)
-    except:
+    else:
         init(mif)
 
     cpu = Prim(mif)
