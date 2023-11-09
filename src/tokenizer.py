@@ -180,14 +180,21 @@ def tokenizeFragments(fragments):
     return tokens
 
 def convert(sourcefn, inputtoml):
-    # load symbols
+    # load symbols from toml file
     try:
-        with open(inputtoml, "r") as f:
-            symbols = [s.strip() for s in f.readlines()]
+        tomldata = toml.load(inputtoml)
+        symbols = tomldata["symbols"]
+        tomlTypeIsCorrent = ("type" in tomldata) and (tomldata["type"] != "tokenizer")
     except:
         symbols = ["H", "LATEST"]
+        tomlTypeIsCorrent = True
+
+    if not tomlTypeIsCorrent:
+        raise Exception("Wrong TOML type (cannot use tokenizer TOML files)")
+
     for sym in symbols:
         Token.addDefinition(sym)
+
     # load colorforth source file
     try:
         with open(sourcefn,"r") as f:
@@ -233,8 +240,9 @@ def main():
 
     # compile data to write toml file
     tomldata = { "title": f"Tokenized {args.input_filename}",
-                 "input-toml": f"{args.input_toml_filename}",
                  "date": f"{datetime.now().strftime('%d.%m.%Y %H:%M:%S')}",
+                 "input-toml": f"{args.input_toml_filename}",
+                 "type": "tokenizer",
                  "symbols": symbols,
                  "tokens": data }
 
