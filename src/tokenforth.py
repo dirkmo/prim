@@ -69,10 +69,12 @@ def init(mif):
     # Index 0: HERE pointer
     mif.write16(Consts.HERE, Consts.HERE+2)
     mif.write16(Consts.DICT, Consts.HERE)
+    Dictionary.addNumberLiteral(Consts.HERE)
     # Dictionary.addNameDefinition("H")
     # Index 1: LATEST pointer, which points behind the last dict entry
     comma16(mif, Consts.DICT-2)
     appendToIndex(mif, HERE_FETCH(mif)-2)
+    Dictionary.addNumberLiteral(Consts.LATEST)
     # Dictionary.addNameDefinition("LATEST")
 
 def fetchFromIndex(mif, idx):
@@ -84,11 +86,8 @@ def HERE_FETCH(mif):
 def HERE_STORE(mif, val):
     mif.write16(Consts.HERE, val)
 
-def LATEST_FETCH(mif):
-    return mif.read16(Consts.LATEST)
-
 def appendToIndex(mif, addr):
-    latest = LATEST_FETCH(mif)
+    latest = mif.read16(Consts.LATEST)
     idx = (Consts.DICT - latest) // 2
     print(f"append: idx {idx}: addr 0x{addr:04x}")
     mif.write16(latest, addr)
