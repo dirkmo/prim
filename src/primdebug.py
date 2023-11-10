@@ -8,6 +8,7 @@ from primconsts import *
 import signal
 import sys
 import toml
+import tomlfix
 
 # TODO
 # - step back
@@ -67,8 +68,8 @@ class PrimDebug:
         self.cpu = cpu
         self.cpu._debug = self
         self.term = term
-        self.symbolNamesDict = symbols # (name: addr) dictionary
-        self.symbols = dict((addr,name) for name,addr in symbols.items()) # (addr, names) dictionary
+        self.symbolMap = self.genSymbolMap(symbols) # (addr, names) dictionary
+        self.symbolNamesDict = dict((name,addr) for addr,name in self.symbolMap.items()) # (name: addr) dictionary
         self.strlits = strlits if strlits is not None else []
         self.numlits = numlits if numlits is not None else []
         self.messages = [] # messages shown in message area
@@ -83,6 +84,14 @@ class PrimDebug:
         self.cpu._mif._tx = self.uart_rx_cb
         self.redrawEverything()
         PrimAsm.createLookup()
+
+    def genSymbolMap(self, symbols):
+        symbolMap = {}
+        mif = self.cpu._mif
+        for idx,sym in enumerate(symbols):
+            addr = mif.read16(Consts.DICT-idx*2)
+            symbolMap[addr] = sym
+        return symbolMap
 
     def uart_rx_cb(self, dat):
         self.appendMessage(f"uart: {chr(dat)} ({dat:02x})")
@@ -168,8 +177,8 @@ class PrimDebug:
             return s
         if useSymbols:
             nextIr = self.cpu._mif.read8(self.addrNextInstruction(addr)) & 0x7f
-            if nextIr in [PrimOpcodes.JP, PrimOpcodes.JZ, PrimOpcodes.CALL, PrimOpcodes.BYTE_FETCH, PrimOpcodes.FETCH, PrimOpcodes.BYTE_STORE, PrimOpcodes.STORE] and val in self.symbols:
-                s += " " + self.term.magenta(f"'{self.symbols[val]}") + f" (${val:x})"
+            if nextIr in [PrimOpcodes.JP, PrimOpcodes.JZ, PrimOpcodes.CALL, PrimOpcodes.BYTE_FETCH, PrimOpcodes.FETCH, PrimOpcodes.BYTE_STORE, PrimOpcodes.STORE] and val in self.symbolMap:
+                s += " " + self.term.magenta(f"'{self.symbolMap[val]}") + f" (${val:x})"
             else:
                 s += f" ${val:x}"
         else:
@@ -190,14 +199,14 @@ class PrimDebug:
             da += self.disassemble(addr)
             lines.insert(0, da)
             linecount += 1
-            if addr in self.symbols:
-                lines.insert(0, f"{addr:04x}           " + self.term.red(":" + self.symbols[addr]))
+            if addr in self.symbolMap:
+                lines.insert(0, f"{addr:04x}           " + self.term.red(":" + self.symbolMap[addr]))
                 linecount += 1
             addr = self.addrPrevInstruction(addr)
         addr = self.addrNextInstruction(self.cpu._pc)
         while addr < 0x10000 and linecount < h:
-            if addr in self.symbols:
-                lines.append(f"{addr:04x}           " + self.term.red(":" + self.symbols[addr]))
+            if addr in self.symbolMap:
+                lines.append(f"{addr:04x}           " + self.term.red(":" + self.symbolMap[addr]))
                 linecount += 1
             da = f"{addr:04x}:"
             for b in range(self.instructionLength(addr)):
@@ -302,8 +311,8 @@ class PrimDebug:
                 self.appendMessage("List of breakpoints:")
                 for bp in self.breakpoints:
                     s = f"${bp:x}"
-                    if bp in self.symbols:
-                        s+= " (" + self.symbols[bp] + ")"
+                    if bp in self.symbolMap:
+                        s+= " (" + self.symbolMap[bp] + ")"
                     self.appendMessage(s)
         elif l == 2:
             if cmd[1] in self.symbolNamesDict:
@@ -585,6 +594,7 @@ class PrimDebug:
 
 def debug(fn, uartfn):
     tomldata = toml.load(fn)
+    tomldata["symbols"] = tomlfix.workaround(tomldata["symbols"])
     term = Terminal()
 
     try:
@@ -606,8 +616,8 @@ def debug(fn, uartfn):
 
 def main():
     parser = argparse.ArgumentParser(description='Prim Debugger')
-    parser.add_argument("-i", help="Input symbol file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.bin.toml")
-    parser.add_argument("-u", help="UART input file", action="store", metavar="<input file>", type=str, required=False, dest="uart_filename",default="src/test.bin")
+    parser.add_argument("-i", help="Input TOML file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.tf.toml")
+    parser.add_argument("-u", help="UART input file", action="store", metavar="<input file>", type=str, required=False, dest="uart_filename",default="")
     args = parser.parse_args()
 
     debug(args.input_filename, args.uart_filename)
