@@ -217,6 +217,7 @@ class PrimDebug:
             linecount += 1
             addr = self.addrNextInstruction(addr)
         for i,l in enumerate(lines):
+            # BUG: l might be to long
             s = self.term.move_xy(x1, y1 + i) + l + " " * (w-self.term.length(l))
             if int(l[0:4],base=16) == self.cpu._pc:
                 s = self.term.reverse(s)
