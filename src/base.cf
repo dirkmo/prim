@@ -32,3 +32,5 @@
 :for 2>r, 'H @ 2r>, 2dup, 2>r, -, push, 'H @ $ffff , jz, ;
 :next r>, 1+, >r, push, swap , jp, 'H @ swap ! rdrop, rdrop, ;
 :i r> r> swap over >r >r ;
+:0= [ if ] 0 [ else ] $ffff [ then ] ;
+:0<> [ if ] $ffff [ else ] 0 [ then ] ;
