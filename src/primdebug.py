@@ -54,7 +54,7 @@ class Mif(MemoryIf):
     def write16(self, addr, value):
         self.write8(addr, value & 0xff)
         self.write8(addr+1, (value >> 8) & 0xff)
-    
+
     def uart_rx(self, dat):
         self.uart_fifo_rx.append(dat)
 
@@ -617,7 +617,7 @@ def debug(fn, uartfn):
 def main():
     parser = argparse.ArgumentParser(description='Prim Debugger')
     parser.add_argument("-i", help="Input TOML file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.tf.toml")
-    parser.add_argument("-u", help="UART input file", action="store", metavar="<input file>", type=str, required=False, dest="uart_filename",default="")
+    parser.add_argument("-u", help="UART input file", action="store", metavar="<input file>", type=str, required=False, dest="uart_filename",default="src/test.tok")
     args = parser.parse_args()
 
     debug(args.input_filename, args.uart_filename)

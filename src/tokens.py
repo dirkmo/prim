@@ -26,14 +26,15 @@ class Token:
     BUILDIN = 5
     LIT_NUMBER = 6
     LIT_STRING = 7
+    LIT_ADDRESS = 8
 
-    DEFINITION = 8
+    DEFINITION = 9
 
-    MODE = 9
+    MODE = 10
 
-    COMMENT_BRACES = 10
-    COMMENT_BACKSLASH = 11
-    WHITESPACE= 12
+    COMMENT_BRACES = 11
+    COMMENT_BACKSLASH = 12
+    WHITESPACE= 13
 
     MODE_COMPILE = 0
     MODE_IMMEDIATE = 1
@@ -42,7 +43,7 @@ class Token:
     Didx = 0
     mode = MODE_COMPILE
 
-    tagnames = ["WORD_CALL", "WORD_ADDRESS", "NUMBER", "STRING", "MNEMONIC", "BUILDIN", "LIT_NUMBER", "LIT_STRING", "DEFINITION", "MODE", "COMMENT_BRACES", "COMMENT_BACKSLASH", "WHITESPACE"]
+    tagnames = ["WORD_CALL", "WORD_ADDRESS", "NUMBER", "STRING", "MNEMONIC", "BUILDIN", "LIT_NUMBER", "LIT_STRING", "LIT_ADDRESS", "DEFINITION", "MODE", "COMMENT_BRACES", "COMMENT_BACKSLASH", "WHITESPACE"]
 
     def __init__(self, tag, fragment):
         self.tag = tag
@@ -198,6 +199,18 @@ class TokenLiteralString(Token):
     def generate(self):
         return Token.generateStringData(self.tag, self.s)
 
+
+class TokenLiteralAddress(Token):
+    def __init__(self, name, fragment):
+        super().__init__(self.LIT_ADDRESS, fragment)
+        self.name = name
+        # print(f"literal address: {self.name}")
+
+    def generate(self):
+        addr = Token.D[self.name]
+        data = [self.tag]
+        data.extend(lohi(addr))
+        return data
 
 class TokenCommentBraces(Token):
     def __init__(self, s, fragment):

@@ -225,6 +225,13 @@ def interpret(tokens, cpu):
             # print(f"Literal string: {name}")
             comma(cpu._mif, [l])
             comma(cpu._mif, tokens[idx:idx+1])
+        elif tag == Token.LIT_ADDRESS:
+            print(f"Literal address: {tokens[idx] | (tokens[idx+1] << 8)}")
+            Dictionary.addNumberLiteral(HERE_FETCH(cpu._mif))
+            di = tokens[idx] | (tokens[idx+1] << 8)
+            idx += 2
+            addr = fetchFromIndex(cpu._mif, di)
+            comma16(cpu._mif, addr)
         elif tag == Token.DEFINITION:
             l = tokens[idx]
             name_ba = bytearray(tokens[idx+1:idx+1+l])

@@ -51,7 +51,11 @@ def disassemble(td, out_fn):
             continue
         if i in numlits:
             num = data[i] | (data[i+1] << 8)
-            f.write(f"{i:04x}:   {data[i]:02x} {data[i+1]:02x}        Literal 0x{num:x}\n")
+            if num in symbolMap:
+                s = f"{symbolMap[num]}"
+            else:
+                s = f"0x{num:x}"
+            f.write(f"{i:04x}:   {data[i]:02x} {data[i+1]:02x}        Literal {s}\n")
             i += 2
             continue
 
@@ -92,8 +96,8 @@ def disassemble(td, out_fn):
 
 def main():
     parser = argparse.ArgumentParser(description='Prim Disassembler')
-    parser.add_argument("-i", help="Input file", action="store", metavar="<toml input file>", type=str, required=False, dest="input_filename",default="src/test.tf.toml")
-    parser.add_argument("-o", help="Output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="src/test.tf.toml.disasm")
+    parser.add_argument("-i", help="Input file", action="store", metavar="<toml input file>", type=str, required=False, dest="input_filename",default="src/base.tf.toml")
+    parser.add_argument("-o", help="Output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="src/base.tf.toml.disasm")
 
     args = parser.parse_args()
 

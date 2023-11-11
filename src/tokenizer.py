@@ -141,8 +141,8 @@ def tokenizeFragments(fragments):
                 assert not immediate, f"ERROR on line {f.linenum}: Literal {t} not possible in immediate mode."
                 if (len(t) > 3) and (t[1] == '"') and t[-1] == '"':
                     newTokens = TokenLiteralString(t[2:-1],f)
-                #elif (len(t) > 2) and (t[1] == "'") and Token.definitionAvailable(t[2:]):
-                #   pass
+                elif (len(t) > 1) and Token.definitionAvailable(t[1:]):
+                   newTokens = TokenLiteralAddress(t[1:],f)
                 else:
                     try:
                         num = stringToNumber(t[1:])
