@@ -75,7 +75,7 @@ def merge_string_fragments(fragments):
     for i in range(len(fragments)):
         f = fragments[i]
         if (not stringfragment):
-            if (len(f) > 0) and (f[0] == '"'):
+            if (len(f) > 0) and (f[0] == '"') and (f[-1] != '"'):
                 # start of string literal
                 stringfragment = True
                 merge = []

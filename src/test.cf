@@ -1,1 +1,9 @@
-:test 1 2 + ;
+:test 1 + ;
+test
+#test
+'test
+#100
+[
+]
+"Hallo Welt"
+"Test"

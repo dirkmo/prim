@@ -190,7 +190,7 @@ def interpret(tokens, cpu):
                 execute(cpu, ops)
         elif tag == Token.STRING:
             l = tokens[idx]
-            s = tokens[idx+1:idx+1+l].decode("utf-8")
+            s = bytearray(tokens[idx+1:idx+1+l]).decode("utf-8")
             idx += l + 1
             # print(f"string: {s}")
             if mode == Token.MODE_COMPILE:
@@ -220,7 +220,7 @@ def interpret(tokens, cpu):
             idx += 2
         elif tag == Token.LIT_STRING:
             l = tokens[idx]
-            name = tokens[idx+1:idx+1+l].decode("utf-8")
+            name = bytearray(tokens[idx+1:idx+1+l]).decode("utf-8")
             idx += l + 1
             # print(f"Literal string: {name}")
             comma(cpu._mif, [l])
