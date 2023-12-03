@@ -226,7 +226,7 @@ def interpret(tokens, cpu):
             comma(cpu._mif, [l])
             comma(cpu._mif, tokens[idx:idx+1])
         elif tag == Token.LIT_ADDRESS:
-            print(f"Literal address: {tokens[idx] | (tokens[idx+1] << 8)}")
+            # print(f"Literal address: {tokens[idx] | (tokens[idx+1] << 8)}")
             Dictionary.addNumberLiteral(HERE_FETCH(cpu._mif))
             di = tokens[idx] | (tokens[idx+1] << 8)
             idx += 2

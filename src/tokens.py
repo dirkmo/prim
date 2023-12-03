@@ -160,6 +160,7 @@ class TokenMnemonic(Token):
     def generate(self):
         data = [self.tag]
         data.extend(PrimAsm.assemble(self.mnemonic))
+        assert len(data) == 2
         return data
 
 

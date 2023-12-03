@@ -1,40 +1,49 @@
+:state #0 \ 0: compile, else: execute
+
 :tx $ffff c! ;
 :rx 1 [ while ] $fffe c@ 0= [ repeat ] $ffff c@ ;
+:ADD \ add H to index
+    'H @ 'LATEST @ ! 'LATEST @ 2 - 'LATEST ! ;
 
-:wordcall ;
+:IDX>ADDR sl 0xfefe swap - @ ; \ fetch addr from idx
+:NUM16 rx rx slw or ; \ receive 16-bit number from uart
+
+:flush rx [ do ] rx tx [ loop ] ; \ flush definition name
+
+:wordcall IDX>ADDR call ;
+\ 'state @ [ if ] ( execute ) [ else ] ;
+
 :wordaddr ;
-:number ;
+
+:number NUM16 'state @ 0= [ if ] push, , [ then ] ;
+
 :string ;
-:mnemonic ;
+
+:mnemonic rx break 'state @ [ if ] ( TODO execute? ) [ else ] c, [ then ] ;
+
 :buildin ;
 :litnum ;
 :litstr ;
 :litaddr ;
-:definition ;
-:mode ;
-:commentbraces ;
-:commentbackslash ;
-:whitespace ;
+
+:definition flush ADD ;
+
+:mode rx ;
+:commentbraces flush ;
+:commentbackslash flush ;
+:whitespace flush ;
 
 :jumptable
-#wordcall
-#wordaddr
-#number
-#string
-#mnemonic
-#buildin
-#litnum
-#litstr
-#litaddr
-#definition
-#mode
-#commentbraces
-#commentbackslash
-#whitespace
+#wordcall #wordaddr #number #string
+#mnemonic #buildin
+#litnum #litstr #litaddr
+#definition #mode
+#commentbraces #commentbackslash #whitespace
 
 :interpreter
     rx                      \ get token
     sl 'jumptable + @ call  \ jump table call
+    'interpreter jp
 ;
 
 [

@@ -335,7 +335,7 @@ class PrimDebug:
         self.redraw = set((PrimDebug.SHOW_CODE, PrimDebug.SHOW_STACKS, PrimDebug.SHOW_MESSAGES, PrimDebug.SHOW_MEMORY))
 
     def show(self):
-        x2_code = min(self.term.width // 2, 40)
+        x2_code = min(self.term.width // 2, 45)
         code = PrimDebug.SHOW_CODE in self.redraw
         mem = PrimDebug.SHOW_MEMORY in self.redraw
         msgs = PrimDebug.SHOW_MESSAGES in self.redraw
