@@ -617,7 +617,7 @@ def debug(fn, uartfn):
 
 def main():
     parser = argparse.ArgumentParser(description='Prim Debugger')
-    parser.add_argument("-i", help="Input TOML file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.tf.toml")
+    parser.add_argument("-i", help="Input TOML file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/interpreter.tf.toml")
     parser.add_argument("-u", help="UART input file", action="store", metavar="<input file>", type=str, required=False, dest="uart_filename",default="src/test.tok")
     args = parser.parse_args()
 
