@@ -145,7 +145,7 @@ wire w_memop = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_BYTE_STORE) || (r_ir[
 assign o_addr = w_execute ? T : r_pc;
 
 assign o_we = w_execute && w_memwrite;
-assign o_bs = i_reset ? 2'b00 : w_execute ? 2'b11 : 2'b11;
+assign o_bs = i_reset ? 2'b00 : w_execute ? 2'b11 : 2'b01;
 assign o_dat = T;
 
 

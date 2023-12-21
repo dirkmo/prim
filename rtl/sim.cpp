@@ -72,6 +72,10 @@ int main(int argc, char *argv[]) {
 
     reset();
 
+    for ( int i = 0; i < 100; i++) {
+        mem[i] = i;
+    }
+
     while(tickcount < 20 * clockcycle_ps) {
         handle(pCore);
         tick();
