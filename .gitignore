@@ -3,3 +3,6 @@ __pycache__
 *.tok
 *.sym
 *.toml
+*.disasm
+.vscode/settings.json
+build/

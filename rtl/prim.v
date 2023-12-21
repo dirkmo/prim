@@ -6,9 +6,8 @@ module Prim(
     output [15:0] o_dat,
     input  [15:0] i_dat,
     output [1:0]  o_bs, // byte select
-    input         i_ack,
     output        o_we,
-    output        o_cs,
+    input         i_ack,
 
     input         i_irq
 );
@@ -24,7 +23,7 @@ reg [15:0] r_pc /* verilator public */; // program counter
 reg [15:0] T /* verilator public */; // top of dstack
 reg [15:0] N /* verilator public */; // 2nd on dstack
 reg [15:0] R /* verilator public */; // top of rstack
-reg [15:0] r_ir /* verilator public */; // instruction register
+reg [7:0] r_ir /* verilator public */; // instruction register
 reg r_carry;
 
 // stacks
@@ -39,49 +38,56 @@ reg [RSS-1:0] r_rsp /* verilator public */;
 wire [15:0] THIRD = r_dstack[r_dsp]; // third element
 
 //
+localparam
+    PHASE_FETCH = 0,
+    PHASE_EXECUTE = 1;
+
 reg r_phase /* verilator public */;
+wire w_fetch = (r_phase == PHASE_FETCH);
+wire w_execute = (r_phase == PHASE_EXECUTE);
 
 // alu
-reg [16:0] r_alu;
-always @(*)
+reg [15:0] r_alu;
+always @(posedge i_clk) begin
     case (r_ir[6:0])
-        OP_NOP:         r_alu = {1'b0, T};
-        OP_CALL:        r_alu = {1'b0, T};
-        OP_JP:          r_alu = {1'b0, T};
-        OP_JZ:          r_alu = {1'b0, T};
-        OP_AND:         r_alu = {1'b0, N & T};
-        OP_OR:          r_alu = {1'b0, N | T};
-        OP_XOR:         r_alu = {1'b0, N ^ T};
-        OP_NOT:         r_alu = {1'b0, ~T};
-        OP_SR:          r_alu = {2'b0, T[15:1]};
-        OP_SRW:         r_alu = {9'b0, T[15:8]};
-        OP_SL:          r_alu = {1'b0, T[14:0], 1'b0};
-        OP_SLW:         r_alu = {1'b0, T[7:0], 8'b0};
-        OP_ADD:         r_alu = {1'b0, N} + {1'b0, T};
-        OP_SUB:         r_alu = {1'b0, N} - {1'b0, T};
-        OP_LTS:         r_alu = {17{($signed(N) < $signed(T))}};
-        OP_LTU:         r_alu = {17{(N < T)}};
-        OP_SWAP:        r_alu = {1'b0, N};
-        OP_OVER:        r_alu = {1'b0, N};
-        OP_DUP:         r_alu = {1'b0, T};
-        OP_NIP:         r_alu = {1'b0, T};
-        OP_ROT:         r_alu = {1'b0, T};
-        OP_NROT:        r_alu = {1'b0, T};
-        OP_DROP:        r_alu = {1'b0, T};
-        OP_RDROP:       r_alu = {1'b0, T};
-        OP_CARRY:       r_alu = {1'b0, T};
-        OP_TO_R:        r_alu = {1'b0, T};
-        OP_FROM_R:      r_alu = {1'b0, T};
-        OP_INT:         r_alu = {1'b0, T};
-        OP_FETCH:       r_alu = {1'b0, T};
-        OP_BYTE_FETCH:  r_alu = {1'b0, T};
-        OP_STORE:       r_alu = {1'b0, T};
-        OP_BYTE_STORE:  r_alu = {1'b0, T};
-        OP_PUSH8:       r_alu = {1'b0, T};
-        OP_PUSH:        r_alu = {1'b0, T};
-        OP_BREAK:       r_alu = {1'b0, T};
-        default:        r_alu = {1'b0, T};
+        OP_NOP:         r_alu <= {T};
+        OP_CALL:        r_alu <= {T};
+        OP_JP:          r_alu <= {T};
+        OP_JZ:          r_alu <= {T};
+        OP_AND:         r_alu <= {N & T};
+        OP_OR:          r_alu <= {N | T};
+        OP_XOR:         r_alu <= {N ^ T};
+        OP_NOT:         r_alu <= {~T};
+        OP_SR:          r_alu <= {1'b0, T[15:1]};
+        OP_SRW:         r_alu <= {8'b0, T[15:8]};
+        OP_SL:          {r_carry, r_alu} <= {T[15:0], 1'b0};
+        OP_SLW:         r_alu <= {T[7:0], 8'b0};
+        OP_ADD:         {r_carry, r_alu} <= {1'b0, N} + {1'b0, T};
+        OP_SUB:         {r_carry, r_alu} <= {1'b0, N} - {1'b0, T};
+        OP_LTS:         r_alu <= {16{($signed(N) < $signed(T))}};
+        OP_LTU:         r_alu <= {16{(N < T)}};
+        OP_SWAP:        r_alu <= N;
+        OP_OVER:        r_alu <= N;
+        OP_DUP:         r_alu <= T;
+        OP_NIP:         r_alu <= T;
+        OP_ROT:         r_alu <= T;
+        OP_NROT:        r_alu <= T;
+        OP_DROP:        r_alu <= T;
+        OP_RDROP:       r_alu <= T;
+        OP_CARRY:       r_alu <= {15'h0, r_carry};
+        OP_TO_R:        r_alu <= T;
+        OP_FROM_R:      r_alu <= T;
+        OP_INT:         r_alu <= T;
+        OP_FETCH:       r_alu <= T;
+        OP_BYTE_FETCH:  r_alu <= T;
+        OP_STORE:       r_alu <= T;
+        OP_BYTE_STORE:  r_alu <= T;
+        OP_PUSH8:       r_alu <= T;
+        OP_PUSH:        r_alu <= T;
+        OP_BREAK:       r_alu <= T;
+        default:        r_alu <= T;
     endcase
+end
 
 // r_phase
 always @(posedge i_clk)
@@ -89,7 +95,11 @@ begin
     if (i_reset) begin
         r_phase <= 0;
     end else begin
-        r_phase <= r_phase + 1;
+        case (r_phase)
+            PHASE_FETCH: if(i_ack) r_phase <= PHASE_EXECUTE;
+            PHASE_EXECUTE: if (w_memop || i_ack) r_phase <= PHASE_FETCH;
+            default: r_phase <= PHASE_FETCH;
+        endcase
     end
 end
 
@@ -110,10 +120,35 @@ always @(posedge i_clk)
 begin
     if (i_reset) begin
         r_pc <= 16'h0000;
-    end else begin
+    end else if (w_execute) begin // TODO: nicht richtig, warten auf Ende der Mem-Op
         r_pc <= r_pc_next;
     end
 end
+
+// instruction register
+always @(posedge i_clk)
+begin
+    if (i_reset) begin
+        r_ir <= 8'h00;
+    end else if ((w_fetch) && i_ack) begin
+        r_ir <= i_dat[7:0];
+    end
+end
+
+
+// ----------------------------------------------------------------------------
+// memory interface
+
+wire w_memwrite = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_BYTE_STORE);
+wire w_memop = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_BYTE_STORE) || (r_ir[6:0] == OP_FETCH) || (r_ir[6:0] == OP_BYTE_FETCH);
+
+assign o_addr = w_execute ? T : r_pc;
+
+assign o_we = w_execute && w_memwrite;
+assign o_bs = i_reset ? 2'b00 : w_execute ? 2'b11 : 2'b11;
+assign o_dat = T;
+
+
 
 /*
 # ALU-OPs
