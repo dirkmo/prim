@@ -8,7 +8,7 @@ localparam
     OP_XOR = 7'h06,
     OP_NOT = 7'h07,
     OP_SR = 7'h08,
-    OP_SRW =7'hx9,
+    OP_SRW =7'h09,
     OP_SL = 7'h0a,
     OP_SLW = 7'h0b,
     OP_ADD = 7'h0c,

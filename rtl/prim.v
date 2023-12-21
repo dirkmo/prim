@@ -87,7 +87,7 @@ always @(*)
 always @(posedge i_clk)
 begin
     if (i_reset) begin
-        r_phase = 0;
+        r_phase <= 0;
     end else begin
         r_phase <= r_phase + 1;
     end
@@ -96,17 +96,22 @@ end
 // Program counter r_pc
 reg [15:0] r_pc_next;
 wire [15:0] pc_plus_1 = r_pc + 1'd1;
+always @(*)
+begin
+    case (r_ir[6:0])
+        OP_CALL: r_pc_next = T;
+        OP_JP: r_pc_next = T;
+        OP_JZ: r_pc_next = (T==16'h0) ? N : pc_plus_1;
+        default: r_pc_next = pc_plus_1;
+    endcase
+end
+
 always @(posedge i_clk)
 begin
     if (i_reset) begin
-        r_pc_next = 16'h0000;
+        r_pc <= 16'h0000;
     end else begin
-        case (r_ir[6:0])
-            OP_CALL: r_pc_next = T;
-            OP_JP: r_pc_next = T;
-            OP_JZ: r_pc_next = (T==16'h0) ? N : pc_plus_1;
-            default: r_pc_next = pc_plus_1;
-        endcase
+        r_pc <= r_pc_next;
     end
 end
 
