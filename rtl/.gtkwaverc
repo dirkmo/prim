@@ -1,2 +1,3 @@
 highlight_wavewindow 1
 fill_waveform 1
+do_initial_zoom_fit 1

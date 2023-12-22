@@ -97,7 +97,7 @@ begin
     end else begin
         case (r_phase)
             PHASE_FETCH: if(i_ack) r_phase <= PHASE_EXECUTE;
-            PHASE_EXECUTE: if (w_memop || i_ack) r_phase <= PHASE_FETCH;
+            PHASE_EXECUTE: if (~w_memop || i_ack) r_phase <= PHASE_FETCH;
             default: r_phase <= PHASE_FETCH;
         endcase
     end

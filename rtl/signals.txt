@@ -1,0 +1,15 @@
+Prim.i_reset
+Prim.i_ack
+Prim.i_dat
+Prim.o_dat
+Prim.o_addr
+Prim.o_bs
+Prim.o_we
+Prim.T
+Prim.N
+Prim.THIRD
+Prim.r_pc
+Prim.r_ir
+Prim.r_phase
+Prim.r_dsp
+Prim.r_rsp

@@ -36,7 +36,6 @@ add_custom_target(simulate
 
 add_custom_target(wave
     COMMAND cp ${PROJECT_SOURCE_DIR}/.gtkwaverc ${PROJECT_SOURCE_DIR}/build
-    COMMAND gtkwave ${PROJECT_SOURCE_DIR}/sim.gtkw
-    #COMMAND gtkwave ${PROJECT_SOURCE_DIR}/build/trace.vcd
+    COMMAND gtkwave -S ${PROJECT_SOURCE_DIR}/addsignals.tcl ${PROJECT_SOURCE_DIR}/build/trace.vcd
     DEPENDS simulate
 )
