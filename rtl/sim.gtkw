@@ -1,0 +1,52 @@
+[*]
+[*] GTKWave Analyzer v3.3.117 (w)1999-2023 BSI
+[*] Fri Dec 22 10:35:23 2023
+[*]
+[dumpfile] "/vol/dev/prim/rtl/build/trace.vcd"
+[dumpfile_mtime] "Fri Dec 22 10:29:20 2023"
+[dumpfile_size] 6501
+[savefile] "/vol/dev/prim/rtl/sim.gtkw"
+[timestart] 5000
+[size] 1920 1016
+[pos] -1 -1
+*-13.440804 20000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[sst_width] 315
+[signals_width] 225
+[sst_expanded] 1
+[sst_vpaned_height] 292
+@28
+TOP.Prim.i_reset
+TOP.Prim.i_clk
+@22
+TOP.Prim.o_addr[15:0]
+TOP.Prim.i_dat[15:0]
+TOP.Prim.o_dat[15:0]
+@28
+TOP.Prim.o_bs[1:0]
+TOP.Prim.o_we
+TOP.Prim.i_ack
+@22
+TOP.Prim.T[15:0]
+TOP.Prim.N[15:0]
+TOP.Prim.THIRD[15:0]
+TOP.Prim.R[15:0]
+@28
+TOP.Prim.r_phase
+@22
+TOP.Prim.r_pc_next[15:0]
+TOP.Prim.r_pc[15:0]
+TOP.Prim.r_ir[7:0]
+@28
+TOP.Prim.i_irq
+@22
+TOP.Prim.pc_plus_1[15:0]
+TOP.Prim.r_alu[15:0]
+@28
+TOP.Prim.r_carry
+@22
+TOP.Prim.r_dsp[3:0]
+@23
+TOP.Prim.r_rsp[3:0]
+[pattern_trace] 1
+[pattern_trace] 0

@@ -1,3 +1,4 @@
+// TODO: Autogenerate this file from primconsts.py
 localparam
     OP_NOP = 7'h00,
     OP_CALL = 7'h01,
@@ -33,4 +34,5 @@ localparam
     OP_BYTE_STORE = 7'h1f,
     OP_PUSH8  = 7'h20,
     OP_PUSH = 7'h21,
-    OP_BREAK = 7'h22;
+    OP_BREAK = 7'h22,
+    OP_SIMEND /* verilator public */ = 7'h7f;

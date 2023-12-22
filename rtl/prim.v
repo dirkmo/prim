@@ -82,9 +82,9 @@ always @(posedge i_clk) begin
         OP_BYTE_FETCH:  r_alu <= T;
         OP_STORE:       r_alu <= T;
         OP_BYTE_STORE:  r_alu <= T;
-        OP_PUSH8:       r_alu <= T;
-        OP_PUSH:        r_alu <= T;
-        OP_BREAK:       r_alu <= T;
+        // OP_PUSH8:       r_alu <= T;
+        // OP_PUSH:        r_alu <= T;
+        // OP_BREAK:       r_alu <= T;
         default:        r_alu <= T;
     endcase
 end
@@ -108,10 +108,12 @@ reg [15:0] r_pc_next;
 wire [15:0] pc_plus_1 = r_pc + 1'd1;
 always @(*)
 begin
-    case (r_ir[6:0])
+    casez (r_ir[6:0])
         OP_CALL: r_pc_next = T;
         OP_JP: r_pc_next = T;
         OP_JZ: r_pc_next = (T==16'h0) ? N : pc_plus_1;
+        OP_PUSH8: if (r_ir[7]) r_pc_next = T; else r_pc_next = r_pc + 2;
+        OP_PUSH:  if (r_ir[7]) r_pc_next = T; else r_pc_next = r_pc + 3;
         default: r_pc_next = pc_plus_1;
     endcase
 end
@@ -132,21 +134,58 @@ begin
         r_ir <= 8'h00;
     end else if ((w_fetch) && i_ack) begin
         r_ir <= i_dat[7:0];
+        `ifdef SIM
+        if (i_dat[6:0] == OP_SIMEND) $finish();
+        `endif
     end
 end
 
+// top of data stack
+always @(posedge i_clk)
+begin
+    if (i_reset) begin
+        T <= 16'h00;
+    end else begin
+        case (r_ir[6:0])
+            OP_PUSH8: T <= i_dat;
+            OP_PUSH: T <= i_dat;
+            OP_SWAP: T <= N;
+            OP_ROT: T <= THIRD;
+            OP_NROT: T <= N;
+            default: ;
+        endcase
+    end
+end
 
 // ----------------------------------------------------------------------------
 // memory interface
 
 wire w_memwrite = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_BYTE_STORE);
-wire w_memop = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_BYTE_STORE) || (r_ir[6:0] == OP_FETCH) || (r_ir[6:0] == OP_BYTE_FETCH);
+wire w_memop8 = (r_ir[6:0] == OP_BYTE_STORE) || (r_ir[6:0] == OP_BYTE_FETCH) || (r_ir[6:0] == OP_PUSH8);
+wire w_memop16 = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_FETCH) || (r_ir[6:0] == OP_PUSH);
+wire w_memop = w_memop8 || w_memop16;
+
+reg [1:0] r_bs;
+always @(*) begin
+    r_bs = 2'b00;
+    if (w_fetch) begin
+        r_bs = 2'b01;
+    end else if (w_execute) begin
+        if (w_memop8) begin
+            r_bs = 2'b01;
+        end else if (w_memop16) begin
+            r_bs = 2'b11;
+        end
+    end
+    if (i_reset) begin
+        r_bs = 2'b00;
+    end
+end
 
 assign o_addr = w_execute ? T : r_pc;
-
 assign o_we = w_execute && w_memwrite;
-assign o_bs = i_reset ? 2'b00 : w_execute ? 2'b11 : 2'b01;
-assign o_dat = T;
+assign o_bs = r_bs;
+assign o_dat = N;
 
 
 

@@ -22,21 +22,21 @@ SOURCES prim.v)
 
 # target_link_libraries(simulator PUBLIC ${CURSES_LIBRARIES} readline)
 
-# add_custom_target(assemble
-#     COMMAND ${PROJECT_SOURCE_DIR}/../dasm/dasm.py -i ${PROJECT_SOURCE_DIR}/forth.asm -o ${PROJECT_SOURCE_DIR}/forth
-# )
+add_custom_target(assemble
+    COMMAND ${PROJECT_SOURCE_DIR}/../src/primasm.py -i ${PROJECT_SOURCE_DIR}/test.asm -o ${CMAKE_BINARY_DIR}/test.bin
+    COMMAND xxd -g1 ${CMAKE_BINARY_DIR}/test.bin
+)
 
 add_custom_target(simulate
-    COMMAND ${PROJECT_BINARY_DIR}/simulator #-i ${PROJECT_SOURCE_DIR}/forth.bin
-    #DEPENDS assemble
+    COMMAND ${PROJECT_BINARY_DIR}/simulator -i ${CMAKE_BINARY_DIR}/test.bin
+    DEPENDS assemble
     DEPENDS simulator
     COMMENT "Executing simulation..."
 )
 
 add_custom_target(wave
     COMMAND cp ${PROJECT_SOURCE_DIR}/.gtkwaverc ${PROJECT_SOURCE_DIR}/build
-    #COMMAND gtkwave ${PROJECT_SOURCE_DIR}/sim.gtkw
-    COMMAND gtkwave ${PROJECT_SOURCE_DIR}/build/trace.vcd
-
-   DEPENDS simulate
+    COMMAND gtkwave ${PROJECT_SOURCE_DIR}/sim.gtkw
+    #COMMAND gtkwave ${PROJECT_SOURCE_DIR}/build/trace.vcd
+    DEPENDS simulate
 )
