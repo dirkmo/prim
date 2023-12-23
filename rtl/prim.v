@@ -134,6 +134,7 @@ begin
         r_ir <= 8'h00;
     end else if ((w_fetch) && i_ack) begin
         r_ir <= i_dat[7:0];
+        $display("ir: %02x", i_dat);
         `ifdef SIM
         if (i_dat[6:0] == OP_SIMEND) $finish();
         `endif
@@ -163,8 +164,10 @@ end
 wire w_memwrite = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_BYTE_STORE);
 wire w_memop8 = (r_ir[6:0] == OP_BYTE_STORE) || (r_ir[6:0] == OP_BYTE_FETCH) || (r_ir[6:0] == OP_PUSH8);
 wire w_memop16 = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_FETCH) || (r_ir[6:0] == OP_PUSH);
+wire w_pushop = (r_ir[6:0] == OP_PUSH) | (r_ir[6:0] == OP_PUSH8);
 wire w_memop = w_memop8 || w_memop16;
 
+// byte select
 reg [1:0] r_bs;
 always @(*) begin
     r_bs = 2'b00;
@@ -182,7 +185,21 @@ always @(*) begin
     end
 end
 
-assign o_addr = w_execute ? T : r_pc;
+// address generation
+reg [15:0] r_addr;
+always @(*) begin
+    if (w_fetch) begin
+        r_addr = r_pc;
+    end else begin // w_execute
+        if (w_pushop) begin
+            r_addr = pc_plus_1;
+        end else begin
+            r_addr = T;
+        end
+    end
+end
+
+assign o_addr = r_addr;
 assign o_we = w_execute && w_memwrite;
 assign o_bs = r_bs;
 assign o_dat = N;
