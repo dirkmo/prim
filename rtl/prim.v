@@ -231,6 +231,25 @@ begin
     end
 end
 
+// carry
+always @(posedge i_clk)
+begin
+    if (i_reset) begin
+        r_carry <= 1'b0;
+    end else if (w_execute) begin
+        casez (r_ir[6:0])
+            OP_ADD: r_carry <= r_alu[16];
+            OP_SUB: r_carry <= r_alu[16];
+            OP_SL: r_carry <= r_alu[16];
+            OP_LTS: r_carry <= r_alu[16];
+            OP_LTU: r_carry <= r_alu[16];
+            OP_CARRY: r_carry <= r_alu[16];
+            default: ;
+        endcase
+    end
+end
+
+
 // ----------------------------------------------------------------------------
 // memory interface
 
@@ -276,41 +295,5 @@ assign o_addr = r_addr;
 assign o_we = w_execute && w_memwrite;
 assign o_bs = r_bs;
 assign o_dat = N;
-
-
-
-/*
-# ALU-OPs
-1. fetch
-2. *--dsp=alu, pc++
-
-# call
-1. fetch
-2. *(++rsp)=pc, pc=*dsp--
-
-# jp
-1. fetch
-2. pc=(cond ? pc=*dsp-- : pc=pc+1)
-
-# memory read
-1. fetch
-2. *dsp = mem[*dsp]
-
-# memory write
-1. fetch
-2. mem[*dsp] = *--dsp
-
-# stack
-1. fetch
-rot
-nrot
-swap
-dup
-nip
-drop
-rdrop
->r
-r>
-*/
 
 endmodule
