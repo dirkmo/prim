@@ -47,45 +47,45 @@ wire w_fetch = (r_phase == PHASE_FETCH);
 wire w_execute = (r_phase == PHASE_EXECUTE);
 
 // alu
-reg [15:0] r_alu;
+reg [16:0] r_alu;
 always @(posedge i_clk) begin
     case (r_ir[6:0])
-        OP_NOP:         r_alu <= {T};
-        OP_CALL:        r_alu <= {T};
-        OP_JP:          r_alu <= {T};
-        OP_JZ:          r_alu <= {T};
-        OP_AND:         r_alu <= {N & T};
-        OP_OR:          r_alu <= {N | T};
-        OP_XOR:         r_alu <= {N ^ T};
-        OP_NOT:         r_alu <= {~T};
-        OP_SR:          r_alu <= {1'b0, T[15:1]};
-        OP_SRW:         r_alu <= {8'b0, T[15:8]};
-        OP_SL:          {r_carry, r_alu} <= {T[15:0], 1'b0};
-        OP_SLW:         r_alu <= {T[7:0], 8'b0};
-        OP_ADD:         {r_carry, r_alu} <= {1'b0, N} + {1'b0, T};
-        OP_SUB:         {r_carry, r_alu} <= {1'b0, N} - {1'b0, T};
-        OP_LTS:         r_alu <= {16{($signed(N) < $signed(T))}};
-        OP_LTU:         r_alu <= {16{(N < T)}};
-        OP_SWAP:        r_alu <= N;
-        OP_OVER:        r_alu <= N;
-        OP_DUP:         r_alu <= T;
-        OP_NIP:         r_alu <= T;
-        OP_ROT:         r_alu <= T;
-        OP_NROT:        r_alu <= T;
-        OP_DROP:        r_alu <= T;
-        OP_RDROP:       r_alu <= T;
-        OP_CARRY:       r_alu <= {15'h0, r_carry};
-        OP_TO_R:        r_alu <= T;
-        OP_FROM_R:      r_alu <= T;
-        OP_INT:         r_alu <= T;
-        OP_FETCH:       r_alu <= T;
-        OP_BYTE_FETCH:  r_alu <= T;
-        OP_STORE:       r_alu <= T;
-        OP_BYTE_STORE:  r_alu <= T;
-        // OP_PUSH8:       r_alu <= T;
-        // OP_PUSH:        r_alu <= T;
-        // OP_BREAK:       r_alu <= T;
-        default:        r_alu <= T;
+        OP_NOP:         r_alu = {1'b0, T};
+        OP_CALL:        r_alu = {1'b0, T};
+        OP_JP:          r_alu = {1'b0, T};
+        OP_JZ:          r_alu = {1'b0, T};
+        OP_AND:         r_alu = {1'b0, N & T};
+        OP_OR:          r_alu = {1'b0, N | T};
+        OP_XOR:         r_alu = {1'b0, N ^ T};
+        OP_NOT:         r_alu = {1'b0, ~T};
+        OP_SR:          r_alu = {2'b0, T[15:1]};
+        OP_SRW:         r_alu = {9'b0, T[15:8]};
+        OP_SL:          r_alu = {T[15:0], 1'b0};
+        OP_SLW:         r_alu = {T[7:0], 9'b0};
+        OP_ADD:         r_alu = {1'b0, N} + {1'b0, T};
+        OP_SUB:         r_alu = {1'b0, N} - {1'b0, T};
+        OP_LTS:         r_alu = {17{($signed(N) < $signed(T))}};
+        OP_LTU:         r_alu = {17{(N < T)}};
+        OP_SWAP:        r_alu = {1'b0, N};
+        OP_OVER:        r_alu = {1'b0, N};
+        OP_DUP:         r_alu = {1'b0, T};
+        OP_NIP:         r_alu = {1'b0, T};
+        OP_ROT:         r_alu = {1'b0, T};
+        OP_NROT:        r_alu = {1'b0, T};
+        OP_DROP:        r_alu = {1'b0, T};
+        OP_RDROP:       r_alu = {1'b0, T};
+        OP_CARRY:       r_alu = {16'h0, r_carry};
+        OP_TO_R:        r_alu = {1'b0, T};
+        OP_FROM_R:      r_alu = {1'b0, T};
+        OP_INT:         r_alu = {1'b0, T};
+        OP_FETCH:       r_alu = {1'b0, T};
+        OP_BYTE_FETCH:  r_alu = {1'b0, T};
+        OP_STORE:       r_alu = {1'b0, T};
+        OP_BYTE_STORE:  r_alu = {1'b0, T};
+        // OP_PUSH8:       r_alu = T;
+        // OP_PUSH:        r_alu = T;
+        // OP_BREAK:       r_alu = T;
+        default:        r_alu = {1'b0, T};
     endcase
 end
 
@@ -154,6 +154,48 @@ begin
             OP_SWAP: T <= N;
             OP_ROT: T <= THIRD;
             OP_NROT: T <= N;
+            default: begin T <= r_alu[15:0]; $display("alu: %x", r_alu); end
+        endcase
+    end
+end
+
+// 2nd on data stack
+always @(posedge i_clk)
+begin
+    if (i_reset) begin
+        N <= 16'h00;
+    end else if (w_execute) begin
+        case (r_ir[6:0])
+            OP_AND: r_dsp <= r_dsp - 1;
+            OP_OR: N <= THIRD;
+            OP_XOR: N <= THIRD;
+            OP_ADD: N <= THIRD;
+            OP_SUB: N <= THIRD;
+            OP_LTS: N <= THIRD;
+            OP_LTU: N <= THIRD;
+            OP_PUSH8: N <= T;
+            OP_PUSH: N <= T;
+            default: ;
+        endcase
+    end
+end
+
+// data stack pointer
+always @(posedge i_clk)
+begin
+    if (i_reset) begin
+        r_dsp <= 'h00;
+    end else if (w_execute) begin
+        case (r_ir[6:0])
+            OP_AND: r_dsp <= r_dsp - 1;
+            OP_OR: r_dsp <= r_dsp - 1;
+            OP_XOR: r_dsp <= r_dsp - 1;
+            OP_ADD: r_dsp <= r_dsp - 1;
+            OP_SUB: r_dsp <= r_dsp - 1;
+            OP_LTS: r_dsp <= r_dsp - 1;
+            OP_LTU: r_dsp <= r_dsp - 1;
+            OP_PUSH8: r_dsp <= r_dsp + 1;
+            OP_PUSH: r_dsp <= r_dsp + 1;
             default: ;
         endcase
     end
