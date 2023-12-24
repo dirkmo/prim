@@ -18,21 +18,21 @@ parameter
 
 `include "opcodes.v"
 
+// stack pointers
+reg [DSS-1:0] r_dsp /* verilator public */;
+reg [RSS-1:0] r_rsp /* verilator public */;
+
 // registers
 reg [15:0] r_pc /* verilator public */; // program counter
 reg [15:0] T /* verilator public */; // top of dstack
 reg [15:0] N /* verilator public */; // 2nd on dstack
-reg [15:0] R /* verilator public */; // top of rstack
+wire [15:0] R /* verilator public */ = r_rstack[r_rsp]; // top of rstack
 reg [7:0] r_ir /* verilator public */; // instruction register
 reg r_carry;
 
 // stacks
 reg [15:0] r_dstack[0:2**DSS-1] /* verilator public */;
 reg [15:0] r_rstack[0:2**RSS-1] /* verilator public */;
-
-// stack pointers
-reg [DSS-1:0] r_dsp /* verilator public */;
-reg [RSS-1:0] r_rsp /* verilator public */;
 
 //
 wire [15:0] THIRD = r_dstack[r_dsp]; // third element
@@ -180,6 +180,19 @@ begin
     end
 end
 
+// top of return stack
+always @(posedge i_clk)
+begin
+    if (w_execute) begin
+        case (r_ir[7:0])
+            {1'b0, OP_CALL}: r_rstack[r_rsp] <= r_pc;
+            {1'b0, OP_INT}: r_rstack[r_rsp] <= r_pc;
+            {1'b0, OP_TO_R}: r_rstack[r_rsp] <= T;
+            default: ;
+        endcase
+    end
+end
+
 // data stack pointer
 always @(posedge i_clk)
 begin
@@ -196,6 +209,23 @@ begin
             OP_LTU: r_dsp <= r_dsp - 1;
             OP_PUSH8: r_dsp <= r_dsp + 1;
             OP_PUSH: r_dsp <= r_dsp + 1;
+            default: ;
+        endcase
+    end
+end
+
+// return stack pointer
+always @(posedge i_clk)
+begin
+    if (i_reset) begin
+        r_rsp <= 'h00;
+    end else if (w_execute) begin
+        casez (r_ir[7:0])
+            {1'b0, OP_CALL}: r_rsp <= r_rsp + 1;
+            {1'b0, OP_INT}: r_rsp <= r_rsp + 1;
+            {1'b0, OP_TO_R}: r_rsp <= r_rsp + 1;
+            {1'b0, OP_FROM_R}: r_rsp <= r_rsp - 1;
+            {1'b1, 7'b???????}: r_rsp <= r_rsp - 1;
             default: ;
         endcase
     end
