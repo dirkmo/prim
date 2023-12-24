@@ -93,7 +93,7 @@ end
 always @(posedge i_clk)
 begin
     if (i_reset) begin
-        r_phase <= 0;
+        r_phase <= PHASE_FETCH;
     end else begin
         case (r_phase)
             PHASE_FETCH: if(i_ack) r_phase <= PHASE_EXECUTE;
@@ -108,12 +108,13 @@ reg [15:0] r_pc_next;
 wire [15:0] pc_plus_1 = r_pc + 1'd1;
 always @(*)
 begin
-    casez (r_ir[6:0])
-        OP_CALL: r_pc_next = T;
-        OP_JP: r_pc_next = T;
-        OP_JZ: r_pc_next = (T==16'h0) ? N : pc_plus_1;
-        OP_PUSH8: if (r_ir[7]) r_pc_next = T; else r_pc_next = r_pc + 2;
-        OP_PUSH:  if (r_ir[7]) r_pc_next = T; else r_pc_next = r_pc + 3;
+    casez (r_ir)
+        {1'b0, OP_CALL}: r_pc_next = T;
+        {1'b0, OP_JP}: r_pc_next = T;
+        {1'b0, OP_JZ}: r_pc_next = (T==16'h0) ? N : pc_plus_1;
+        {1'b0, OP_PUSH8}: if (r_ir[7]) r_pc_next = T; else r_pc_next = r_pc + 2;
+        {1'b0, OP_PUSH}:  if (r_ir[7]) r_pc_next = T; else r_pc_next = r_pc + 3;
+        {1'b1, 7'b???????}: r_pc_next = R;
         default: r_pc_next = pc_plus_1;
     endcase
 end
@@ -146,10 +147,10 @@ always @(posedge i_clk)
 begin
     if (i_reset) begin
         T <= 16'h00;
-    end else begin
+    end else if (w_execute) begin
         case (r_ir[6:0])
-            OP_PUSH8: T <= i_dat;
-            OP_PUSH: T <= i_dat;
+            OP_PUSH8: begin T <= i_dat; $display("push8 %x", i_dat); end
+            OP_PUSH: begin T <= i_dat; $display("push %x", i_dat); end
             OP_SWAP: T <= N;
             OP_ROT: T <= THIRD;
             OP_NROT: T <= N;
