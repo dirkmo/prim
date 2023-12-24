@@ -135,7 +135,7 @@ begin
         r_ir <= 8'h00;
     end else if ((w_fetch) && i_ack) begin
         r_ir <= i_dat[7:0];
-        $display("ir: %02x", i_dat);
+        $display("pc: %04x, ir: %02x", r_pc, i_dat);
         `ifdef SIM
         if (i_dat[6:0] == OP_SIMEND) $finish();
         `endif
@@ -149,6 +149,8 @@ begin
         T <= 16'h00;
     end else if (w_execute) begin
         case (r_ir[6:0])
+            OP_JP: T <= N;
+            OP_JZ: T <= N;
             OP_PUSH8: begin T <= i_dat; $display("push8 %x", i_dat); end
             OP_PUSH: begin T <= i_dat; $display("push %x", i_dat); end
             OP_SWAP: T <= N;
