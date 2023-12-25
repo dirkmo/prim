@@ -23,8 +23,11 @@ void opentrace(const char *vcdname) {
 }
 
 void tick() {
-    pCore->i_clk = !pCore->i_clk;
-    tickcount += clockcycle_ps / 2;
+    pCore->eval();
+    tickcount += clockcycle_ps / 4;
+    if ((tickcount % clockcycle_ps) == (clockcycle_ps/2)) {
+        pCore->i_clk = !pCore->i_clk;
+    }
     pCore->eval();
     if(pTrace) pTrace->dump(static_cast<vluint64_t>(tickcount));
 }
@@ -61,7 +64,7 @@ int handle(Vprim *pCore) {
         } else {
         }
     }
-    pCore->i_ack = (pCore->o_bs != 0);
+    pCore->i_ack = (pCore->o_bs != 0) && !pCore->i_clk;
     return 0;
 }
 

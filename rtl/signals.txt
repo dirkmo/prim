@@ -1,3 +1,4 @@
+Prim.i_clk
 Prim.i_reset
 Prim.i_ack
 Prim.i_dat
