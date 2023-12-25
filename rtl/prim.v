@@ -37,6 +37,9 @@ reg [15:0] r_rstack[0:2**RSS-1] /* verilator public */;
 //
 wire [15:0] THIRD = r_dstack[r_dsp]; // third element
 
+// pop from stack
+wire w_popop;
+
 //
 localparam
     PHASE_FETCH = 0,
@@ -158,6 +161,8 @@ begin
             OP_NROT: T <= N;
             default: begin T <= r_alu[15:0]; $display("alu: %x", r_alu); end
         endcase
+    end else if (w_fetch) begin
+        $display("T: %x, N: %x, 3rd: %x, R: %x", T, N, THIRD, R);
     end
 end
 
@@ -182,6 +187,15 @@ begin
     end
 end
 
+// 3rd on data stack
+always @(posedge i_clk)
+begin
+    if (w_execute) begin
+        case (r_ir[6:0])
+        endcase
+    end
+end
+
 // top of return stack
 always @(posedge i_clk)
 begin
@@ -201,18 +215,11 @@ begin
     if (i_reset) begin
         r_dsp <= 'h00;
     end else if (w_execute) begin
-        case (r_ir[6:0])
-            OP_AND: r_dsp <= r_dsp - 1;
-            OP_OR: r_dsp <= r_dsp - 1;
-            OP_XOR: r_dsp <= r_dsp - 1;
-            OP_ADD: r_dsp <= r_dsp - 1;
-            OP_SUB: r_dsp <= r_dsp - 1;
-            OP_LTS: r_dsp <= r_dsp - 1;
-            OP_LTU: r_dsp <= r_dsp - 1;
-            OP_PUSH8: r_dsp <= r_dsp + 1;
-            OP_PUSH: r_dsp <= r_dsp + 1;
-            default: ;
-        endcase
+        if (w_popop) begin
+            r_dsp <= r_dsp - ((r_ir[6:0] == OP_JZ) ? 'h2 : 'h1);
+        end else if (w_pushop) begin
+            r_dsp <= r_dsp + 'h1;
+        end
     end
 end
 
@@ -260,6 +267,23 @@ wire w_memop8 = (r_ir[6:0] == OP_BYTE_STORE) || (r_ir[6:0] == OP_BYTE_FETCH) || 
 wire w_memop16 = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_FETCH) || (r_ir[6:0] == OP_PUSH);
 wire w_pushop = (r_ir[6:0] == OP_PUSH) | (r_ir[6:0] == OP_PUSH8);
 wire w_memop = w_memop8 || w_memop16;
+assign w_popop = (r_ir[6:0] == OP_CALL) ||
+                (r_ir[6:0] == OP_JZ) ||
+                (r_ir[6:0] == OP_JP) ||
+                (r_ir[6:0] == OP_AND) ||
+                (r_ir[6:0] == OP_OR) ||
+                (r_ir[6:0] == OP_XOR) ||
+                (r_ir[6:0] == OP_NOT) ||
+                (r_ir[6:0] == OP_ADD) ||
+                (r_ir[6:0] == OP_SUB) ||
+                (r_ir[6:0] == OP_LTS) ||
+                (r_ir[6:0] == OP_LTU) ||
+                (r_ir[6:0] == OP_NIP) ||
+                (r_ir[6:0] == OP_DROP) ||
+                (r_ir[6:0] == OP_TO_R) ||
+                (r_ir[6:0] == OP_INT) ||
+                (r_ir[6:0] == OP_STORE) ||
+                (r_ir[6:0] == OP_BYTE_STORE);
 
 // byte select
 reg [1:0] r_bs;
