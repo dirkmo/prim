@@ -7,7 +7,6 @@ module Prim(
     input  [15:0] i_dat,
     output [1:0]  o_bs, // byte select
     output        o_we,
-    input         i_ack,
 
     input         i_irq
 );
@@ -15,6 +14,14 @@ module Prim(
 parameter
     DSS /* verilator public */ = 4, // data stack size: 2^DSS
     RSS /* verilator public */ = 4; // return stack size: 2^RSS
+
+parameter
+    MEM_CYCLES_READ8 = 1,
+    MEM_CYCLES_WRITE8 = 2,
+    MEM_CYCLES_READ16_ALIGNED = 1,
+    MEM_CYCLES_READ16_UNALIGNED = 2,
+    MEM_CYCLES_WRITE16_ALIGNED = 2,
+    MEM_CYCLES_WRITE16_UNALIGNED = 4;
 
 `include "opcodes.v"
 
@@ -45,6 +52,9 @@ localparam
 reg r_phase /* verilator public */;
 wire w_fetch = (r_phase == PHASE_FETCH);
 wire w_execute = (r_phase == PHASE_EXECUTE);
+
+// memory access acknowledge
+reg r_memack;
 
 // alu
 reg [16:0] r_alu;
@@ -96,8 +106,8 @@ begin
         r_phase <= PHASE_FETCH;
     end else begin
         case (r_phase)
-            PHASE_FETCH: if(i_ack) r_phase <= PHASE_EXECUTE;
-            PHASE_EXECUTE: if (~w_memop || i_ack) r_phase <= PHASE_FETCH;
+            PHASE_FETCH: if(r_memack) r_phase <= PHASE_EXECUTE;
+            PHASE_EXECUTE: if (~w_memop || r_memack) r_phase <= PHASE_FETCH;
             default: r_phase <= PHASE_FETCH;
         endcase
     end
@@ -133,7 +143,7 @@ always @(posedge i_clk)
 begin
     if (i_reset) begin
         r_ir <= 8'h00;
-    end else if ((w_fetch) && i_ack) begin
+    end else if (w_fetch && r_memack) begin
         r_ir <= i_dat[7:0];
         $display("pc: %04x, ir: %02x", r_pc, i_dat);
         `ifdef SIM
@@ -260,6 +270,46 @@ wire w_memop8 = (r_ir[6:0] == OP_BYTE_STORE) || (r_ir[6:0] == OP_BYTE_FETCH) || 
 wire w_memop16 = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_FETCH) || (r_ir[6:0] == OP_PUSH);
 wire w_pushop = (r_ir[6:0] == OP_PUSH) | (r_ir[6:0] == OP_PUSH8);
 wire w_memop = w_memop8 || w_memop16;
+
+reg [2:0] r_memaccesstype;
+localparam
+    MEMACCESS_NONE = 0,
+    MEMACCESS_READ8 = 1,
+    MEMACCESS_WRITE8 = 2,
+    MEMACCESS_READ16_ALIGNED = 3,
+    MEMACCESS_READ16_UNALIGNED = 4,
+    MEMACCESS_WRITE16_ALIGNED = 5,
+    MEMACCESS_WRITE16_UNALIGNED = 6;
+
+reg [2:0] r_memdelay;
+always @(posedge i_clk) begin
+    if (i_reset) begin
+        r_memdelay <= 'h0;
+        r_memack = 'h0;
+    end else begin
+        r_memdelay <= r_memack ? 'h0 : (r_memdelay + 'h1);
+        case (r_memaccesstype)
+            MEMACCESS_READ8: r_memack = (r_memdelay == MEM_CYCLES_READ8);
+            MEMACCESS_WRITE8: r_memack = (r_memdelay == MEM_CYCLES_WRITE8);
+            MEMACCESS_READ16_ALIGNED: r_memack = (r_memdelay == MEM_CYCLES_READ16_ALIGNED);
+            MEMACCESS_READ16_UNALIGNED: r_memack = (r_memdelay == MEM_CYCLES_READ16_UNALIGNED);
+            MEMACCESS_WRITE16_ALIGNED: r_memack = (r_memdelay == MEM_CYCLES_WRITE16_ALIGNED);
+            MEMACCESS_WRITE16_UNALIGNED: r_memack = (r_memdelay == MEM_CYCLES_WRITE16_ALIGNED);
+            default: r_memack = 0;
+        endcase
+    end
+end
+
+always @(*) begin
+    casez ({w_memwrite, w_memop16, o_addr[0]})
+        {1'b0, 1'b0, 1'b?}: r_memaccesstype = MEMACCESS_READ8;
+        {1'b0, 1'b1, 1'b0}: r_memaccesstype = MEMACCESS_READ16_ALIGNED;
+        {1'b0, 1'b1, 1'b1}: r_memaccesstype = MEMACCESS_READ16_UNALIGNED;
+        {1'b1, 1'b1, 1'b0}: r_memaccesstype = MEMACCESS_WRITE16_ALIGNED;
+        {1'b1, 1'b1, 1'b1}: r_memaccesstype = MEMACCESS_WRITE16_UNALIGNED;
+        default: r_memaccesstype = MEMACCESS_NONE;
+    endcase
+end
 
 // byte select
 reg [1:0] r_bs;

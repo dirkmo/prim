@@ -32,7 +32,6 @@ void tick() {
 void reset() {
     pCore->i_reset = 1;
     pCore->i_dat = 0;
-    pCore->i_ack = 0;
     pCore->i_clk = 1;
     tick();
     tick();
@@ -61,7 +60,6 @@ int handle(Vprim *pCore) {
         } else {
         }
     }
-    pCore->i_ack = (pCore->o_bs != 0);
     return 0;
 }
 
