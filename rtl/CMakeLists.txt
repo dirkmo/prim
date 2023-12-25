@@ -39,3 +39,11 @@ add_custom_target(wave
     COMMAND gtkwave -S ${PROJECT_SOURCE_DIR}/addsignals.tcl ${PROJECT_SOURCE_DIR}/build/trace.vcd
     DEPENDS simulate
 )
+
+add_custom_target(iverilog
+    COMMAND iverilog -Wall -I ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/prim.v
+)
+
+add_custom_target(yosys
+	COMMAND yosys -Wall -p "synth_ice40 -dsp" ${PROJECT_SOURCE_DIR}/prim.v
+)
