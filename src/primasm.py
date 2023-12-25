@@ -159,26 +159,28 @@ class PrimAsm:
                 i += 1
         return disasm
 
+def disassemble(fn):
+    with open(fn, "rb") as f:
+        data = f.read()
+    da = PrimAsm.disassemble(data)
+    for d in da:
+        (addr, ops, ds) = d
+        print(f"{addr:x}: ", end="")
+        for b in ops:
+            print(f"{b:x} ", end="")
+        print("\t"+ds)
+
 
 def main():
-    # PrimAsm.assembleFile("src/test.asm", "src/test.bin")
-    # data = PrimAsm.assemble("123 nop call 0x1234 and or +.ret # kommentar")
-    # print(data)
-    # with open("src/test.bin", "rb") as f:
-    #     data = f.read()
-    # disasm = PrimAsm.disassemble(data[Consts.HERE+2:], Consts.HERE+2)
-    # for d in disasm:
-    #     (addr, ops, ds) = d
-    #     sys.stdout.write(f"{addr:04x}: ")
-    #     for o in ops:
-    #         sys.stdout.write(f"{o:02x} ")
-    #     print(f"\t{ds}")
     parser = argparse.ArgumentParser(description='Prim Assembler')
-    parser.add_argument("-i", help="Input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/test.asm")
-    parser.add_argument("-o", help="Output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="src/test.bin")
+    parser.add_argument("-i", help="Input file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="")
+    parser.add_argument("-o", help="Output filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="")
+    parser.add_argument("-d", help="Disassamble binary", metavar="<input binary filename>", action="store", type=str, required=False, dest="input_binary_filename",default="")
     args = parser.parse_args()
-    PrimAsm.assembleFile(args.input_filename, args.output_filename)
-
+    if len(args.input_filename) > 0:
+        PrimAsm.assembleFile(args.input_filename, args.output_filename)
+    if len(args.input_binary_filename) > 0:
+        disassemble(args.input_binary_filename)
 
 if __name__ == "__main__":
     main()

@@ -27,9 +27,14 @@ add_custom_target(assemble
     COMMAND xxd -g1 ${CMAKE_BINARY_DIR}/test.bin
 )
 
+add_custom_target(disassemble
+    COMMAND ${PROJECT_SOURCE_DIR}/../src/primasm.py -d ${CMAKE_BINARY_DIR}/test.bin
+)
+
 add_custom_target(simulate
     COMMAND ${PROJECT_BINARY_DIR}/simulator -i ${CMAKE_BINARY_DIR}/test.bin
     DEPENDS assemble
+    DEPENDS disassemble
     DEPENDS simulator
     COMMENT "Executing simulation..."
 )
