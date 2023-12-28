@@ -42,12 +42,17 @@ wire w_popop;
 
 //
 localparam
-    PHASE_FETCH = 0,
-    PHASE_EXECUTE = 1;
+    PHASE_FETCH = 2'h0,
+    PHASE_MEMWAIT = 2'h1,
+    PHASE_EXECUTE = 2'h2;
 
-reg r_phase /* verilator public */;
-wire w_fetch = (r_phase == PHASE_FETCH);
-wire w_execute = (r_phase == PHASE_EXECUTE);
+reg [1:0] r_phase /* verilator public */;
+wire w_phase_fetch = (r_phase == PHASE_FETCH);
+wire w_phase_execute = (r_phase == PHASE_EXECUTE);
+wire w_phase_memop = (r_phase == PHASE_MEMWAIT);
+
+//
+reg r_next_is_memop;
 
 // alu
 reg [16:0] r_alu;
@@ -99,8 +104,9 @@ begin
         r_phase <= PHASE_FETCH;
     end else begin
         case (r_phase)
-            PHASE_FETCH: if(i_ack) r_phase <= PHASE_EXECUTE;
-            PHASE_EXECUTE: if (~w_memop || i_ack) r_phase <= PHASE_FETCH;
+            PHASE_FETCH: if(i_ack) r_phase <= r_next_is_memop ? PHASE_MEMWAIT : PHASE_EXECUTE;
+            PHASE_MEMWAIT: if(i_ack) r_phase <= PHASE_EXECUTE;
+            PHASE_EXECUTE: r_phase <= PHASE_FETCH;
             default: r_phase <= PHASE_FETCH;
         endcase
     end
@@ -126,7 +132,7 @@ always @(posedge i_clk)
 begin
     if (i_reset) begin
         r_pc <= 16'h0000;
-    end else if (w_execute) begin // TODO: nicht richtig, warten auf Ende der Mem-Op
+    end else if (w_phase_execute) begin // TODO: nicht richtig, warten auf Ende der Mem-Op
         r_pc <= r_pc_next;
     end
 end
@@ -134,10 +140,12 @@ end
 // instruction register
 always @(posedge i_clk)
 begin
+    r_next_is_memop <= 'h0;
     if (i_reset) begin
         r_ir <= 8'h00;
-    end else if ((w_fetch) && i_ack) begin
+    end else if ((w_phase_fetch) && i_ack) begin
         r_ir <= i_dat[7:0];
+        r_next_is_memop <= (i_dat[6:0] == OP_PUSH) || (i_dat[6:0] == OP_PUSH8) || (i_dat[6:0] == OP_BYTE_FETCH) || (i_dat[6:0] == OP_FETCH) || (i_dat[6:0] == OP_BYTE_STORE) || (i_dat[6:0] == OP_STORE);
         $display("pc: %04x, ir: %02x", r_pc, i_dat);
         `ifdef SIM
         if (i_dat[6:0] == OP_SIMEND) $finish();
@@ -150,18 +158,25 @@ always @(posedge i_clk)
 begin
     if (i_reset) begin
         T <= 16'h00;
-    end else if (w_execute) begin
-        case (r_ir[6:0])
-            OP_JP: T <= N;
-            OP_JZ: T <= N;
-            OP_PUSH8: begin T <= i_dat; $display("push8 %x", i_dat); end
-            OP_PUSH: begin T <= i_dat; $display("push %x", i_dat); end
-            OP_SWAP: T <= N;
-            OP_ROT: T <= THIRD;
-            OP_NROT: T <= N;
-            default: begin T <= r_alu[15:0]; $display("alu: %x", r_alu); end
-        endcase
-    end else if (w_fetch) begin
+    end else if (w_phase_execute) begin
+        if (w_popop) begin
+            T <= N;
+        end else if (w_pushop) begin
+            T <= i_dat;
+        end else begin
+        end
+
+        // case (r_ir[6:0])
+        //     OP_JP: T <= N;
+        //     OP_JZ: T <= N;
+        //     OP_PUSH8: begin T <= i_dat; $display("push8 %x", i_dat); end
+        //     OP_PUSH: begin T <= i_dat; $display("push %x", i_dat); end
+        //     OP_SWAP: T <= N;
+        //     OP_ROT: T <= THIRD;
+        //     OP_NROT: T <= N;
+        //     default: begin T <= r_alu[15:0]; $display("alu: %x", r_alu); end
+        // endcase
+    end else if (w_phase_fetch) begin
         $display("T: %x, N: %x, 3rd: %x, R: %x", T, N, THIRD, R);
     end
 end
@@ -171,26 +186,20 @@ always @(posedge i_clk)
 begin
     if (i_reset) begin
         N <= 16'h00;
-    end else if (w_execute) begin
-        case (r_ir[6:0])
-            OP_AND: r_dsp <= r_dsp - 1;
-            OP_OR: N <= THIRD;
-            OP_XOR: N <= THIRD;
-            OP_ADD: N <= THIRD;
-            OP_SUB: N <= THIRD;
-            OP_LTS: N <= THIRD;
-            OP_LTU: N <= THIRD;
-            OP_PUSH8: N <= T;
-            OP_PUSH: N <= T;
-            default: ;
-        endcase
+    end else if (w_phase_execute) begin
+        if (w_popop) begin
+            N <= THIRD;
+        end else if (w_pushop) begin
+            N <= T;
+        end else begin
+        end
     end
 end
 
 // 3rd on data stack
 always @(posedge i_clk)
 begin
-    if (w_execute) begin
+    if (w_phase_execute) begin
         case (r_ir[6:0])
         endcase
     end
@@ -199,7 +208,7 @@ end
 // top of return stack
 always @(posedge i_clk)
 begin
-    if (w_execute) begin
+    if (w_phase_execute) begin
         case (r_ir[7:0])
             {1'b0, OP_CALL}: r_rstack[r_rsp] <= r_pc;
             {1'b0, OP_INT}: r_rstack[r_rsp] <= r_pc;
@@ -214,7 +223,7 @@ always @(posedge i_clk)
 begin
     if (i_reset) begin
         r_dsp <= 'h00;
-    end else if (w_execute) begin
+    end else if (w_phase_execute) begin
         if (w_popop) begin
             r_dsp <= r_dsp - ((r_ir[6:0] == OP_JZ) ? 'h2 : 'h1);
         end else if (w_pushop) begin
@@ -228,7 +237,7 @@ always @(posedge i_clk)
 begin
     if (i_reset) begin
         r_rsp <= 'h00;
-    end else if (w_execute) begin
+    end else if (w_phase_execute) begin
         casez (r_ir[7:0])
             {1'b0, OP_CALL}: r_rsp <= r_rsp + 1;
             {1'b0, OP_INT}: r_rsp <= r_rsp + 1;
@@ -245,7 +254,7 @@ always @(posedge i_clk)
 begin
     if (i_reset) begin
         r_carry <= 1'b0;
-    end else if (w_execute) begin
+    end else if (w_phase_execute) begin
         casez (r_ir[6:0])
             OP_ADD: r_carry <= r_alu[16];
             OP_SUB: r_carry <= r_alu[16];
@@ -265,8 +274,8 @@ end
 wire w_memwrite = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_BYTE_STORE);
 wire w_memop8 = (r_ir[6:0] == OP_BYTE_STORE) || (r_ir[6:0] == OP_BYTE_FETCH) || (r_ir[6:0] == OP_PUSH8);
 wire w_memop16 = (r_ir[6:0] == OP_STORE) || (r_ir[6:0] == OP_FETCH) || (r_ir[6:0] == OP_PUSH);
-wire w_pushop = (r_ir[6:0] == OP_PUSH) | (r_ir[6:0] == OP_PUSH8);
 wire w_memop = w_memop8 || w_memop16;
+wire w_pushop = (r_ir[6:0] == OP_PUSH) | (r_ir[6:0] == OP_PUSH8);
 assign w_popop = (r_ir[6:0] == OP_CALL) ||
                 (r_ir[6:0] == OP_JZ) ||
                 (r_ir[6:0] == OP_JP) ||
@@ -281,17 +290,17 @@ assign w_popop = (r_ir[6:0] == OP_CALL) ||
                 (r_ir[6:0] == OP_NIP) ||
                 (r_ir[6:0] == OP_DROP) ||
                 (r_ir[6:0] == OP_TO_R) ||
-                (r_ir[6:0] == OP_INT) ||
-                (r_ir[6:0] == OP_STORE) ||
-                (r_ir[6:0] == OP_BYTE_STORE);
+                (r_ir[6:0] == OP_INT);
+                //(r_ir[6:0] == OP_STORE) ||
+                //(r_ir[6:0] == OP_BYTE_STORE);
 
 // byte select
 reg [1:0] r_bs;
 always @(*) begin
     r_bs = 2'b00;
-    if (w_fetch) begin
+    if (w_phase_fetch) begin
         r_bs = 2'b01;
-    end else if (w_execute) begin
+    end else if (w_phase_execute) begin
         if (w_memop8) begin
             r_bs = 2'b01;
         end else if (w_memop16) begin
@@ -306,9 +315,9 @@ end
 // address generation
 reg [15:0] r_addr;
 always @(*) begin
-    if (w_fetch) begin
+    if (w_phase_fetch) begin
         r_addr = r_pc;
-    end else begin // w_execute
+    end else begin // w_phase_execute
         if (w_pushop) begin
             r_addr = pc_plus_1;
         end else begin
@@ -318,7 +327,7 @@ always @(*) begin
 end
 
 assign o_addr = r_addr;
-assign o_we = w_execute && w_memwrite;
+assign o_we = w_phase_execute && w_memwrite;
 assign o_bs = r_bs;
 assign o_dat = N;
 

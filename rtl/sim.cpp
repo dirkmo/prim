@@ -70,7 +70,7 @@ int handle(Vprim *pCore) {
 
 int program_load(const char *fn, uint16_t offset) {
     // for (int i = 0; i < 0x10000; mem[i++] = OP_SIM_END);
-    memset(mem, Vprim_Prim::OP_SIMEND, sizeof(mem));
+    memset(mem, 0xff, sizeof(mem));
     FILE *f = fopen(fn, "rb");
     if (!f) {
         fprintf(stderr, "Failed to open file\n");

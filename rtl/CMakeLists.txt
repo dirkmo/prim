@@ -22,6 +22,11 @@ SOURCES prim.v)
 
 # target_link_libraries(simulator PUBLIC ${CURSES_LIBRARIES} readline)
 
+add_custom_target(genopcodes
+    COMMAND ${PROJECT_SOURCE_DIR}/../src/primconsts.py ${PROJECT_SOURCE_DIR}/opcodes.v
+)
+
+
 add_custom_target(assemble
     COMMAND ${PROJECT_SOURCE_DIR}/../src/primasm.py -i ${PROJECT_SOURCE_DIR}/test.asm -o ${CMAKE_BINARY_DIR}/test.bin
     COMMAND xxd -g1 ${CMAKE_BINARY_DIR}/test.bin
@@ -35,6 +40,7 @@ add_custom_target(simulate
     COMMAND ${PROJECT_BINARY_DIR}/simulator -i ${CMAKE_BINARY_DIR}/test.bin
     DEPENDS assemble
     DEPENDS disassemble
+    DEPENDS genopcodes
     DEPENDS simulator
     COMMENT "Executing simulation..."
 )
