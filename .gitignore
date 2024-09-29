@@ -6,3 +6,5 @@ __pycache__
 *.disasm
 .vscode/settings.json
 build/
+.venv/
+hdl/prim.vcd
