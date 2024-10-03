@@ -7,13 +7,14 @@ from amaranth.lib import wiring
 from amaranth.lib.wiring import In, Out
 from amaranth.sim import Simulator, Period
 
-class Stack(wiring.Component):
+class DataStack(wiring.Component):
     def __init__(self, width=16, depth=16):
         self.top = Signal(width)
         self.second = Signal(width)
         self.data_in = Signal(width)
         self.push = Signal()
-        self.pop = Signal()
+        self.pop1 = Signal()
+        self.pop2 = Signal()
         self.dsp = Signal(4)
         self.depth = depth
 
@@ -42,8 +43,10 @@ class Stack(wiring.Component):
 
         with m.If(self.push):
             m.d.sync += self.dsp.eq(self.dsp+1)
-        with m.Elif(self.pop):
+        with m.Elif(self.pop1):
             m.d.sync += self.dsp.eq(self.dsp-1)
+        with m.Elif(self.pop2):
+            m.d.sync += self.dsp.eq(self.dsp-2)
 
         return m
 

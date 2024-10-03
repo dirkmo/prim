@@ -7,7 +7,7 @@ from amaranth.lib import wiring
 from amaranth.lib.wiring import In, Out
 from amaranth.sim import Simulator, Period
 
-from stack import Stack
+from stack import *
 from primopcodes import *
 
 class Prim(wiring.Component):
@@ -22,12 +22,13 @@ class Prim(wiring.Component):
     def elaborate(self, platform):
         m = Module()
 
-        self.dstack = m.submodules.dstack = Stack(width=16, depth=16)
+        self.dstack = m.submodules.dstack = DataStack(width=16, depth=16)
 
         self.pc = pc = Signal(16)
         self.ir = ir = Signal(16)
 
-        m.d.sync += self.dstack.pop.eq(0)
+        m.d.sync += self.dstack.pop1.eq(0)
+        m.d.sync += self.dstack.pop2.eq(0)
         m.d.sync += self.dstack.push.eq(0)
 
         m.d.comb += self.data_out.eq(self.dstack.second)
@@ -62,8 +63,9 @@ class Prim(wiring.Component):
                     self.we.eq(0)
                 ]
                 with m.If(self.ack):
-                    m.d.sync += Print(Format("{:x}: Memory Fetch ({:d})", self.pc, self.acs))
+                    m.d.sync += Print(Format("{:x}: Memory Fetch ({:d}): {:x}", self.pc, self.acs, self.data_in))
                     m.d.sync += self.pc.eq(self.pc + 1 + (self.ir & 1))
+
                     m.next = "Execute"
 
             with m.State("Memory Store"):
@@ -74,7 +76,10 @@ class Prim(wiring.Component):
                 ]
                 with m.If(self.ack):
                     m.d.sync += Print(Format("{:x}: Memory Store {:04x}<-{:x}", self.pc, self.addr, self.data_out))
-                    m.d.sync += self.pc.eq(self.pc + 1 + (self.ir & 1))
+                    pop2 = (self.ir & 1)
+                    m.d.sync += self.pc.eq(self.pc + 1 + pop2)
+                    m.d.sync += self.dstack.pop1.eq(~pop2)
+                    m.d.sync += self.dstack.pop2.eq(pop2)
                     m.next = "Instruction Fetch"
 
 
