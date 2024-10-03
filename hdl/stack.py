@@ -24,7 +24,7 @@ class DataStack(wiring.Component):
     def elaborate(self, platform):
         m = Module()
 
-        dstack = m.submodules.dstack = Memory(shape=unsigned(16), depth=16, init=[])
+        dstack = m.submodules.dstack = Memory(shape=unsigned(16), depth=self.depth, init=[])
 
         rdp_top = dstack.read_port()
         m.d.comb += self.top.eq(rdp_top.data)

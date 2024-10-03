@@ -7,7 +7,7 @@ from amaranth.lib import wiring
 from amaranth.lib.wiring import In, Out
 from amaranth.sim import Simulator, Period
 
-from stack import *
+# from stack import *
 from primopcodes import *
 
 class Prim(wiring.Component):
@@ -19,21 +19,52 @@ class Prim(wiring.Component):
         self.acs = Signal(2) # access-size: 0: none, 1: byte (8bit) or 2: word (16bit)
         self.ack = Signal()
 
+        self.dstack_depth = 8
+
+        self.rstack_depth = 16
+        self.rtop = Signal(16)
+
     def elaborate(self, platform):
         m = Module()
 
-        self.dstack = m.submodules.dstack = DataStack(width=16, depth=16)
+        dstack = m.submodules.dstack = Memory(shape=unsigned(16), depth=self.dstack_depth, init=[])
+        dstack_rp = dstack.read_port()
+        dstack_wp = dstack.write_port()
+        self.dsp = dsp = Signal(range(self.dstack_depth))
+        self.top = Signal(16)
+        self.second = Signal(16)
+
+
+        def dpush(m, signal):
+            m.d.comb += [
+                dstack_wp.data.eq(self.second),
+                dstack_wp.en.eq(1)
+            ]
+            m.d.sync += [
+                self.top.eq(signal),
+                self.second.eq(self.top),
+                self.dsp.eq(self.dsp+1)
+            ]
+
+        def dpop(m):
+            m.d.sync += [
+                self.top.eq(self.second),
+                self.second.eq(dstack_rp.data),
+                self.dsp.eq(self.dsp-1)
+            ]
 
         self.pc = pc = Signal(16)
         self.ir = ir = Signal(16)
 
-        m.d.sync += self.dstack.pop1.eq(0)
-        m.d.sync += self.dstack.pop2.eq(0)
-        m.d.comb += self.dstack.push.eq(0)
+        m.d.comb += [
+            dstack_wp.addr.eq(self.dsp+1),
+            dstack_rp.addr.eq(self.dsp),
+            dstack_rp.en.eq(1),
+        ]
 
-        m.d.comb += self.data_out.eq(self.dstack.second)
+        memaccess16 = (self.ir & 1) # warum geht das ohne m.d.comb ??
 
-        memaccess16 = (self.ir & 1)
+        m.d.comb += dstack_wp.en.eq(0)
 
         with m.FSM(init="Reset"):
             with m.State("Reset"):
@@ -63,24 +94,24 @@ class Prim(wiring.Component):
                     self.addr.eq(pc),
                     self.acs.eq(1 + (self.ir & 1)),
                     self.we.eq(0),
-                    self.dstack.data_in.eq(self.data_in),
-                    self.dstack.push.eq(self.ack)
                 ]
+
                 with m.If(self.ack):
                     m.d.sync += Print(Format("{:04x}: Memory Fetch ({:d}): {:x}", self.pc, self.acs, self.data_in))
                     m.d.sync += self.pc.eq(self.pc + 1 + memaccess16)
-
+                    dpush(m, self.data_in)
                     m.next = "Execute"
 
             with m.State("Memory Store"):
                 m.d.comb += [
-                    self.addr.eq(self.dstack.top),
+                    self.addr.eq(self.top),
                     self.acs.eq(1 + memaccess16),
+                    self.data_out.eq(self.second),
                     self.we.eq(1)
                 ]
                 with m.If(self.ack):
                     m.d.sync += Print(Format("{:04x}: Memory Store {:04x}<-{:x}", self.pc, self.addr, self.data_out))
-                    m.d.sync += self.dstack.pop2.eq(1)
+                    dpop(m)
                     m.next = "Instruction Fetch"
 
 
@@ -113,6 +144,13 @@ def main():
         return mem
 
     mem = mem_create(init=[
+        PrimOpcodes.PUSH8, 1,
+        PrimOpcodes.PUSH8, 2,
+        PrimOpcodes.PUSH8, 3,
+        PrimOpcodes.PUSH8, 4,
+        PrimOpcodes.PUSH8, 5,
+        PrimOpcodes.PUSH8, 6,
+        PrimOpcodes.PUSH8, 7,
         PrimOpcodes.PUSH8, 123,
         PrimOpcodes.PUSH, 0x34, 0x12,
         PrimOpcodes.STORE8,
@@ -122,7 +160,7 @@ def main():
     dut = Prim()
     async def bench(ctx):
         memcyc = 0
-        for _ in range(20):
+        for _ in range(100):
             ir = ctx.get(dut.ir)
             if ir == PrimOpcodes.SIMEND.value:
                 print("ENDSIM")
