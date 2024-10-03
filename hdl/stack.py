@@ -10,6 +10,7 @@ from amaranth.sim import Simulator, Period
 class Stack(wiring.Component):
     def __init__(self, width=16, depth=16):
         self.top = Signal(width)
+        self.second = Signal(width)
         self.data_in = Signal(width)
         self.push = Signal()
         self.pop = Signal()
@@ -17,18 +18,24 @@ class Stack(wiring.Component):
         self.depth = depth
 
     def port_list(self):
-        return [self.top,self.data_in,self.push,self.pop,self.dsp]
+        return [self.top,self.second,self.data_in,self.push,self.pop,self.dsp]
 
     def elaborate(self, platform):
         m = Module()
 
         dstack = m.submodules.dstack = Memory(shape=unsigned(16), depth=16, init=[])
-        rdp = dstack.read_port()
-        wdp = dstack.write_port()
-        m.d.comb += self.top.eq(rdp.data)
-        m.d.comb += rdp.addr.eq(self.dsp)
-        m.d.comb += rdp.en.eq(1)
 
+        rdp_top = dstack.read_port()
+        m.d.comb += self.top.eq(rdp_top.data)
+        m.d.comb += rdp_top.addr.eq(self.dsp)
+        m.d.comb += rdp_top.en.eq(1)
+
+        rdp_second = dstack.read_port()
+        m.d.comb += self.second.eq(rdp_second.data)
+        m.d.comb += rdp_second.addr.eq(self.dsp-1)
+        m.d.comb += rdp_second.en.eq(1)
+
+        wdp = dstack.write_port()
         m.d.comb += wdp.data.eq(self.data_in)
         m.d.comb += wdp.addr.eq(self.dsp)
         m.d.sync += wdp.en.eq(self.push)

@@ -8,3 +8,5 @@ __pycache__
 build/
 .venv/
 hdl/prim.vcd
+prim.v
+prim.vcd
