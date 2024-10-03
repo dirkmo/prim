@@ -38,8 +38,8 @@ class DataStack(wiring.Component):
 
         wdp = dstack.write_port()
         m.d.comb += wdp.data.eq(self.data_in)
-        m.d.comb += wdp.addr.eq(self.dsp)
-        m.d.sync += wdp.en.eq(self.push)
+        m.d.comb += wdp.addr.eq(self.dsp+1)
+        m.d.comb += wdp.en.eq(self.push)
 
         with m.If(self.push):
             m.d.sync += self.dsp.eq(self.dsp+1)
