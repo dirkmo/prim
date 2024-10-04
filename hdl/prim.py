@@ -19,8 +19,7 @@ class Prim(wiring.Component):
     T_RAM = 5
 
     D0_T = 1
-    D0_D1 = 2
-    D0_D2 = 3
+    #D0_D1 = 2
 
     R_PC = 1
     R_R0 = 2
@@ -64,7 +63,10 @@ class Prim(wiring.Component):
             {"dsp": -1, "rsp": 1, "top": Prim.T_D0,  "d0": 0,         "rtop": Prim.R_PC, "r0": 0, "pc": 0,         "ma": Prim.MA_NONE,  "addr": 0, }, # CALL
             {"dsp":  1, "rsp": 0, "top": Prim.T_RAM, "d0": Prim.D0_T, "rtop": 0,         "r0": 0, "pc": Prim.PC_1, "ma": Prim.MA_READ8, "addr": Prim.ADDR_PC, }, # PUSH8
             {"dsp":  1, "rsp": 0, "top": Prim.T_RAM, "d0": Prim.D0_T, "rtop": 0,         "r0": 0, "pc": Prim.PC_1, "ma": Prim.MA_READ,  "addr": Prim.ADDR_PC, }, # PUSH
-            {"dsp": -2, "rsp": 0, "top": Prim.T_D1,  "d0": Prim.D0_D2,"rtop": 0,         "r0": 0, "pc": 0,         "ma": Prim.MA_WRITE8,"addr": Prim.ADDR_T, }, # STORE8
+            {"dsp": -2, "rsp": 0, "top": 0,          "d0": 0,         "rtop": 0,         "r0": 0, "pc": 0,         "ma": Prim.MA_WRITE8,"addr": Prim.ADDR_T, }, # STORE8
+
+
+            {"dsp": -2, "rsp": 0, "top": Prim.T_D1,  "d0": 0,         "rtop": 0,         "r0": 0, "pc": Prim.PC_T, "ma": Prim.MA_WRITE,"addr": Prim.ADDR_T, }, # temp
         ])
 
     def elaborate(self, platform):
@@ -94,7 +96,7 @@ class Prim(wiring.Component):
         # program counter
         self.pc = pc = Signal(16)
         # instruction register
-        self.ir = ir = Signal(16)
+        self.ir = ir = Signal(8)
         # return bit
         self.retbit = Signal()
         m.d.comb += self.retbit.eq(self.ir & 0x80)
@@ -172,9 +174,9 @@ class Prim(wiring.Component):
         with m.Switch(ir["d0"]):
             with m.Case(Prim.D0_T):
                 m.d.comb += self.dstack_wp.data.eq(self.top)
-                m.d.sync += self.dstack_wp.en.eq(1)
+                m.d.comb += self.dstack_wp.en.eq(1)
             with m.Default():
-                m.d.sync += self.dstack_wp.en.eq(0)
+                m.d.comb += self.dstack_wp.en.eq(0)
 
         # pc
         next_pc = Signal(self.pc.shape())
@@ -219,24 +221,27 @@ class Prim(wiring.Component):
 
 def main():
     def mem_create(init):
-        mem = [PrimOpcodes.SIMEND]*0x10000
+        mem = [PrimOpcodes.SIMEND.value]*0x10000
         for i in range(len(init)):
             mem[i] = init[i]
         return mem
 
     mem = mem_create(init=[
-        2, 0x67, #push8
+        2, 0x11, #push8
+        2, 0x22, #push8
+        2, 0x33, #push8
         3, 0x34, 0x12, #push16
         4, # store8
-        PrimOpcodes.SIMEND
+        PrimOpcodes.SIMEND.value
         ])
     print(mem[0:10])
     dut = Prim()
+
     async def bench(ctx):
         memcyc = 0
-        for _ in range(20):
+        for _ in range(30):
             ir = ctx.get(dut.ir)
-            if ir == PrimOpcodes.SIMEND:
+            if ir == PrimOpcodes.SIMEND.value:
                 print("ENDSIM")
                 break
             ctx.set(dut.ack, 0)
