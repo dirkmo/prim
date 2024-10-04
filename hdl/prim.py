@@ -11,6 +11,39 @@ from amaranth.sim import Simulator, Period
 from primopcodes import *
 
 class Prim(wiring.Component):
+
+    T_ALU = 1
+    T_D0 = 2
+    T_D1 = 3
+    T_R0 = 4
+    T_RAM = 5
+
+    D0_T = 1
+    D0_D1 = 2
+    D0_D2 = 3
+
+    R_PC = 1
+    R_R0 = 2
+    R_T = 3
+
+    R0_R = 1
+    R0_R1 = 2
+
+    PC_1 = 1
+    PC_T = 2
+
+    MA_NONE = 0
+    MA_READ8 = 1
+    MA_READ = 2
+    MA_WRITE8 = 3
+    MA_WRITE = 4
+
+    ADDR_PC = 0
+    ADDR_T = 1
+
+
+
+
     def __init__(self):
         self.data_in = Signal(16)
         self.data_out = Signal(16)
@@ -21,40 +54,57 @@ class Prim(wiring.Component):
 
         self.dstack_depth = 8
 
-        self.rstack_depth = 16
+        self.rstack_depth = 8
         self.rtop = Signal(16)
+
+        self.ie = Signal() # interrupt enabled
+
+        self.Lut = Array([
+            {"dsp":  0, "rsp": 0, "top": 0,          "d0": 0,         "rtop": 0,         "r0": 0, "pc": 0,         "ma": Prim.MA_NONE,  "addr": 0, }, # NOP
+            {"dsp": -1, "rsp": 1, "top": Prim.T_D0,  "d0": 0,         "rtop": Prim.R_PC, "r0": 0, "pc": 0,         "ma": Prim.MA_NONE,  "addr": 0, }, # CALL
+            {"dsp":  1, "rsp": 0, "top": Prim.T_RAM, "d0": Prim.D0_T, "rtop": 0,         "r0": 0, "pc": Prim.PC_1, "ma": Prim.MA_READ8, "addr": Prim.ADDR_PC, }, # PUSH8
+            {"dsp":  1, "rsp": 0, "top": Prim.T_RAM, "d0": Prim.D0_T, "rtop": 0,         "r0": 0, "pc": Prim.PC_1, "ma": Prim.MA_READ,  "addr": Prim.ADDR_PC, }, # PUSH
+            {"dsp": -2, "rsp": 0, "top": Prim.T_D1,  "d0": Prim.D0_D2,"rtop": 0,         "r0": 0, "pc": 0,         "ma": Prim.MA_WRITE8,"addr": Prim.ADDR_T, }, # STORE8
+        ])
 
     def elaborate(self, platform):
         m = Module()
 
+        ## data stack
         dstack = m.submodules.dstack = Memory(shape=unsigned(16), depth=self.dstack_depth, init=[])
-        dstack_rp = dstack.read_port()
-        dstack_wp = dstack.write_port()
+        self.dstack_rp = dstack_rp = dstack.read_port()
+        self.dstack_wp = dstack_wp = dstack.write_port()
+
+        # data stack pointer
         self.dsp = dsp = Signal(range(self.dstack_depth))
+        # top register
         self.top = Signal(16)
-        self.second = Signal(16)
 
+        ## return stack
+        rstack = m.submodules.rstack = Memory(shape=unsigned(16), depth=self.rstack_depth, init=[])
+        self.rstack_rp = rstack_rp = rstack.read_port()
+        self.rstack_wp = rstack_wp = rstack.write_port()
 
-        def dpush(m, signal):
-            m.d.comb += [
-                dstack_wp.data.eq(self.second),
-                dstack_wp.en.eq(1)
-            ]
-            m.d.sync += [
-                self.top.eq(signal),
-                self.second.eq(self.top),
-                self.dsp.eq(self.dsp+1)
-            ]
+        # return stack pointer
+        self.rsp = dsp = Signal(range(self.rstack_depth))
+        # top register
+        self.rtop = Signal(16)
 
-        def dpop(m):
-            m.d.sync += [
-                self.top.eq(self.second),
-                self.second.eq(dstack_rp.data),
-                self.dsp.eq(self.dsp-1)
-            ]
-
+        ##
+        # program counter
         self.pc = pc = Signal(16)
+        # instruction register
         self.ir = ir = Signal(16)
+        # return bit
+        self.retbit = Signal()
+        m.d.comb += self.retbit.eq(self.ir & 0x80)
+
+        # look-up current instruction
+        self.lut = self.Lut[self.ir & 0x7f]
+
+        # is memory access ongoing?
+        self.mem_acc_done = Signal()
+        m.d.comb += self.mem_acc_done.eq((self.lut["ma"] == Prim.MA_NONE) | self.ack),
 
         m.d.comb += [
             dstack_wp.addr.eq(self.dsp+1),
@@ -62,9 +112,7 @@ class Prim(wiring.Component):
             dstack_rp.en.eq(1),
         ]
 
-        memaccess16 = (self.ir & 1) # warum geht das ohne m.d.comb ??
-
-        m.d.comb += dstack_wp.en.eq(0)
+        #m.d.comb += dstack_wp.en.eq(0)
 
         with m.FSM(init="Reset"):
             with m.State("Reset"):
@@ -79,61 +127,94 @@ class Prim(wiring.Component):
                     self.we.eq(0)
                 ]
                 with m.If(self.ack):
-                    m.d.sync += pc.eq(pc+1)
+                    m.d.sync += [
+                        pc.eq(pc+1),
+                        ir.eq(self.data_in),
+                    ]
                     m.d.sync += Print(Format("{:04x}: Instruction Fetch: {:02x} ", self.pc, self.data_in))
-                    with m.If(self.data_in & 0xf0 == 0x20):
-                        m.next = "Memory Fetch"
-                    with m.Elif(self.data_in & 0xf0 == 0x30):
-                        m.next = "Memory Store"
-                    with m.Else():
-                        m.next = "Execute"
-                    m.d.sync += ir.eq(self.data_in)
-
-            with m.State("Memory Fetch"):
-                m.d.comb += [
-                    self.addr.eq(pc),
-                    self.acs.eq(1 + (self.ir & 1)),
-                    self.we.eq(0),
-                ]
-
-                with m.If(self.ack):
-                    m.d.sync += Print(Format("{:04x}: Memory Fetch ({:d}): {:x}", self.pc, self.acs, self.data_in))
-                    m.d.sync += self.pc.eq(self.pc + 1 + memaccess16)
-                    dpush(m, self.data_in)
                     m.next = "Execute"
-
-            with m.State("Memory Store"):
-                m.d.comb += [
-                    self.addr.eq(self.top),
-                    self.acs.eq(1 + memaccess16),
-                    self.data_out.eq(self.second),
-                    self.we.eq(1)
-                ]
-                with m.If(self.ack):
-                    m.d.sync += Print(Format("{:04x}: Memory Store {:04x}<-{:x}", self.pc, self.addr, self.data_out))
-                    dpop(m)
-                    m.next = "Instruction Fetch"
-
 
             with m.State("Execute"):
                 m.d.sync += Print("Execute")
-                m.next = "Instruction Fetch"
-                self.execute(m, ir)
+                self.execute(m)
+                with m.If(self.mem_acc_done):
+                    m.next = "Instruction Fetch"
 
         return m
 
-    def execute(self, m, ir):
-        pass
-        # with m.Switch(ir & 0x7f):
-        #     with m.Case(PrimOpcodes.NOP):
-        #         pass
-        #     with m.Case(PrimOpcodes.CALL):
-        #         m.d.sync += self.pc.eq(self.dstack.top)
-        #         m.d.sync += self.dstack.pop.eq(1)
-        #     with m.Case(PrimOpcodes.PUSH8):
-        #         m.d.sync += self.dstack.push.eq(1)
-        #         m.d.comb += Print("push8")
+    def execute(self, m):
+        ir = self.Lut[self.ir & 0x7f]
 
+        with m.If(self.mem_acc_done):
+            m.d.sync += [
+                self.dsp.eq(self.dsp + ir["dsp"]),
+                self.rsp.eq(self.dsp + ir["rsp"]),
+            ]
+
+        # top
+        with m.Switch(ir["top"]):
+            with m.Case(Prim.T_RAM):
+                with m.If(self.mem_acc_done): # TODO: kann man sich vermutlich sparen
+                    m.d.sync += self.top.eq(self.data_in)
+            with m.Case(Prim.T_ALU):
+                m.d.sync += self.top.eq(0) # TODO
+            with m.Case(Prim.T_D0):
+                m.d.sync += self.top.eq(self.dstack_rp.data)
+            with m.Case(Prim.T_D1):
+                m.d.sync += self.top.eq(self.dstack_rp.data)
+            with m.Case(Prim.T_R0):
+                m.d.sync += self.top.eq(self.rstack_rp.data)
+
+        # data stack
+        m.d.comb += self.dstack_rp.addr.eq(self.dsp-2) # TODO: evtl 0 besser?
+        m.d.comb += self.dstack_wp.addr.eq(self.dsp-1) # TODO: evtl +1 besser?
+
+        with m.Switch(ir["d0"]):
+            with m.Case(Prim.D0_T):
+                m.d.comb += self.dstack_wp.data.eq(self.top)
+                m.d.sync += self.dstack_wp.en.eq(1)
+            with m.Default():
+                m.d.sync += self.dstack_wp.en.eq(0)
+
+        # pc
+        next_pc = Signal(self.pc.shape())
+        with m.If(ir["ma"] == Prim.MA_READ):
+            m.d.comb += next_pc.eq(self.pc+2) # assuming PUSH
+        with m.Else():
+            m.d.comb += next_pc.eq(self.pc+1) # assuming PUSH8
+
+        with m.Switch(ir["pc"]):
+            with m.Case(Prim.PC_1):
+                with m.If(self.mem_acc_done):
+                    m.d.sync += self.pc.eq(next_pc)
+            with m.Case(Prim.PC_T):
+                m.d.sync += self.pc.eq(self.top)
+
+        # addr
+        with m.Switch(ir["addr"]):
+            with m.Case(Prim.ADDR_PC):
+                m.d.comb += self.addr.eq(self.pc)
+            with m.Case(Prim.ADDR_T):
+                m.d.comb += self.addr.eq(self.top)
+
+        # we
+        with m.Switch(ir["ma"]):
+            with m.Case(Prim.MA_WRITE, Prim.MA_WRITE8):
+                m.d.comb += self.we.eq(1)
+            with m.Default():
+                m.d.comb += self.we.eq(0)
+
+        # acs
+        with m.Switch(ir["ma"]):
+            with m.Case(Prim.MA_WRITE, Prim.MA_READ):
+                m.d.comb += self.acs.eq(2)
+            with m.Case(Prim.MA_WRITE8, Prim.MA_READ8):
+                m.d.comb += self.acs.eq(1)
+            with m.Default():
+                m.d.comb += self.acs.eq(0)
+
+        # data_out
+        m.d.comb += self.data_out.eq(self.dstack_rp.data)
 
 
 def main():
@@ -144,25 +225,18 @@ def main():
         return mem
 
     mem = mem_create(init=[
-        PrimOpcodes.PUSH8, 1,
-        PrimOpcodes.PUSH8, 2,
-        PrimOpcodes.PUSH8, 3,
-        PrimOpcodes.PUSH8, 4,
-        PrimOpcodes.PUSH8, 5,
-        PrimOpcodes.PUSH8, 6,
-        PrimOpcodes.PUSH8, 7,
-        PrimOpcodes.PUSH8, 123,
-        PrimOpcodes.PUSH, 0x34, 0x12,
-        PrimOpcodes.STORE8,
+        2, 0x67, #push8
+        3, 0x34, 0x12, #push16
+        4, # store8
         PrimOpcodes.SIMEND
         ])
     print(mem[0:10])
     dut = Prim()
     async def bench(ctx):
         memcyc = 0
-        for _ in range(100):
+        for _ in range(20):
             ir = ctx.get(dut.ir)
-            if ir == PrimOpcodes.SIMEND.value:
+            if ir == PrimOpcodes.SIMEND:
                 print("ENDSIM")
                 break
             ctx.set(dut.ack, 0)
