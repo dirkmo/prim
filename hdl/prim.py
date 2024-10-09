@@ -11,37 +11,18 @@ from amaranth.sim import Simulator, Period
 from primopcodes import *
 
 class Prim(wiring.Component):
-
-    T_ALU = 1
-    T_D0 = 2
-    T_D1 = 3
-    T_R0 = 4
-    T_RAM = 5
-
-    D0_T = 1
-    #D0_D1 = 2
-
-    R_PC = 1
-    R_R0 = 2
-    R_T = 3
-
-    R0_R = 1
-    R0_R1 = 2
-
-    PC_1 = 1
-    PC_T = 2
-
-    MA_NONE = 0
-    MA_READ8 = 1
-    MA_READ = 2
-    MA_WRITE8 = 3
-    MA_WRITE = 4
-
-    ADDR_PC = 0
-    ADDR_T = 1
-
-
-
+    # Source/Destination
+    SD_ALU = 0
+    SD_D0 = 1
+    SD_R0 = 2
+    SD_AR = 3
+    SD_M8_A = 4  #  8-bit mem access, addressed by A
+    SD_M8_PC = 5 #  8-bit mem access, addressed by PC
+    SD_M_A = 6   # 16-bit mem access, addressed by A
+    SD_M_PC = 7  # 16-bit mem access, addressed by PC
+    # stack pointer manipulation
+    SP_INC = 1
+    SP_DEC = 2
 
     def __init__(self):
         self.data_in = Signal(16)
@@ -58,16 +39,13 @@ class Prim(wiring.Component):
 
         self.ie = Signal() # interrupt enabled
 
-        self.Lut = Array([
-            {"dsp":  0, "rsp": 0, "top": 0,          "d0": 0,         "rtop": 0,         "r0": 0, "pc": 0,         "ma": Prim.MA_NONE,  "addr": 0, }, # NOP
-            {"dsp": -1, "rsp": 1, "top": Prim.T_D0,  "d0": 0,         "rtop": Prim.R_PC, "r0": 0, "pc": 0,         "ma": Prim.MA_NONE,  "addr": 0, }, # CALL
-            {"dsp":  1, "rsp": 0, "top": Prim.T_RAM, "d0": Prim.D0_T, "rtop": 0,         "r0": 0, "pc": Prim.PC_1, "ma": Prim.MA_READ8, "addr": Prim.ADDR_PC, }, # PUSH8
-            {"dsp":  1, "rsp": 0, "top": Prim.T_RAM, "d0": Prim.D0_T, "rtop": 0,         "r0": 0, "pc": Prim.PC_1, "ma": Prim.MA_READ,  "addr": Prim.ADDR_PC, }, # PUSH
-            {"dsp": -2, "rsp": 0, "top": 0,          "d0": 0,         "rtop": 0,         "r0": 0, "pc": 0,         "ma": Prim.MA_WRITE8,"addr": Prim.ADDR_T, }, # STORE8
+        self.Table = Array([
+            { "src": Prim.SD_AR,    "dst": Prim.SD_AR,  "dsp": 0,           "rsp": 0, "alu": 0}, # NOP
+            { "src": Prim.SD_M8_PC, "dst": Prim.SD_D0,  "dsp": Prim.SP_INC, "rsp": 0, "alu": 0}, # PUSH8
+            { "src": Prim.SD_M_PC,  "dst": Prim.SD_D0,  "dsp": Prim.SP_INC, "rsp": 0, "alu": 0}, # PUSH
 
-
-            {"dsp": -2, "rsp": 0, "top": Prim.T_D1,  "d0": 0,         "rtop": 0,         "r0": 0, "pc": Prim.PC_T, "ma": Prim.MA_WRITE,"addr": Prim.ADDR_T, }, # temp
         ])
+
 
     def elaborate(self, platform):
         m = Module()
@@ -92,6 +70,9 @@ class Prim(wiring.Component):
         # top register
         self.rtop = Signal(16)
 
+        # address register
+        self.areg = Signal(16)
+
         ##
         # program counter
         self.pc = pc = Signal(16)
@@ -102,11 +83,19 @@ class Prim(wiring.Component):
         m.d.comb += self.retbit.eq(self.ir & 0x80)
 
         # look-up current instruction
-        self.lut = self.Lut[self.ir & 0x7f]
+        self.lut = self.Table[self.ir & 0x7f]
 
         # is memory access ongoing?
         self.mem_acc_done = Signal()
-        m.d.comb += self.mem_acc_done.eq((self.lut["ma"] == Prim.MA_NONE) | self.ack),
+        is_mem_op = Signal()
+        src = Signal(range(Prim.SD_M_PC))
+        dst = Signal(range(Prim.SD_M_PC))
+        m.d.comb += [
+            src.eq(self.lut["src"]),
+            dst.eq(self.lut["dst"]),
+            is_mem_op.eq((src[2] | dst[2]).bool()),
+            self.mem_acc_done.eq( (~is_mem_op) | self.ack ),
+        ]
 
         m.d.comb += [
             dstack_wp.addr.eq(self.dsp+1),
@@ -145,78 +134,125 @@ class Prim(wiring.Component):
         return m
 
     def execute(self, m):
-        ir = self.Lut[self.ir & 0x7f]
-
-        with m.If(self.mem_acc_done):
-            m.d.sync += [
-                self.dsp.eq(self.dsp + ir["dsp"]),
-                self.rsp.eq(self.dsp + ir["rsp"]),
-            ]
-
-        # top
-        with m.Switch(ir["top"]):
-            with m.Case(Prim.T_RAM):
-                with m.If(self.mem_acc_done): # TODO: kann man sich vermutlich sparen
-                    m.d.sync += self.top.eq(self.data_in)
-            with m.Case(Prim.T_ALU):
-                m.d.sync += self.top.eq(0) # TODO
-            with m.Case(Prim.T_D0):
-                m.d.sync += self.top.eq(self.dstack_rp.data)
-            with m.Case(Prim.T_D1):
-                m.d.sync += self.top.eq(self.dstack_rp.data)
-            with m.Case(Prim.T_R0):
-                m.d.sync += self.top.eq(self.rstack_rp.data)
-
-        # data stack
-        m.d.comb += self.dstack_rp.addr.eq(self.dsp-2) # TODO: evtl 0 besser?
-        m.d.comb += self.dstack_wp.addr.eq(self.dsp-1) # TODO: evtl +1 besser?
-
-        with m.Switch(ir["d0"]):
-            with m.Case(Prim.D0_T):
-                m.d.comb += self.dstack_wp.data.eq(self.top)
-                m.d.comb += self.dstack_wp.en.eq(1)
-            with m.Default():
-                m.d.comb += self.dstack_wp.en.eq(0)
-
-        # pc
-        next_pc = Signal(self.pc.shape())
-        with m.If(ir["ma"] == Prim.MA_READ):
-            m.d.comb += next_pc.eq(self.pc+2) # assuming PUSH
-        with m.Else():
-            m.d.comb += next_pc.eq(self.pc+1) # assuming PUSH8
-
-        with m.Switch(ir["pc"]):
-            with m.Case(Prim.PC_1):
-                with m.If(self.mem_acc_done):
-                    m.d.sync += self.pc.eq(next_pc)
-            with m.Case(Prim.PC_T):
-                m.d.sync += self.pc.eq(self.top)
-
-        # addr
-        with m.Switch(ir["addr"]):
-            with m.Case(Prim.ADDR_PC):
-                m.d.comb += self.addr.eq(self.pc)
-            with m.Case(Prim.ADDR_T):
-                m.d.comb += self.addr.eq(self.top)
-
-        # we
-        with m.Switch(ir["ma"]):
-            with m.Case(Prim.MA_WRITE, Prim.MA_WRITE8):
-                m.d.comb += self.we.eq(1)
-            with m.Default():
-                m.d.comb += self.we.eq(0)
-
-        # acs
-        with m.Switch(ir["ma"]):
-            with m.Case(Prim.MA_WRITE, Prim.MA_READ):
-                m.d.comb += self.acs.eq(2)
-            with m.Case(Prim.MA_WRITE8, Prim.MA_READ8):
-                m.d.comb += self.acs.eq(1)
-            with m.Default():
-                m.d.comb += self.acs.eq(0)
+        ir = self.Table[self.ir & 0x7f]
 
         # data_out
         m.d.comb += self.data_out.eq(self.dstack_rp.data)
+
+         # data stack
+        m.d.comb += [
+            self.dstack_rp.addr.eq(self.dsp-2), # TODO: evtl 0 besser?
+            self.dstack_wp.addr.eq(self.dsp-1) # TODO: evtl +1 besser?
+        ]
+
+        # default values
+        m.d.comb += [
+            self.addr.eq(self.pc),
+            self.we.eq(0),
+            self.acs.eq(0)
+        ]
+
+        # next_pc = Signal(self.pc.shape())
+
+        dsp_next = Signal(16)
+        with m.Switch(ir["dsp"]):
+            with m.Case(Prim.SP_INC):
+                m.d.comb += dsp_next.eq(self.dsp + 1)
+            with m.Case(Prim.SP_DEC):
+                m.d.comb += dsp_next.eq(self.dsp - 1)
+            with m.Default():
+                pass
+
+        rsp_next = Signal(16)
+        with m.Switch(ir["rsp"]):
+            with m.Case(Prim.SP_INC):
+                m.d.comb += rsp_next.eq(self.rsp + 1)
+            with m.Case(Prim.SP_DEC):
+                m.d.comb += rsp_next.eq(self.rsp - 1)
+            with m.Default():
+                pass
+
+        src = Signal(16)
+        with m.Switch(ir["src"]):
+            with m.Case(Prim.SD_ALU):
+                m.d.comb += src.eq(self.alu_out(m, self.ir))
+            with m.Case(Prim.SD_D0):
+                m.d.comb += src.eq(self.dstack_rp.data)
+            with m.Case(Prim.SD_R0):
+                m.d.comb += src.eq(self.rstack_rp.data)
+            with m.Case(Prim.SD_AR):
+                m.d.comb += src.eq(self.areg)
+            with m.Case(Prim.SD_M8_A):
+                m.d.comb += [
+                    src.eq(Cat(self.data_in[:8], Const(0, 8))),
+                    self.addr.eq(self.areg)
+                ]
+            with m.Case(Prim.SD_M8_PC):
+                m.d.comb += [
+                    src.eq(Cat(self.data_in[:8], Const(0, 8))),
+                    self.addr.eq(self.pc)
+                ]
+            with m.Case(Prim.SD_M_A):
+                m.d.comb += [
+                    src.eq(self.data_in),
+                    self.addr.eq(self.areg)
+                ]
+            with m.Case(Prim.SD_M_PC):
+                m.d.comb += [
+                    src.eq(self.data_in),
+                    self.addr.eq(self.pc)
+                ]
+            with m.Default():
+                pass
+
+        with m.Switch(ir["dst"]):
+            with m.Case(Prim.SD_D0):
+                m.d.comb += [
+                    self.dstack_wp.data.eq(src),
+                    self.dstack_wp.en.eq(1)
+                ]
+            with m.Case(Prim.SD_R0):
+                m.d.comb += [
+                    self.rstack_wp.data.eq(src),
+                    self.rstack_wp.en.eq(1)
+                ]
+            with m.Case(Prim.SD_AR):
+                m.d.comb += self.areg.eq(src)
+            with m.Case(Prim.SD_M8_A):
+                m.d.comb += [
+                    self.addr.eq(self.areg),
+                    self.we.eq(1),
+                    self.acs.eq(1),
+                ]
+            with m.Case(Prim.SD_M8_PC):
+                m.d.comb += [
+                    self.addr.eq(self.pc),
+                    self.we.eq(1),
+                    self.acs.eq(1),
+                ]
+            with m.Case(Prim.SD_M_A):
+                m.d.comb += [
+                    self.addr.eq(self.areg),
+                    self.we.eq(1),
+                    self.acs.eq(2),
+                ]
+            with m.Case(Prim.SD_M_PC):
+                m.d.comb += [
+                    self.addr.eq(self.pc),
+                    self.we.eq(1),
+                    self.acs.eq(2),
+                ]
+            with m.Default():
+                pass
+
+    def alu_out(self, m, op):
+        out = Signal(16)
+        with m.Switch(op & 0xf):
+            with m.Case(0):
+                m.d.comb += out.eq(0)
+            with m.Default():
+                m.d.comb += out.eq(0xffff)
+        return out
 
 
 def main():
@@ -227,11 +263,7 @@ def main():
         return mem
 
     mem = mem_create(init=[
-        2, 0x11, #push8
-        2, 0x22, #push8
-        2, 0x33, #push8
-        3, 0x34, 0x12, #push16
-        4, # store8
+        0,
         PrimOpcodes.SIMEND.value
         ])
     print(mem[0:10])
