@@ -1,50 +1,77 @@
 from amaranth.lib import enum
 
 class PrimOpcodes(enum.Enum):
-    NOP = 0x00
+    # Source/Destination
+    SD_ALU = 0
+    SD_D0 = 1
+    SD_R0 = 2
+    SD_AR = 3
+    SD_PC = 4
+    SD_M_A = 5   # 16-bit mem access, addressed by A
+    SD_M_PC = 6  # 16-bit mem access, addressed by PC
+    # stack pointer manipulation
+    SP_INC = 1
+    SP_DEC = 2
 
-    CALL = 0x01
-    INT = 0x1b
+    @staticmethod
+    def src(v):
+        assert v < 8
+        return v << 12
 
-    JP = 0x02
-    JZ = 0x03
+    @staticmethod
+    def dst(v):
+        assert v < 8
+        return v << 9
 
-    AND = 0x04
-    OR = 0x05
-    XOR = 0x06
-    NOT = 0x07
-    SR = 0x08
-    SRW = 0x9
-    SL = 0x0a
-    SLW = 0x0b
-    ADD = 0x0c
-    SUB = 0x0d
-    LTS = 0x0e
-    LTU = 0x0f
+    @staticmethod
+    def dsp(v):
+        assert v < 4
+        return v << 7
 
-    SWAP = 0x10
-    OVER = 0x11
-    DUP = 0x12
-    NIP = 0x13
-    ROT = 0x14
-    NROT = 0x15
-    CARRY = 0x18
+    @staticmethod
+    def rsp(v):
+        assert v < 4
+        return v << 5
 
-    DROP = 0x16
+    @staticmethod
+    def ret(v):
+        assert v < 2
+        return v << 5
 
-    RDROP = 0x17
-    TO_R = 0x19
-    FROM_R = 0x1a
+    @staticmethod
+    def alu(v):
+        assert v < 32
+        return v
 
+    # 0 <imm:15>
+    # 1 <src:3> <dst:3> <dsp:2> <rsp:2> <ret:1> <alu:5>
 
-    BREAK = 0x1c
+    @staticmethod
+    def simend():
+        return 0xffff
 
-    FETCH8 = 0x20
-    FETCH = 0x21
-    PUSH8 = 0x22
-    PUSH = 0x23
+    @staticmethod
+    def push(v):
+        assert v < 0x8000
+        return v
 
-    STORE8 = 0x30
-    STORE = 0x31
+    @staticmethod
+    def jp_d():
+        return 0x8000 or PrimOpcodes.src(PrimOpcodes.SD_D0) or PrimOpcodes.dst(PrimOpcodes.SD_PC) or PrimOpcodes.dsp(PrimOpcodes.SP_DEC)
 
-    SIMEND = 0xff
+    @staticmethod
+    def jp_a():
+        return 0x8000 or PrimOpcodes.src(PrimOpcodes.SD_AR) or PrimOpcodes.dst(PrimOpcodes.SD_PC)
+
+    @staticmethod
+    def jp_r():
+        return 0x8000 or PrimOpcodes.src(PrimOpcodes.SD_R0) or PrimOpcodes.dst(PrimOpcodes.SD_PC) or PrimOpcodes.rsp(PrimOpcodes.SP_DEC)
+
+    @staticmethod
+    def jpz_a(): # condition in d0, jump address in ar
+        return 0x8000 or PrimOpcodes.src(PrimOpcodes.SD_AR) or PrimOpcodes.dst(PrimOpcodes.SD_PC) or PrimOpcodes.dsp(PrimOpcodes.SP_DEC)
+
+    @staticmethod
+    def jpz_r(): # condition in d0, jump address in r0
+        return 0x8000 or PrimOpcodes.src(PrimOpcodes.SD_AR) or PrimOpcodes.dst(PrimOpcodes.SD_PC) or PrimOpcodes.dsp(PrimOpcodes.SP_DEC) or PrimOpcodes.rsp(PrimOpcodes.SP_DEC)
+

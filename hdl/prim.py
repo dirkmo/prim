@@ -11,26 +11,13 @@ from amaranth.sim import Simulator, Period
 from primopcodes import *
 
 class Prim(wiring.Component):
-    # Source/Destination
-    SD_ALU = 0
-    SD_D0 = 1
-    SD_R0 = 2
-    SD_AR = 3
-    SD_M8_A = 4  #  8-bit mem access, addressed by A
-    SD_M8_PC = 5 #  8-bit mem access, addressed by PC
-    SD_M_A = 6   # 16-bit mem access, addressed by A
-    SD_M_PC = 7  # 16-bit mem access, addressed by PC
-    # stack pointer manipulation
-    SP_INC = 1
-    SP_DEC = 2
 
     def __init__(self):
         self.data_in = Signal(16)
         self.data_out = Signal(16)
         self.addr = Signal(16)
         self.we = Signal()
-        self.acs = Signal(2) # access-size: 0: none, 1: byte (8bit) or 2: word (16bit)
-        self.ack = Signal()
+        self.cs = Signal()
 
         self.dstack_depth = 8
 
@@ -39,12 +26,23 @@ class Prim(wiring.Component):
 
         self.ie = Signal() # interrupt enabled
 
-        self.Table = Array([
-            { "src": Prim.SD_AR,    "dst": Prim.SD_AR,  "dsp": 0,           "rsp": 0, "alu": 0}, # NOP
-            { "src": Prim.SD_M8_PC, "dst": Prim.SD_D0,  "dsp": Prim.SP_INC, "rsp": 0, "alu": 0}, # PUSH8
-            { "src": Prim.SD_M_PC,  "dst": Prim.SD_D0,  "dsp": Prim.SP_INC, "rsp": 0, "alu": 0}, # PUSH
-
-        ])
+    def decode(self, m, opcode):
+        # 0 <imm:15>
+        # 1 <src:3> <dst:3> <dsp:2> <rsp:2> <ret:1> <alu:5>
+        self.op_alu = Signal(5)
+        self.op_ret = Signal()
+        self.op_rsp = Signal(2)
+        self.op_dsp = Signal(2)
+        self.op_dst = Signal(3)
+        self.op_src = Signal(3)
+        m.d.comb += [
+            self.op_alu.eq(opcode[0:5]),
+            self.op_ret.eq(opcode[5]),
+            self.op_rsp.eq(opcode[6:8]),
+            self.op_dsp.eq(opcode[8:10]),
+            self.op_dst.eq(opcode[10:13]),
+            self.op_src.eq(opcode[13:]),
+        ]
 
 
     def elaborate(self, platform):
@@ -75,27 +73,9 @@ class Prim(wiring.Component):
 
         ##
         # program counter
-        self.pc = pc = Signal(16)
+        self.pc = Signal(16)
         # instruction register
-        self.ir = ir = Signal(8)
-        # return bit
-        self.retbit = Signal()
-        m.d.comb += self.retbit.eq(self.ir & 0x80)
-
-        # look-up current instruction
-        self.lut = self.Table[self.ir & 0x7f]
-
-        # is memory access ongoing?
-        self.mem_acc_done = Signal()
-        is_mem_op = Signal()
-        src = Signal(range(Prim.SD_M_PC))
-        dst = Signal(range(Prim.SD_M_PC))
-        m.d.comb += [
-            src.eq(self.lut["src"]),
-            dst.eq(self.lut["dst"]),
-            is_mem_op.eq((src[2] | dst[2]).bool()),
-            self.mem_acc_done.eq( (~is_mem_op) | self.ack ),
-        ]
+        self.ir = Signal(16)
 
         m.d.comb += [
             dstack_wp.addr.eq(self.dsp+1),
@@ -103,39 +83,43 @@ class Prim(wiring.Component):
             dstack_rp.en.eq(1),
         ]
 
-        #m.d.comb += dstack_wp.en.eq(0)
-
         with m.FSM(init="Reset"):
             with m.State("Reset"):
                 m.d.sync += Print("Reset")
-                m.d.sync += pc.eq(0)
-                m.next = "Instruction Fetch"
+                m.d.sync += self.pc.eq(0)
+                m.next = "Fetch-1"
 
-            with m.State("Instruction Fetch"):
+            with m.State("Fetch-1"):
                 m.d.comb += [
-                    self.addr.eq(pc),
-                    self.acs.eq(1),
+                    self.addr.eq(self.pc),
+                    self.cs.eq(1),
                     self.we.eq(0)
                 ]
-                with m.If(self.ack):
-                    m.d.sync += [
-                        pc.eq(pc+1),
-                        ir.eq(self.data_in),
-                    ]
-                    m.d.sync += Print(Format("{:04x}: Instruction Fetch: {:02x} ", self.pc, self.data_in))
-                    m.next = "Execute"
+                m.next = "Fetch-2"
 
-            with m.State("Execute"):
-                m.d.sync += Print("Execute")
+            with m.State("Fetch-2"):
+                m.d.sync += [
+                    self.pc.eq(self.pc+1),
+                    self.ir.eq(self.data_in),
+                ]
+                m.d.sync += Print(Format("{:04x}: Instruction Fetch: {:02x} ", self.pc, self.data_in))
+                self.decode(m, self.data_in)
+                m.next = "Execute-1"
+
+            with m.State("Execute-1"):
+                m.d.sync += Print("Execute-1")
                 self.execute(m)
-                with m.If(self.mem_acc_done):
-                    m.next = "Instruction Fetch"
+                m.next = "Execute-2"
+
+            with m.State("Execute-2"):
+                m.d.sync += Print("Execute-2")
+                self.execute(m)
+                m.next = "Fetch-1"
+
 
         return m
 
     def execute(self, m):
-        ir = self.Table[self.ir & 0x7f]
-
         # data_out
         m.d.comb += self.data_out.eq(self.dstack_rp.data)
 
@@ -149,55 +133,45 @@ class Prim(wiring.Component):
         m.d.comb += [
             self.addr.eq(self.pc),
             self.we.eq(0),
-            self.acs.eq(0)
+            self.cs.eq(0)
         ]
 
         # next_pc = Signal(self.pc.shape())
 
         dsp_next = Signal(16)
-        with m.Switch(ir["dsp"]):
-            with m.Case(Prim.SP_INC):
+        with m.Switch(self.op_dsp):
+            with m.Case(PrimOpcodes.SP_INC):
                 m.d.comb += dsp_next.eq(self.dsp + 1)
-            with m.Case(Prim.SP_DEC):
+            with m.Case(PrimOpcodes.SP_DEC):
                 m.d.comb += dsp_next.eq(self.dsp - 1)
             with m.Default():
                 pass
 
         rsp_next = Signal(16)
-        with m.Switch(ir["rsp"]):
-            with m.Case(Prim.SP_INC):
+        with m.Switch(self.op_rsp):
+            with m.Case(PrimOpcodes.SP_INC):
                 m.d.comb += rsp_next.eq(self.rsp + 1)
-            with m.Case(Prim.SP_DEC):
+            with m.Case(PrimOpcodes.SP_DEC):
                 m.d.comb += rsp_next.eq(self.rsp - 1)
             with m.Default():
                 pass
 
         src = Signal(16)
-        with m.Switch(ir["src"]):
-            with m.Case(Prim.SD_ALU):
+        with m.Switch(self.op_src):
+            with m.Case(PrimOpcodes.SD_ALU):
                 m.d.comb += src.eq(self.alu_out(m, self.ir))
-            with m.Case(Prim.SD_D0):
+            with m.Case(PrimOpcodes.SD_D0):
                 m.d.comb += src.eq(self.dstack_rp.data)
-            with m.Case(Prim.SD_R0):
+            with m.Case(PrimOpcodes.SD_R0):
                 m.d.comb += src.eq(self.rstack_rp.data)
-            with m.Case(Prim.SD_AR):
+            with m.Case(PrimOpcodes.SD_AR):
                 m.d.comb += src.eq(self.areg)
-            with m.Case(Prim.SD_M8_A):
-                m.d.comb += [
-                    src.eq(Cat(self.data_in[:8], Const(0, 8))),
-                    self.addr.eq(self.areg)
-                ]
-            with m.Case(Prim.SD_M8_PC):
-                m.d.comb += [
-                    src.eq(Cat(self.data_in[:8], Const(0, 8))),
-                    self.addr.eq(self.pc)
-                ]
-            with m.Case(Prim.SD_M_A):
+            with m.Case(PrimOpcodes.SD_M_A):
                 m.d.comb += [
                     src.eq(self.data_in),
                     self.addr.eq(self.areg)
                 ]
-            with m.Case(Prim.SD_M_PC):
+            with m.Case(PrimOpcodes.SD_M_PC):
                 m.d.comb += [
                     src.eq(self.data_in),
                     self.addr.eq(self.pc)
@@ -205,42 +179,30 @@ class Prim(wiring.Component):
             with m.Default():
                 pass
 
-        with m.Switch(ir["dst"]):
-            with m.Case(Prim.SD_D0):
+        with m.Switch(self.op_dst):
+            with m.Case(PrimOpcodes.SD_D0):
                 m.d.comb += [
                     self.dstack_wp.data.eq(src),
                     self.dstack_wp.en.eq(1)
                 ]
-            with m.Case(Prim.SD_R0):
+            with m.Case(PrimOpcodes.SD_R0):
                 m.d.comb += [
                     self.rstack_wp.data.eq(src),
                     self.rstack_wp.en.eq(1)
                 ]
-            with m.Case(Prim.SD_AR):
-                m.d.comb += self.areg.eq(src)
-            with m.Case(Prim.SD_M8_A):
+            with m.Case(PrimOpcodes.SD_AR):
+                m.d.sync += self.areg.eq(src)
+            with m.Case(PrimOpcodes.SD_M_A):
                 m.d.comb += [
                     self.addr.eq(self.areg),
                     self.we.eq(1),
-                    self.acs.eq(1),
+                    self.cs.eq(1),
                 ]
-            with m.Case(Prim.SD_M8_PC):
+            with m.Case(PrimOpcodes.SD_M_PC):
                 m.d.comb += [
                     self.addr.eq(self.pc),
                     self.we.eq(1),
-                    self.acs.eq(1),
-                ]
-            with m.Case(Prim.SD_M_A):
-                m.d.comb += [
-                    self.addr.eq(self.areg),
-                    self.we.eq(1),
-                    self.acs.eq(2),
-                ]
-            with m.Case(Prim.SD_M_PC):
-                m.d.comb += [
-                    self.addr.eq(self.pc),
-                    self.we.eq(1),
-                    self.acs.eq(2),
+                    self.cs.eq(1),
                 ]
             with m.Default():
                 pass
@@ -257,14 +219,15 @@ class Prim(wiring.Component):
 
 def main():
     def mem_create(init):
-        mem = [PrimOpcodes.SIMEND.value]*0x10000
+        mem = [PrimOpcodes.simend()]*0x10000
         for i in range(len(init)):
             mem[i] = init[i]
         return mem
 
     mem = mem_create(init=[
-        0,
-        PrimOpcodes.SIMEND.value
+        PrimOpcodes.push(0x1234),
+        PrimOpcodes.jp_d(),
+        PrimOpcodes.simend()
         ])
     print(mem[0:10])
     dut = Prim()
@@ -273,25 +236,19 @@ def main():
         memcyc = 0
         for _ in range(30):
             ir = ctx.get(dut.ir)
-            if ir == PrimOpcodes.SIMEND.value:
+            if ir == PrimOpcodes.simend():
                 print("ENDSIM")
                 break
-            ctx.set(dut.ack, 0)
-            if ctx.get(dut.acs) > 0:
+            if ctx.get(dut.cs) > 0:
                 memcyc += 1
+                ctx.set(dut.data_in, 0)
                 if memcyc > 1:
                     addr = ctx.get(dut.addr)
                     if addr >= len(mem):
                         print(f"Out of memory bounds {addr}")
                         break
                     value = mem[addr]
-                    if ctx.get(dut.acs) == 2:
-                        if addr+1 >= len(mem):
-                            print(f"Out of memory bounds {addr+1}")
-                            break
-                        value |= mem[addr+1] << 8
                     ctx.set(dut.data_in, value)
-                    ctx.set(dut.ack, 1)
                     memcyc = 0
             await ctx.tick()
 
@@ -303,7 +260,7 @@ def main():
 
     from amaranth.back import verilog
     with open("prim.v", "w") as f:
-        f.write(verilog.convert(dut, ports=[dut.data_in, dut.data_out, dut.addr, dut.we, dut.acs, dut.ack]))
+        f.write(verilog.convert(dut, ports=[dut.data_in, dut.data_out, dut.addr, dut.we, dut.cs]))
 
 
 if __name__ == "__main__":
