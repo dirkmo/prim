@@ -28,6 +28,11 @@ class Prim(wiring.Component):
     def decode(self, m, opcode):
         # 0 <imm:15>
         # 1 <src:3> <dst:3> <dsp:2> <rsp:2> <ret:1> <alu:4>
+
+        # 1 1 1 1 1 1
+        # 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
+        # I|src  |dst  |dsp|rsp|r| alu
+
         self.op_alu = Signal(4) # 0-3
         self.op_ret = Signal() # 4
         self.op_rsp = Signal(2) # 5-6
@@ -133,10 +138,11 @@ class Prim(wiring.Component):
 
     def push(self, m):
         m.d.comb += [
-            self.dstack_wp.data.eq(Cat(Const(0, 1), self.ir[0:15])),
+            self.dstack_wp.data.eq(self.top),
             self.dstack_wp.en.eq(1)
         ]
         m.d.sync += [
+            self.top.eq(Cat(self.ir[0:15], Const(0, 1))),
             self.dsp.eq(self.dsp + 1)
         ]
 
@@ -151,7 +157,7 @@ class Prim(wiring.Component):
             self.addr.eq(self.pc),
             self.we.eq(0),
             self.cs.eq(0),
-            pc_next.eq(self.pc + 1),
+            pc_next.eq(self.pc),
         ]
 
         dsp_next = Signal(16)
@@ -192,6 +198,8 @@ class Prim(wiring.Component):
                     src.eq(self.data_in),
                     self.addr.eq(self.pc)
                 ]
+            with m.Case(PrimOpcodes.SD_PC):
+                pass
             with m.Default():
                 pass
 
@@ -219,6 +227,10 @@ class Prim(wiring.Component):
                     self.addr.eq(self.pc),
                     self.we.eq(1),
                     self.cs.eq(1),
+                ]
+            with m.Case(PrimOpcodes.SD_PC):
+                m.d.comb += [
+                    pc_next.eq(self.dstack_rp.data),
                 ]
             with m.Default():
                 pass
@@ -250,7 +262,6 @@ def main():
     mem = mem_create(init=[
         PrimOpcodes.push(0x1234),
         PrimOpcodes.jp_d(),
-        PrimOpcodes.simend()
         ])
     print(mem[0:10])
     dut = Prim()

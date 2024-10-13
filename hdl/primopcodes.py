@@ -1,14 +1,14 @@
 from amaranth.lib import enum
 
-class PrimOpcodes(enum.Enum):
+class PrimOpcodes:
     # Source/Destination
     SD_ALU = 0
     SD_D0 = 1
     SD_R0 = 2
     SD_AR = 3
     SD_PC = 4
-    SD_M_A = 5   # 16-bit mem access, addressed by A
-    SD_M_PC = 6  # 16-bit mem access, addressed by PC
+    SD_M_A = 5   # mem access, addressed by A
+    SD_M_PC = 6  # mem access, addressed by PC
     # stack pointer manipulation
     SP_INC = 1
     SP_DEC = 2
@@ -36,7 +36,7 @@ class PrimOpcodes(enum.Enum):
     @staticmethod
     def ret(v):
         assert v < 2
-        return v << 5
+        return v << 4
 
     @staticmethod
     def alu(v):
@@ -57,21 +57,21 @@ class PrimOpcodes(enum.Enum):
 
     @staticmethod
     def jp_d():
-        return 0x8000 or PrimOpcodes.src(PrimOpcodes.SD_D0) or PrimOpcodes.dst(PrimOpcodes.SD_PC) or PrimOpcodes.dsp(PrimOpcodes.SP_DEC)
+        return 0x8000 | PrimOpcodes.src(PrimOpcodes.SD_D0) | PrimOpcodes.dst(PrimOpcodes.SD_PC) | PrimOpcodes.dsp(PrimOpcodes.SP_DEC)
 
     @staticmethod
     def jp_a():
-        return 0x8000 or PrimOpcodes.src(PrimOpcodes.SD_AR) or PrimOpcodes.dst(PrimOpcodes.SD_PC)
+        return 0x8000 | PrimOpcodes.src(PrimOpcodes.SD_AR) | PrimOpcodes.dst(PrimOpcodes.SD_PC)
 
     @staticmethod
     def jp_r():
-        return 0x8000 or PrimOpcodes.src(PrimOpcodes.SD_R0) or PrimOpcodes.dst(PrimOpcodes.SD_PC) or PrimOpcodes.rsp(PrimOpcodes.SP_DEC)
+        return 0x8000 | PrimOpcodes.src(PrimOpcodes.SD_R0) | PrimOpcodes.dst(PrimOpcodes.SD_PC) | PrimOpcodes.rsp(PrimOpcodes.SP_DEC)
 
     @staticmethod
     def jpz_a(): # condition in d0, jump address in ar
-        return 0x8000 or PrimOpcodes.src(PrimOpcodes.SD_AR) or PrimOpcodes.dst(PrimOpcodes.SD_PC) or PrimOpcodes.dsp(PrimOpcodes.SP_DEC)
+        return 0x8000 | PrimOpcodes.src(PrimOpcodes.SD_AR) | PrimOpcodes.dst(PrimOpcodes.SD_PC) | PrimOpcodes.dsp(PrimOpcodes.SP_DEC)
 
     @staticmethod
     def jpz_r(): # condition in d0, jump address in r0
-        return 0x8000 or PrimOpcodes.src(PrimOpcodes.SD_AR) or PrimOpcodes.dst(PrimOpcodes.SD_PC) or PrimOpcodes.dsp(PrimOpcodes.SP_DEC) or PrimOpcodes.rsp(PrimOpcodes.SP_DEC)
+        return 0x8000 | PrimOpcodes.src(PrimOpcodes.SD_AR) | PrimOpcodes.dst(PrimOpcodes.SD_PC) | PrimOpcodes.dsp(PrimOpcodes.SP_DEC) | PrimOpcodes.rsp(PrimOpcodes.SP_DEC)
 
