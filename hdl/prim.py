@@ -8,7 +8,7 @@ from amaranth.lib.wiring import In, Out
 from amaranth.sim import Simulator, Period
 
 # from stack import *
-from primopcodes import *
+import PrimOpcodes
 
 class Prim(wiring.Component):
 
@@ -25,7 +25,7 @@ class Prim(wiring.Component):
 
         self.ie = Signal() # interrupt enabled
 
-    def decode(self, m, opcode):
+    def decode(self, m):
         # 0 <imm:15>
         # 1 <src:3> <dst:3> <dsp:2> <rsp:2> <ret:1> <alu:4>
 
@@ -41,13 +41,13 @@ class Prim(wiring.Component):
         self.op_src = Signal(3) # 12-14
         self.op_type = Signal() # 15
         m.d.comb += [
-            self.op_alu.eq(opcode[0:4]),
-            self.op_ret.eq(opcode[4]),
-            self.op_rsp.eq(opcode[5:7]),
-            self.op_dsp.eq(opcode[7:9]),
-            self.op_dst.eq(opcode[9:12]),
-            self.op_src.eq(opcode[12:15]),
-            self.op_type.eq(opcode[15])
+            self.op_alu.eq(self.ir[0:4]),
+            self.op_ret.eq(self.ir[4]),
+            self.op_rsp.eq(self.ir[5:7]),
+            self.op_dsp.eq(self.ir[7:9]),
+            self.op_dst.eq(self.ir[9:12]),
+            self.op_src.eq(self.ir[12:15]),
+            self.op_type.eq(self.ir[15])
         ]
 
 
@@ -87,6 +87,8 @@ class Prim(wiring.Component):
             dstack_rp.en.eq(1),
         ]
 
+        self.decode(m)
+
         with m.FSM(init="Reset"):
             with m.State("Reset"):
                 m.d.sync += Print("Reset")
@@ -112,9 +114,8 @@ class Prim(wiring.Component):
                     self.cs.eq(1),
                     self.we.eq(0)
                 ]
-                self.decode(m, self.data_in)
 
-                with m.If(self.op_type == 0):
+                with m.If(self.data_in[15] == 0):
                     m.next = "Push"
                 with m.Else():
                     m.next = "Execute-1"
@@ -136,7 +137,7 @@ class Prim(wiring.Component):
 
         return m
 
-    def push(self, m):
+    def push(self, m): # push immediate
         m.d.comb += [
             self.dstack_wp.data.eq(self.top),
             self.dstack_wp.en.eq(1)
@@ -158,16 +159,27 @@ class Prim(wiring.Component):
             self.we.eq(0),
             self.cs.eq(0),
             pc_next.eq(self.pc),
+            self.dstack_wp.data.eq(self.top),
         ]
+
+        top_next = Signal(16)
+
 
         dsp_next = Signal(16)
         with m.Switch(self.op_dsp):
             with m.Case(PrimOpcodes.SP_INC):
-                m.d.comb += dsp_next.eq(self.dsp + 1)
+                m.d.comb += [
+                    dsp_next.eq(self.dsp + 1),
+                    top_next.eq(self.dstack_rp.data),
+                    self.dstack_wp.en.eq(write)
+                ]
             with m.Case(PrimOpcodes.SP_DEC):
-                m.d.comb += dsp_next.eq(self.dsp - 1)
+                m.d.comb += [
+                    dsp_next.eq(self.dsp - 1),
+                    top_next.eq(self.dstack_rp.data),
+                ]
             with m.Default():
-                pass
+                top_next.eq(self.top),
 
         rsp_next = Signal(16)
         with m.Switch(self.op_rsp):
@@ -183,7 +195,7 @@ class Prim(wiring.Component):
             with m.Case(PrimOpcodes.SD_ALU):
                 m.d.comb += src.eq(self.alu_out(m, self.ir))
             with m.Case(PrimOpcodes.SD_D0):
-                m.d.comb += src.eq(self.dstack_rp.data)
+                m.d.comb += src.eq(self.top)
             with m.Case(PrimOpcodes.SD_R0):
                 m.d.comb += src.eq(self.rstack_rp.data)
             with m.Case(PrimOpcodes.SD_AR):
@@ -206,8 +218,7 @@ class Prim(wiring.Component):
         with m.Switch(self.op_dst):
             with m.Case(PrimOpcodes.SD_D0):
                 m.d.comb += [
-                    self.dstack_wp.data.eq(src),
-                    self.dstack_wp.en.eq(1)
+                    top_next.eq(src),
                 ]
             with m.Case(PrimOpcodes.SD_R0):
                 m.d.comb += [
@@ -240,6 +251,7 @@ class Prim(wiring.Component):
                 self.dsp.eq(dsp_next),
                 self.rsp.eq(rsp_next),
                 self.pc.eq(pc_next),
+                self.top.eq(top_next),
             ]
 
     def alu_out(self, m, op):
@@ -260,8 +272,12 @@ def main():
         return mem
 
     mem = mem_create(init=[
-        PrimOpcodes.push(0x1234),
-        PrimOpcodes.jp_d(),
+        PrimOpcodes.push(0x1),
+        PrimOpcodes.push(0x2),
+        PrimOpcodes.drop(),
+        # PrimOpcodes.jp_d(),
+        # PrimOpcodes.to_a(),
+        # PrimOpcodes.jp_a(),
         ])
     print(mem[0:10])
     dut = Prim()
