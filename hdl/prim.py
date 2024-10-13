@@ -18,30 +18,31 @@ class Prim(wiring.Component):
         self.addr = Signal(16)
         self.we = Signal()
         self.cs = Signal()
+        self.int = Signal()
 
         self.dstack_depth = 8
-
         self.rstack_depth = 8
-        self.rtop = Signal(16)
 
         self.ie = Signal() # interrupt enabled
 
     def decode(self, m, opcode):
         # 0 <imm:15>
-        # 1 <src:3> <dst:3> <dsp:2> <rsp:2> <ret:1> <alu:5>
-        self.op_alu = Signal(5)
-        self.op_ret = Signal()
-        self.op_rsp = Signal(2)
-        self.op_dsp = Signal(2)
-        self.op_dst = Signal(3)
-        self.op_src = Signal(3)
+        # 1 <src:3> <dst:3> <dsp:2> <rsp:2> <ret:1> <alu:4>
+        self.op_alu = Signal(4) # 0-3
+        self.op_ret = Signal() # 4
+        self.op_rsp = Signal(2) # 5-6
+        self.op_dsp = Signal(2) # 7-8
+        self.op_dst = Signal(3) # 9-11
+        self.op_src = Signal(3) # 12-14
+        self.op_type = Signal() # 15
         m.d.comb += [
-            self.op_alu.eq(opcode[0:5]),
-            self.op_ret.eq(opcode[5]),
-            self.op_rsp.eq(opcode[6:8]),
-            self.op_dsp.eq(opcode[8:10]),
-            self.op_dst.eq(opcode[10:13]),
-            self.op_src.eq(opcode[13:]),
+            self.op_alu.eq(opcode[0:4]),
+            self.op_ret.eq(opcode[4]),
+            self.op_rsp.eq(opcode[5:7]),
+            self.op_dsp.eq(opcode[7:9]),
+            self.op_dst.eq(opcode[9:12]),
+            self.op_src.eq(opcode[12:15]),
+            self.op_type.eq(opcode[15])
         ]
 
 
@@ -65,8 +66,6 @@ class Prim(wiring.Component):
 
         # return stack pointer
         self.rsp = dsp = Signal(range(self.rstack_depth))
-        # top register
-        self.rtop = Signal(16)
 
         # address register
         self.areg = Signal(16)
@@ -78,8 +77,8 @@ class Prim(wiring.Component):
         self.ir = Signal(16)
 
         m.d.comb += [
-            dstack_wp.addr.eq(self.dsp+1),
-            dstack_rp.addr.eq(self.dsp),
+            dstack_rp.addr.eq(self.dsp-1),
+            dstack_wp.addr.eq(self.dsp),
             dstack_rp.en.eq(1),
         ]
 
@@ -101,42 +100,59 @@ class Prim(wiring.Component):
                 m.d.sync += [
                     self.pc.eq(self.pc+1),
                     self.ir.eq(self.data_in),
+                    Print(Format("{:04x}: Instruction Fetch: {:02x} ", self.pc, self.data_in)),
                 ]
-                m.d.sync += Print(Format("{:04x}: Instruction Fetch: {:02x} ", self.pc, self.data_in))
+                m.d.comb += [
+                    self.addr.eq(self.pc),
+                    self.cs.eq(1),
+                    self.we.eq(0)
+                ]
                 self.decode(m, self.data_in)
-                m.next = "Execute-1"
+
+                with m.If(self.op_type == 0):
+                    m.next = "Push"
+                with m.Else():
+                    m.next = "Execute-1"
+
+            with m.State("Push"):
+                m.d.sync += Print("Push")
+                self.push(m)
+                m.next = "Fetch-1"
 
             with m.State("Execute-1"):
                 m.d.sync += Print("Execute-1")
-                self.execute(m)
+                self.execute(m, write=False)
                 m.next = "Execute-2"
 
             with m.State("Execute-2"):
                 m.d.sync += Print("Execute-2")
-                self.execute(m)
+                self.execute(m, write=True)
                 m.next = "Fetch-1"
-
 
         return m
 
-    def execute(self, m):
+    def push(self, m):
+        m.d.comb += [
+            self.dstack_wp.data.eq(Cat(Const(0, 1), self.ir[0:15])),
+            self.dstack_wp.en.eq(1)
+        ]
+        m.d.sync += [
+            self.dsp.eq(self.dsp + 1)
+        ]
+
+    def execute(self, m, write):
         # data_out
         m.d.comb += self.data_out.eq(self.dstack_rp.data)
 
-         # data stack
-        m.d.comb += [
-            self.dstack_rp.addr.eq(self.dsp-2), # TODO: evtl 0 besser?
-            self.dstack_wp.addr.eq(self.dsp-1) # TODO: evtl +1 besser?
-        ]
+        pc_next = Signal(16)
 
         # default values
         m.d.comb += [
             self.addr.eq(self.pc),
             self.we.eq(0),
-            self.cs.eq(0)
+            self.cs.eq(0),
+            pc_next.eq(self.pc + 1),
         ]
-
-        # next_pc = Signal(self.pc.shape())
 
         dsp_next = Signal(16)
         with m.Switch(self.op_dsp):
@@ -206,6 +222,13 @@ class Prim(wiring.Component):
                 ]
             with m.Default():
                 pass
+
+        if write:
+            m.d.sync += [
+                self.dsp.eq(dsp_next),
+                self.rsp.eq(rsp_next),
+                self.pc.eq(pc_next),
+            ]
 
     def alu_out(self, m, op):
         out = Signal(16)
