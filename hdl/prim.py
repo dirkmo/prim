@@ -1,11 +1,11 @@
 #! /usr/bin/env python3
 
 from amaranth import *
-from amaranth.lib import enum
+from amaranth.lib import enum, wiring
 from amaranth.lib.memory import Memory
-from amaranth.lib import wiring
 from amaranth.lib.wiring import In, Out
 from amaranth.sim import Simulator, Period
+from amaranth.back import verilog
 
 # from stack import *
 import PrimOpcodes
@@ -55,7 +55,7 @@ class Prim(wiring.Component):
         m = Module()
 
         ## data stack
-        dstack = m.submodules.dstack = Memory(shape=unsigned(16), depth=self.dstack_depth, init=[])
+        self.dstack = dstack = m.submodules.dstack = Memory(shape=unsigned(16), depth=self.dstack_depth, init=[])
         self.dstack_rp = dstack_rp = dstack.read_port()
         self.dstack_wp = dstack_wp = dstack.write_port()
 
@@ -264,53 +264,61 @@ class Prim(wiring.Component):
         return out
 
 
+
 def main():
+
     def mem_create(init):
         mem = [PrimOpcodes.simend()]*0x10000
         for i in range(len(init)):
             mem[i] = init[i]
+            print(f"{mem[i]:04x} ", end="")
+        print()
         return mem
 
-    mem = mem_create(init=[
-        PrimOpcodes.push(0x1),
-        PrimOpcodes.push(0x2),
-        PrimOpcodes.drop(),
-        # PrimOpcodes.jp_d(),
-        # PrimOpcodes.to_a(),
-        # PrimOpcodes.jp_a(),
-        ])
-    print(mem[0:10])
     dut = Prim()
-
-    async def bench(ctx):
-        memcyc = 0
-        for _ in range(30):
-            ir = ctx.get(dut.ir)
-            if ir == PrimOpcodes.simend():
-                print("ENDSIM")
-                break
-            if ctx.get(dut.cs) > 0:
-                memcyc += 1
-                ctx.set(dut.data_in, 0)
-                if memcyc > 1:
-                    addr = ctx.get(dut.addr)
-                    if addr >= len(mem):
-                        print(f"Out of memory bounds {addr}")
-                        break
-                    value = mem[addr]
-                    ctx.set(dut.data_in, value)
-                    memcyc = 0
-            await ctx.tick()
-
     sim = Simulator(dut)
     sim.add_clock(Period(MHz=1))
-    sim.add_testbench(bench)
-    with sim.write_vcd("prim.vcd"):
-        sim.run()
 
-    from amaranth.back import verilog
-    with open("prim.v", "w") as f:
-        f.write(verilog.convert(dut, ports=[dut.data_in, dut.data_out, dut.addr, dut.we, dut.cs]))
+    dut.mem = mem_create(init=[PrimOpcodes.push(100+i) for i in range(0,dut.dstack_depth)])
+    dut.mem_cycle = 0
+
+    def memory_access(ctx):
+        if ctx.get(dut.cs) > 0:
+            dut.mem_cycle += 1
+            ctx.set(dut.data_in, 0)
+            if dut.mem_cycle > 1:
+                addr = ctx.get(dut.addr)
+                assert(addr < len(dut.mem)), f"Memory access out of bounds 0x{addr:x}"
+                value = dut.mem[addr]
+                ctx.set(dut.data_in, value)
+                dut.mem_cycle = 0
+
+    def test_push():
+        testname = __name__
+        print(testname)
+        sim.reset()
+        dut.mem_cycle = 0
+        async def bench(ctx):
+            while ctx.get(dut.ir) != PrimOpcodes.simend():
+                memory_access(ctx)
+                await ctx.tick()
+            dsp = ctx.get(dut.dsp)
+            for i in range(8):
+                print(f"{ctx.get(dut.dstack.data[i])}")
+            # assert ctx.get(dut.top) == dut.dstack_depth-1, f"top has wrong value {ctx.get(dut.top):x}"
+
+        sim.add_testbench(bench)
+        try:
+            sim.run()
+        except:
+            sim.reset()
+            with sim.write_vcd(f"{testname}.vcd", gtkw_file=f"{testname}.gtkw", traces=[dut.addr, dut.cs, dut.data_out, dut.data_in, dut.top]):
+                sim.run()
+
+
+    test_push()
+#    with open("prim.v", "w") as f:
+#        f.write(verilog.convert(dut, ports=[dut.data_in, dut.data_out, dut.addr, dut.we, dut.cs]))
 
 
 if __name__ == "__main__":
