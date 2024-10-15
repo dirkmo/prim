@@ -65,7 +65,7 @@ class Prim(wiring.Component):
         self.top = Signal(16)
 
         ## return stack
-        rstack = m.submodules.rstack = Memory(shape=unsigned(16), depth=self.rstack_depth, init=[])
+        self.rstack = rstack = m.submodules.rstack = Memory(shape=unsigned(16), depth=self.rstack_depth, init=[])
         self.rstack_rp = rstack_rp = rstack.read_port()
         self.rstack_wp = rstack_wp = rstack.write_port()
 
@@ -279,10 +279,8 @@ def main():
     sim = Simulator(dut)
     sim.add_clock(Period(MHz=1))
 
-    dut.mem = mem_create(init=[PrimOpcodes.push(100+i) for i in range(0,dut.dstack_depth)])
-    dut.mem_cycle = 0
 
-    def memory_access(ctx):
+    def memory_access(ctx, td):
         if ctx.get(dut.cs) > 0:
             dut.mem_cycle += 1
             ctx.set(dut.data_in, 0)
@@ -293,30 +291,54 @@ def main():
                 ctx.set(dut.data_in, value)
                 dut.mem_cycle = 0
 
-    def test_push():
-        testname = __name__
-        print(testname)
+    def test(td):
+        print(td["name"])
         sim.reset()
         dut.mem_cycle = 0
+        dut.mem = mem_create(init=td["mem-init"])
         async def bench(ctx):
             while ctx.get(dut.ir) != PrimOpcodes.simend():
-                memory_access(ctx)
+                memory_access(ctx, td)
                 await ctx.tick()
-            dsp = ctx.get(dut.dsp)
             for i in range(8):
                 print(f"{ctx.get(dut.dstack.data[i])}")
-            # assert ctx.get(dut.top) == dut.dstack_depth-1, f"top has wrong value {ctx.get(dut.top):x}"
+
+            top = ctx.get(dut.top)
+            dsp = ctx.get(dut.dsp)
+            ds = [top] +  [ctx.get(dut.dstack.data[(dsp-i-1)%dut.dstack_depth]) for i in range(dut.dstack_depth)]
+            rsp = ctx.get(dut.rsp)
+            rs = [ctx.get(dut.rstack.data[(rsp-i-1)%dut.rstack_depth]) for i in range(dut.rstack_depth)]
+
+            assert (not "dsp" in td) or (dsp == td["dsp"]), f"dsp has wrong value {dsp:x} instead of {td["dsp"]:x}"
+
+            if "ds" in td:
+                for i in range(len(td["ds"])):
+                    assert ds[i] == td["ds"][i]
+
+            if "rs" in td:
+                for i in range(len(td["rs"])):
+                    assert rs[i] == td["rs"][i]
+            if "mem" in td:
+                (addr, m) = (td["mem"][0], td["mem"][1:])
+                for i,w in enumerate(m):
+                    pass
+
 
         sim.add_testbench(bench)
         try:
             sim.run()
         except:
             sim.reset()
-            with sim.write_vcd(f"{testname}.vcd", gtkw_file=f"{testname}.gtkw", traces=[dut.addr, dut.cs, dut.data_out, dut.data_in, dut.top]):
+            with sim.write_vcd(f"{td["name"]}.vcd", gtkw_file=f"{td["name"]}.gtkw", traces=[dut.addr, dut.cs, dut.data_out, dut.data_in, dut.top]):
                 sim.run()
 
-
-    test_push()
+    td = {
+        "name": "push",
+        "mem-init": [PrimOpcodes.push(100+i) for i in range(0,dut.dstack_depth+1)],
+        "dsp": 1,
+        "ds": [106, 105, 104, 103, 102, 101, 100],
+    }
+    test(td)
 #    with open("prim.v", "w") as f:
 #        f.write(verilog.convert(dut, ports=[dut.data_in, dut.data_out, dut.addr, dut.we, dut.cs]))
 
