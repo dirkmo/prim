@@ -309,19 +309,14 @@ def main():
             rsp = ctx.get(dut.rsp)
             rs = [ctx.get(dut.rstack.data[(rsp-i-1)%dut.rstack_depth]) for i in range(dut.rstack_depth)]
 
-            assert (not "dsp" in td) or (dsp == td["dsp"]), f"dsp has wrong value {dsp:x} instead of {td["dsp"]:x}"
-
-            if "ds" in td:
-                for i in range(len(td["ds"])):
-                    assert ds[i] == td["ds"][i]
-
-            if "rs" in td:
-                for i in range(len(td["rs"])):
-                    assert rs[i] == td["rs"][i]
+            assert (not "dsp" in td) or (dsp == td["dsp"]), f"dsp is different:\ncond: {dsp:x}\ntest: {td["dsp"]:x}"
+            assert (not "rsp" in td) or (rsp == td["rsp"]), f"rsp is different:\ncond: {rsp:x}\ntest: {td["rsp"]:x}"
+            assert (not "ds" in td) or ds[0:len(td["ds"])] == td["ds"], f"ds is different:\ncond: {ds}\ntest: {td['ds']}"
+            assert (not "rs" in td) or rs[0:len(td["rs"])] == td["rs"], f"rs is different:\ncond: {rs}\ntest: {td['rs']}"
             if "mem" in td:
                 (addr, m) = (td["mem"][0], td["mem"][1:])
-                for i,w in enumerate(m):
-                    pass
+                dut_mem = dut.mem[addr:addr+len(m)]
+                assert m == dut_mem, f"mem is different:\ncond: {m}\ntest: {dut_mem}"
 
 
         sim.add_testbench(bench)
@@ -336,7 +331,8 @@ def main():
         "name": "push",
         "mem-init": [PrimOpcodes.push(100+i) for i in range(0,dut.dstack_depth+1)],
         "dsp": 1,
-        "ds": [106, 105, 104, 103, 102, 101, 100],
+        "ds": [108, 107, 106, 105, 104, 103, 102, 101, 100],
+        "mem": [0, 100, 101, 102, 103, 104, 0]
     }
     test(td)
 #    with open("prim.v", "w") as f:
