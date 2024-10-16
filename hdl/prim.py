@@ -292,7 +292,7 @@ def main():
                 dut.mem_cycle = 0
 
     def test(td):
-        print(td["name"])
+        print(f'Test: {td["name"]}')
         sim.reset()
         dut.mem_cycle = 0
         dut.mem = mem_create(init=td["mem-init"])
@@ -332,7 +332,14 @@ def main():
         "mem-init": [PrimOpcodes.push(100+i) for i in range(0,dut.dstack_depth+1)],
         "dsp": 1,
         "ds": [108, 107, 106, 105, 104, 103, 102, 101, 100],
-        "mem": [0, 100, 101, 102, 103, 104, 0]
+    }
+    test(td)
+
+    td = {
+        "name": "drop",
+        "mem-init": [PrimOpcodes.push(65), PrimOpcodes.push(66), PrimOpcodes.drop(), PrimOpcodes.push(67) ],
+        "dsp": 2,
+        "ds": [67, 65],
     }
     test(td)
 #    with open("prim.v", "w") as f:
