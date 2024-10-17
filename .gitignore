@@ -10,3 +10,5 @@ build/
 hdl/prim.vcd
 prim.v
 prim.vcd
+*.gtkw
+*.vcd

@@ -50,6 +50,21 @@ def drop():
 def dup():
     return 0x8000 | dsp(SP_INC) | src(SD_D0) | dst(SD_D0)
 
+def to_a():
+    return 0x8000 | src(SD_D0) | dst(SD_AR) | dsp(SP_DEC)
+
+def to_r():
+    return 0x8000 | src(SD_D0) | dst(SD_R0) | dsp(SP_DEC) | rsp(SP_INC)
+
+def r_from():
+    return 0x8000 | src(SD_R0) | dst(SD_D0) | dsp(SP_INC) | rsp(SP_DEC)
+
+def r_to_a():
+    return 0x8000 | src(SD_R0) | dst(SD_AR) | rsp(SP_DEC)
+
+def a_to_r():
+    return 0x8000 | src(SD_AR) | dst(SD_R0) | rsp(SP_INC)
+
 def jp_d():
     return 0x8000 | src(SD_D0) | dst(SD_PC) | dsp(SP_DEC)
 
@@ -65,5 +80,3 @@ def jpz_a(): # condition in d0, jump address in ar
 def jpz_r(): # condition in d0, jump address in r0
     return 0x8000 | src(SD_AR) | dst(SD_PC) | dsp(SP_DEC) | rsp(SP_DEC)
 
-def to_a():
-    return 0x8000 | src(SD_D0) | dst(SD_AR) | dsp(SP_DEC)

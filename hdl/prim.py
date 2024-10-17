@@ -1,5 +1,7 @@
 #! /usr/bin/env python3
 
+from colorama import Fore, Back, Style
+
 from amaranth import *
 from amaranth.lib import enum, wiring
 from amaranth.lib.memory import Memory
@@ -85,6 +87,9 @@ class Prim(wiring.Component):
             dstack_rp.addr.eq(self.dsp-1),
             dstack_wp.addr.eq(self.dsp),
             dstack_rp.en.eq(1),
+            rstack_rp.addr.eq(self.rsp-1),
+            rstack_wp.addr.eq(self.rsp),
+            rstack_rp.en.eq(1),
         ]
 
         self.decode(m)
@@ -279,8 +284,7 @@ def main():
     sim = Simulator(dut)
     sim.add_clock(Period(MHz=1))
 
-
-    def memory_access(ctx, td):
+    def memory_access(ctx, td) -> None:
         if ctx.get(dut.cs) > 0:
             dut.mem_cycle += 1
             ctx.set(dut.data_in, 0)
@@ -291,28 +295,37 @@ def main():
                 ctx.set(dut.data_in, value)
                 dut.mem_cycle = 0
 
-    def test(td):
-        print(f'Test: {td["name"]}')
+    def test_data_is_valid(td: dict) -> bool:
+        valid_keys = [ "name", "mem-init", "dsp", "ds", "rsp", "rs", "areg" ]
+        for key in td:
+            assert key in valid_keys, f"Invalid testdata for '{td["name"]}': {key}"
+
+
+    def test(td: dict) -> None:
+        print(Style.BRIGHT + Back.WHITE + Fore.BLACK + f'Test: {td["name"]}' + Style.RESET_ALL)
+        test_data_is_valid(td), "Testdata not valid"
         sim.reset()
         dut.mem_cycle = 0
         dut.mem = mem_create(init=td["mem-init"])
+        dut.td = td
         async def bench(ctx):
+            td = dut.td
             while ctx.get(dut.ir) != PrimOpcodes.simend():
                 memory_access(ctx, td)
                 await ctx.tick()
-            for i in range(8):
-                print(f"{ctx.get(dut.dstack.data[i])}")
 
             top = ctx.get(dut.top)
             dsp = ctx.get(dut.dsp)
             ds = [top] +  [ctx.get(dut.dstack.data[(dsp-i-1)%dut.dstack_depth]) for i in range(dut.dstack_depth)]
             rsp = ctx.get(dut.rsp)
             rs = [ctx.get(dut.rstack.data[(rsp-i-1)%dut.rstack_depth]) for i in range(dut.rstack_depth)]
+            areg = ctx.get(dut.areg)
 
             assert (not "dsp" in td) or (dsp == td["dsp"]), f"dsp is different:\ncond: {dsp:x}\ntest: {td["dsp"]:x}"
             assert (not "rsp" in td) or (rsp == td["rsp"]), f"rsp is different:\ncond: {rsp:x}\ntest: {td["rsp"]:x}"
             assert (not "ds" in td) or ds[0:len(td["ds"])] == td["ds"], f"ds is different:\ncond: {ds}\ntest: {td['ds']}"
             assert (not "rs" in td) or rs[0:len(td["rs"])] == td["rs"], f"rs is different:\ncond: {rs}\ntest: {td['rs']}"
+            assert (not "areg" in td) or areg == td["areg"], f"areg is different:\ncond: {areg:x}\ntest: {td["areg"]:x}"
             if "mem" in td:
                 (addr, m) = (td["mem"][0], td["mem"][1:])
                 dut_mem = dut.mem[addr:addr+len(m)]
@@ -326,22 +339,63 @@ def main():
             sim.reset()
             with sim.write_vcd(f"{td["name"]}.vcd", gtkw_file=f"{td["name"]}.gtkw", traces=[dut.addr, dut.cs, dut.data_out, dut.data_in, dut.top]):
                 sim.run()
-
-    td = {
+    testdata = []
+    testdata.append({
         "name": "push",
         "mem-init": [PrimOpcodes.push(100+i) for i in range(0,dut.dstack_depth+1)],
         "dsp": 1,
         "ds": [108, 107, 106, 105, 104, 103, 102, 101, 100],
-    }
-    test(td)
-
-    td = {
+    })
+    testdata.append({
         "name": "drop",
         "mem-init": [PrimOpcodes.push(65), PrimOpcodes.push(66), PrimOpcodes.drop(), PrimOpcodes.push(67) ],
         "dsp": 2,
         "ds": [67, 65],
-    }
-    test(td)
+    })
+    testdata.append({
+        "name": "dup",
+        "mem-init": [PrimOpcodes.push(65), PrimOpcodes.dup(), PrimOpcodes.push(100), PrimOpcodes.dup() ],
+        "dsp": 4,
+        "ds": [100, 100, 65, 65],
+    })
+    testdata.append({
+        "name": "to_a",
+        "mem-init": [PrimOpcodes.push(200), PrimOpcodes.to_a()],
+        "dsp": 0,
+        "areg": 200,
+    })
+    testdata.append({
+        "name": "to_r",
+        "mem-init": [PrimOpcodes.push(100), PrimOpcodes.to_r(), PrimOpcodes.push(300), PrimOpcodes.push(400), PrimOpcodes.to_r(), PrimOpcodes.to_r()],
+        "dsp": 0,
+        "rsp": 3,
+        "rs": [300, 400, 100]
+    })
+    testdata.append({
+        "name": "r_from",
+        "mem-init": [PrimOpcodes.push(5), PrimOpcodes.to_r(), PrimOpcodes.push(6), PrimOpcodes.to_r(), PrimOpcodes.r_from(), PrimOpcodes.r_from()],
+        "dsp": 2,
+        "rsp": 0,
+        "ds": [5, 6]
+    })
+    testdata.append({
+        "name": "r_to_a",
+        "mem-init": [PrimOpcodes.push(0x1234), PrimOpcodes.to_r(), PrimOpcodes.r_to_a()],
+        "rsp": 0,
+        "areg": 0x1234
+    })
+    testdata.append({
+        "name": "a_to_r",
+        "mem-init": [PrimOpcodes.push(0x222), PrimOpcodes.to_a(), PrimOpcodes.a_to_r()],
+        "rsp": 1,
+        "rs": [0x222],
+        "areg": 0x222
+    })
+
+
+    for td in testdata:
+        test(td)
+
 #    with open("prim.v", "w") as f:
 #        f.write(verilog.convert(dut, ports=[dut.data_in, dut.data_out, dut.addr, dut.we, dut.cs]))
 
