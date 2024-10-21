@@ -251,7 +251,7 @@ class Prim(wiring.Component):
                 ]
             with m.Case(PrimOpcodes.SD_PC):
                 m.d.comb += [
-                    pc_next.eq(self.dstack_rp.data),
+                    pc_next.eq(src),
                 ]
             with m.Case(PrimOpcodes.SD_D_A):
                 m.d.comb += [
@@ -307,7 +307,7 @@ def main():
                 dut.mem_cycle = 0
 
     def test_data_is_valid(td: dict) -> bool:
-        valid_keys = [ "name", "mem-init", "dsp", "ds", "rsp", "rs", "areg" ]
+        valid_keys = [ "name", "mem-init", "dsp", "ds", "rsp", "rs", "areg", "pc" ]
         for key in td:
             assert key in valid_keys, f"Invalid testdata for '{td["name"]}': {key}"
 
@@ -321,7 +321,11 @@ def main():
         dut.td = td
         async def bench(ctx):
             td = dut.td
+            count = 0
             while ctx.get(dut.ir) != PrimOpcodes.simend():
+                count += 1
+                if count > 100:
+                    break
                 memory_access(ctx, td)
                 await ctx.tick()
 
@@ -331,12 +335,14 @@ def main():
             rsp = ctx.get(dut.rsp)
             rs = [ctx.get(dut.rstack.data[(rsp-i-1)%dut.rstack_depth]) for i in range(dut.rstack_depth)]
             areg = ctx.get(dut.areg)
+            pc = ctx.get(dut.pc)
 
             assert (not "dsp" in td) or (dsp == td["dsp"]), f"dsp is different:\nreal: {dsp:x}\ntest: {td["dsp"]:x}"
             assert (not "rsp" in td) or (rsp == td["rsp"]), f"rsp is different:\nreal: {rsp:x}\ntest: {td["rsp"]:x}"
             assert (not "ds" in td) or ds[0:len(td["ds"])] == td["ds"], f"ds is different:\nreal: {ds}\ntest: {td['ds']}"
             assert (not "rs" in td) or rs[0:len(td["rs"])] == td["rs"], f"rs is different:\nreal: {rs}\ntest: {td['rs']}"
             assert (not "areg" in td) or areg == td["areg"], f"areg is different:\nreal: {areg:x}\ntest: {td["areg"]:x}"
+            assert (not "pc" in td) or pc == td["pc"], f"pc is different:\nreal: {pc:x}\ntest: {td["pc"]:x}"
             if "mem" in td:
                 (addr, m) = (td["mem"][0], td["mem"][1:])
                 dut_mem = dut.mem[addr:addr+len(m)]
@@ -419,9 +425,17 @@ def main():
         "ds": [3, 4],
         "areg": 1
     })
-
+    test({
+        "name": "jp_d",
+        "mem-init": [PrimOpcodes.push(0x10),
+                     PrimOpcodes.jp_d()
+                     ],
+        "dsp": 0,
+        "pc": 0x11,
+    })
     for td in testdata:
         test(td)
+
 
 #    with open("prim.v", "w") as f:
 #        f.write(verilog.convert(dut, ports=[dut.data_in, dut.data_out, dut.addr, dut.we, dut.cs]))
