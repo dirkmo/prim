@@ -6,6 +6,7 @@ SD_AR = 3
 SD_PC = 4
 SD_M_A = 5   # mem access, addressed by A
 SD_M_PC = 6  # mem access, addressed by PC
+SD_D_A = 7 # stack access, addressed by A
 # stack pointer manipulation
 SP_INC = 1
 SP_DEC = 2
@@ -35,7 +36,7 @@ def alu(v):
     return v
 
 # 0 <imm:15>
-# 1 <src:3> <dst:3> <dsp:2> <rsp:2> <ret:1> <alu:5>
+# 1 <src:3> <dst:3> <dsp:2> <rsp:2> <ret:1> <alu:4>
 
 def simend():
     return 0xffff
@@ -64,6 +65,12 @@ def r_to_a():
 
 def a_to_r():
     return 0x8000 | src(SD_AR) | dst(SD_R0) | rsp(SP_INC)
+
+def pick():
+    return 0x8000 | src(SD_D_A) | dst(SD_D0) | dsp(SP_INC)
+
+def stuff():
+    return 0x8000 | src(SD_D0) | dst(SD_D_A) | dsp(SP_DEC)
 
 def jp_d():
     return 0x8000 | src(SD_D0) | dst(SD_PC) | dsp(SP_DEC)

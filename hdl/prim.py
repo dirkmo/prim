@@ -216,7 +216,12 @@ class Prim(wiring.Component):
                     self.addr.eq(self.pc)
                 ]
             with m.Case(PrimOpcodes.SD_PC):
-                pass
+                m.d.comb += src.eq(self.pc)
+            with m.Case(PrimOpcodes.SD_D_A):
+                m.d.comb += [
+                    src.eq(self.dstack_rp.data),
+                    self.dstack_rp.addr.eq(self.dsp - self.areg - 1)
+                ]
             with m.Default():
                 pass
 
@@ -247,6 +252,12 @@ class Prim(wiring.Component):
             with m.Case(PrimOpcodes.SD_PC):
                 m.d.comb += [
                     pc_next.eq(self.dstack_rp.data),
+                ]
+            with m.Case(PrimOpcodes.SD_D_A):
+                m.d.comb += [
+                    self.dstack_wp.data.eq(src),
+                    self.dstack_wp.addr.eq(self.dsp - self.areg - 1),
+                    self.dstack_wp.en.eq(1)
                 ]
             with m.Default():
                 pass
@@ -321,11 +332,11 @@ def main():
             rs = [ctx.get(dut.rstack.data[(rsp-i-1)%dut.rstack_depth]) for i in range(dut.rstack_depth)]
             areg = ctx.get(dut.areg)
 
-            assert (not "dsp" in td) or (dsp == td["dsp"]), f"dsp is different:\ncond: {dsp:x}\ntest: {td["dsp"]:x}"
-            assert (not "rsp" in td) or (rsp == td["rsp"]), f"rsp is different:\ncond: {rsp:x}\ntest: {td["rsp"]:x}"
-            assert (not "ds" in td) or ds[0:len(td["ds"])] == td["ds"], f"ds is different:\ncond: {ds}\ntest: {td['ds']}"
-            assert (not "rs" in td) or rs[0:len(td["rs"])] == td["rs"], f"rs is different:\ncond: {rs}\ntest: {td['rs']}"
-            assert (not "areg" in td) or areg == td["areg"], f"areg is different:\ncond: {areg:x}\ntest: {td["areg"]:x}"
+            assert (not "dsp" in td) or (dsp == td["dsp"]), f"dsp is different:\nreal: {dsp:x}\ntest: {td["dsp"]:x}"
+            assert (not "rsp" in td) or (rsp == td["rsp"]), f"rsp is different:\nreal: {rsp:x}\ntest: {td["rsp"]:x}"
+            assert (not "ds" in td) or ds[0:len(td["ds"])] == td["ds"], f"ds is different:\nreal: {ds}\ntest: {td['ds']}"
+            assert (not "rs" in td) or rs[0:len(td["rs"])] == td["rs"], f"rs is different:\nreal: {rs}\ntest: {td['rs']}"
+            assert (not "areg" in td) or areg == td["areg"], f"areg is different:\nreal: {areg:x}\ntest: {td["areg"]:x}"
             if "mem" in td:
                 (addr, m) = (td["mem"][0], td["mem"][1:])
                 dut_mem = dut.mem[addr:addr+len(m)]
@@ -391,7 +402,23 @@ def main():
         "rs": [0x222],
         "areg": 0x222
     })
-
+    testdata.append({
+        "name": "pick",
+        "mem-init": [PrimOpcodes.push(0x1), PrimOpcodes.to_a(), PrimOpcodes.push(0x2), PrimOpcodes.push(0x3), PrimOpcodes.push(0x4), PrimOpcodes.pick()],
+        "dsp": 4,
+        "ds": [2, 4, 3, 2],
+        "areg": 1
+    })
+    testdata.append({
+        "name": "stuff",
+        "mem-init": [PrimOpcodes.push(0x1), PrimOpcodes.to_a(), # areg = 1
+                     PrimOpcodes.push(0x2), PrimOpcodes.push(0x3), PrimOpcodes.push(0x4), # ds: 4 3 2
+                     PrimOpcodes.stuff() # 3 4
+                     ],
+        "dsp": 2,
+        "ds": [3, 4],
+        "areg": 1
+    })
 
     for td in testdata:
         test(td)
