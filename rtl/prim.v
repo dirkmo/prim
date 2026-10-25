@@ -16,6 +16,8 @@ parameter
     DSS /* verilator public */ = 4, // data stack size: 2^DSS
     RSS /* verilator public */ = 4; // return stack size: 2^RSS
 
+localparam [15:0] ISR_ADDR = 16'h0004;
+
 `include "opcodes.v"
 
 // stack pointers
@@ -142,6 +144,7 @@ begin
             {1'b0, OP_CALL}: r_pc_next = T;
             {1'b0, OP_JP}: r_pc_next = T;
             {1'b0, OP_JZ}: r_pc_next = (N==16'h0) ? T : pc_plus_1;
+            {1'b0, OP_INT}: r_pc_next = ISR_ADDR;
             {1'b0, OP_PUSH8}: r_pc_next = r_pc + 2;
             {1'b0, OP_PUSH}:  r_pc_next = r_pc + 3;
             default: r_pc_next = pc_plus_1;
@@ -227,9 +230,11 @@ begin
             OP_DROP,
             OP_CALL,
             OP_JP,
-            OP_TO_R,
-            OP_INT: begin
+            OP_TO_R: begin
                 T <= N;
+            end
+            OP_INT: begin
+                T <= T;
             end
             OP_AND,
             OP_OR,
@@ -309,8 +314,7 @@ begin
             OP_SUB,
             OP_LTS,
             OP_LTU,
-            OP_TO_R,
-            OP_INT: begin
+            OP_TO_R: begin
                 N <= w_stack_third;
             end
             OP_JZ,
@@ -356,8 +360,7 @@ begin
             OP_SUB,
             OP_LTS,
             OP_LTU,
-            OP_TO_R,
-            OP_INT: begin
+            OP_TO_R: begin
                 r_dstack[r_dsp] <= N;
             end
             OP_DUP: begin
@@ -431,8 +434,7 @@ begin
             OP_SUB,
             OP_LTS,
             OP_LTU,
-            OP_TO_R,
-            OP_INT: begin
+            OP_TO_R: begin
                 r_dsp <= w_dsp_dec1;
             end
             OP_STORE,
