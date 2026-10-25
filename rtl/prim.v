@@ -36,7 +36,7 @@ reg [15:0] r_rstack[0:2**RSS-1] /* verilator public */;
 
 //
 wire [DSS-1:0] w_dsp_dec2_amt = {{(DSS-2){1'b0}}, 2'b10};
-wire [15:0] THIRD = r_dstack[(r_dsp - w_dsp_dec2_amt) & ((1 << DSS)-1)]; // third element
+wire [15:0] THIRD = r_dstack[(r_dsp - 1'b1) & ((1 << DSS)-1)]; // third element
 
 // pop from stack
 wire w_popop;
@@ -186,7 +186,7 @@ wire [DSS-1:0] w_dsp_dec1 = r_dsp - {{(DSS-1){1'b0}}, 1'b1};
 wire [DSS-1:0] w_dsp_dec2 = r_dsp - w_dsp_dec2_amt;
 wire [DSS-1:0] w_dsp_inc1 = r_dsp + {{(DSS-1){1'b0}}, 1'b1};
 wire [DSS-1:0] w_second_idx = (r_dsp - {{(DSS-1){1'b0}}, 1'b1}) & ((1 << DSS)-1);
-wire [DSS-1:0] w_third_idx  = (r_dsp - w_dsp_dec2_amt) & ((1 << DSS)-1);
+wire [DSS-1:0] w_third_idx  = (r_dsp - {{(DSS-1){1'b0}}, 1'b1}) & ((1 << DSS)-1);
 wire [15:0] w_stack_second = r_dstack[w_second_idx];
 wire [15:0] w_stack_third  = r_dstack[w_third_idx];
 
@@ -216,14 +216,11 @@ begin
             OP_OVER: begin
                 T <= N;
             end
-            OP_NIP: begin
-                T <= N;
-            end
             OP_ROT: begin
-                T <= N;
+                T <= w_stack_third;
             end
             OP_NROT: begin
-                T <= w_stack_third;
+                T <= N;
             end
             OP_DROP,
             OP_CALL,
@@ -239,8 +236,7 @@ begin
             OP_TO_R,
             OP_INT,
             OP_STORE,
-            OP_BYTE_STORE,
-            OP_RDROP:
+            OP_BYTE_STORE:
                 T <= N;
             OP_JZ: begin
                 T <= w_stack_third;
@@ -284,10 +280,10 @@ begin
                 N <= w_stack_third;
             end
             OP_ROT: begin
-                N <= w_stack_third;
+                N <= T;
             end
             OP_NROT: begin
-                N <= T;
+                N <= w_stack_third;
             end
             OP_DROP,
             OP_CALL,
@@ -306,8 +302,7 @@ begin
             OP_FETCH,
             OP_BYTE_FETCH,
             OP_STORE,
-            OP_BYTE_STORE,
-            OP_RDROP:
+            OP_BYTE_STORE:
                 N <= w_stack_third;
             OP_FROM_R: begin
                 N <= T;
@@ -351,8 +346,7 @@ begin
             OP_FETCH,
             OP_BYTE_FETCH,
             OP_STORE,
-            OP_BYTE_STORE,
-            OP_RDROP: begin
+            OP_BYTE_STORE: begin
                 r_dstack[r_dsp] <= N;
             end
             OP_DUP: begin
@@ -366,14 +360,12 @@ begin
                 r_dstack[w_dsp_inc1] <= N;
             end
             OP_ROT: begin
-                r_dstack[r_dsp] <= N;
-                r_dstack[w_dsp_dec1] <= w_stack_third;
-                r_dstack[w_dsp_dec2] <= T;
+                r_dstack[r_dsp] <= T;
+                r_dstack[w_dsp_dec1] <= N;
             end
             OP_NROT: begin
                 r_dstack[r_dsp] <= w_stack_third;
                 r_dstack[w_dsp_dec1] <= T;
-                r_dstack[w_dsp_dec2] <= N;
             end
             default: begin
             end
@@ -433,8 +425,7 @@ begin
             OP_FETCH,
             OP_BYTE_FETCH,
             OP_STORE,
-            OP_BYTE_STORE,
-            OP_RDROP: begin
+            OP_BYTE_STORE: begin
                 r_dsp <= w_dsp_dec1;
             end
             OP_JZ: begin
@@ -457,6 +448,7 @@ begin
             {1'b0, OP_INT}: r_rsp <= r_rsp + 1;
             {1'b0, OP_TO_R}: r_rsp <= r_rsp + 1;
             {1'b0, OP_FROM_R}: r_rsp <= r_rsp - 1;
+            {1'b0, OP_RDROP}: r_rsp <= r_rsp - 1;
             {1'b1, 7'b???????}: r_rsp <= r_rsp - 1;
             default: ;
         endcase

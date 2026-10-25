@@ -225,8 +225,9 @@ class Prim:
 
     def step(self):
         ir = self.fetch8()
-        if ir != PrimOpcodes.BREAK:
-            self.execute(ir)
+        if ir in (PrimOpcodes.BREAK, PrimOpcodes.SIMEND):
+            return ir
+        self.execute(ir)
         return ir & 0x7f
 
     def status(self):

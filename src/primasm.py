@@ -40,7 +40,8 @@ class PrimAsm:
         "C!": PrimOpcodes.BYTE_STORE,
         "PUSH8": PrimOpcodes.PUSH8,
         "PUSH": PrimOpcodes.PUSH,
-        "BREAK": PrimOpcodes.BREAK
+        "BREAK": PrimOpcodes.BREAK,
+        "SIMEND": PrimOpcodes.SIMEND
     }
 
     LOOKUP = None
@@ -125,6 +126,8 @@ class PrimAsm:
 
     def disassembleOpcode(opcode):
         PrimAsm.createLookup()
+        if opcode == PrimOpcodes.SIMEND:
+            return "SIMEND"
         retbit = (opcode & 0x80) != 0
         opcode &= 0x7f
         s = PrimAsm.LOOKUP[opcode]
@@ -139,6 +142,10 @@ class PrimAsm:
         s = ""
         disasm = []
         while i < len(data):
+            if data[i] == PrimOpcodes.SIMEND:
+                disasm.append((offset+i, (data[i],), "SIMEND"))
+                i += 1
+                continue
             retbit = (data[i] >> 7) & 1
             ir = data[i] & 0x7f
             if ir == PrimOpcodes.PUSH:

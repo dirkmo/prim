@@ -12,8 +12,8 @@ RTL = ROOT / 'rtl'
 BUILD = RTL / 'build'
 SIM = BUILD / 'simulator'
 
-# These are the current control-flow regression cases to be exercised against the
-# Verilog implementation before the broader instruction set is added.
+# These focused control-flow and stack cases are exercised against the Verilog
+# implementation before the broader instruction set is added.
 CASES = [
     (
         'call_ret_1',
@@ -39,6 +39,66 @@ CASES = [
         'jz_nonzero',
         '1 8 jz BREAK 0xfe',
         {'pc': 0x0006, 'dsp': 0, 'rsp': 0, 'T': 0x0000, 'N': 0x0000, 'R': 0x0000},
+    ),
+    (
+        'stack_dup',
+        '1 2 dup BREAK',
+        {'pc': 0x0006, 'dsp': 3, 'rsp': 0, 'T': 0x0002, 'N': 0x0002, 'R': 0x0000},
+    ),
+    (
+        'stack_swap',
+        '1 2 swap BREAK',
+        {'pc': 0x0006, 'dsp': 2, 'rsp': 0, 'T': 0x0001, 'N': 0x0002, 'R': 0x0000},
+    ),
+    (
+        'stack_over',
+        '1 2 over BREAK',
+        {'pc': 0x0006, 'dsp': 3, 'rsp': 0, 'T': 0x0001, 'N': 0x0002, 'R': 0x0000},
+    ),
+    (
+        'stack_nip',
+        '1 2 nip BREAK',
+        {'pc': 0x0006, 'dsp': 1, 'rsp': 0, 'T': 0x0002, 'N': 0x0000, 'R': 0x0000},
+    ),
+    (
+        'stack_rot',
+        '1 2 3 rot BREAK',
+        {'pc': 0x0008, 'dsp': 3, 'rsp': 0, 'T': 0x0001, 'N': 0x0003, 'R': 0x0000},
+    ),
+    (
+        'stack_rot_deep',
+        '1 2 3 rot nip BREAK',
+        {'pc': 0x0009, 'dsp': 2, 'rsp': 0, 'T': 0x0001, 'N': 0x0002, 'R': 0x0000},
+    ),
+    (
+        'stack_nrot',
+        '1 2 3 -rot BREAK',
+        {'pc': 0x0008, 'dsp': 3, 'rsp': 0, 'T': 0x0002, 'N': 0x0001, 'R': 0x0000},
+    ),
+    (
+        'stack_nrot_deep',
+        '1 2 3 -rot nip BREAK',
+        {'pc': 0x0009, 'dsp': 2, 'rsp': 0, 'T': 0x0002, 'N': 0x0003, 'R': 0x0000},
+    ),
+    (
+        'stack_drop',
+        '1 2 drop BREAK',
+        {'pc': 0x0006, 'dsp': 1, 'rsp': 0, 'T': 0x0001, 'N': 0x0000, 'R': 0x0000},
+    ),
+    (
+        'stack_to_r',
+        '1 >r BREAK',
+        {'pc': 0x0004, 'dsp': 0, 'rsp': 1, 'T': 0x0000, 'N': 0x0000, 'R': 0x0001},
+    ),
+    (
+        'stack_rdrop',
+        '1 >r 2 >r rdrop BREAK',
+        {'pc': 0x0008, 'dsp': 0, 'rsp': 1, 'T': 0x0000, 'N': 0x0000, 'R': 0x0001},
+    ),
+    (
+        'stack_from_r',
+        '1 >r 2 r> BREAK',
+        {'pc': 0x0007, 'dsp': 2, 'rsp': 0, 'T': 0x0001, 'N': 0x0002, 'R': 0x0000},
     ),
 ]
 
