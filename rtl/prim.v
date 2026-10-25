@@ -98,16 +98,29 @@ always @(posedge i_clk) begin
 end
 
 // r_phase
+// Strict 3-phase flow:
+//   FETCH -> (optional MEMWAIT) -> EXECUTE -> FETCH
+// Memory instructions always stall one cycle in MEMWAIT after fetch so the
+// immediate / operand read or write can complete before the execute phase runs.
+wire w_fetch_complete = w_phase_fetch && i_ack;
+wire w_memwait_complete = w_phase_memop && i_ack;
+
 always @(posedge i_clk)
 begin
     if (i_reset) begin
         r_phase <= PHASE_FETCH;
     end else begin
         case (r_phase)
-            PHASE_FETCH: if(i_ack) r_phase <= r_next_is_memop ? PHASE_MEMWAIT : PHASE_EXECUTE;
-            PHASE_MEMWAIT: if(i_ack) r_phase <= PHASE_EXECUTE;
-            PHASE_EXECUTE: r_phase <= PHASE_FETCH;
-            default: r_phase <= PHASE_FETCH;
+            PHASE_FETCH:
+                if (w_fetch_complete)
+                    r_phase <= r_next_is_memop ? PHASE_MEMWAIT : PHASE_EXECUTE;
+            PHASE_MEMWAIT:
+                if (w_memwait_complete)
+                    r_phase <= PHASE_EXECUTE;
+            PHASE_EXECUTE:
+                r_phase <= PHASE_FETCH;
+            default:
+                r_phase <= PHASE_FETCH;
         endcase
     end
 end
@@ -132,7 +145,10 @@ always @(posedge i_clk)
 begin
     if (i_reset) begin
         r_pc <= 16'h0000;
-    end else if (w_phase_execute) begin // TODO: nicht richtig, warten auf Ende der Mem-Op
+    end else if (w_phase_execute) begin
+        // PC is advanced only after the instruction has fully completed its
+        // fetch / memory wait sequence. This keeps immediate operands and memory
+        // transactions aligned with the execute phase.
         r_pc <= r_pc_next;
     end
 end
@@ -140,12 +156,17 @@ end
 // instruction register
 always @(posedge i_clk)
 begin
-    r_next_is_memop <= 'h0;
     if (i_reset) begin
         r_ir <= 8'h00;
-    end else if ((w_phase_fetch) && i_ack) begin
+        r_next_is_memop <= 1'b0;
+    end else if (w_phase_fetch && i_ack) begin
         r_ir <= i_dat[7:0];
-        r_next_is_memop <= (i_dat[6:0] == OP_PUSH) || (i_dat[6:0] == OP_PUSH8) || (i_dat[6:0] == OP_BYTE_FETCH) || (i_dat[6:0] == OP_FETCH) || (i_dat[6:0] == OP_BYTE_STORE) || (i_dat[6:0] == OP_STORE);
+        r_next_is_memop <= (i_dat[6:0] == OP_PUSH) ||
+                           (i_dat[6:0] == OP_PUSH8) ||
+                           (i_dat[6:0] == OP_BYTE_FETCH) ||
+                           (i_dat[6:0] == OP_FETCH) ||
+                           (i_dat[6:0] == OP_BYTE_STORE) ||
+                           (i_dat[6:0] == OP_STORE);
         $display("pc: %04x, ir: %02x", r_pc, i_dat);
         `ifdef SIM
         if (i_dat[6:0] == OP_SIMEND) $finish();
@@ -197,13 +218,13 @@ begin
 end
 
 // 3rd on data stack
-always @(posedge i_clk)
-begin
-    if (w_phase_execute) begin
-        case (r_ir[6:0])
-        endcase
-    end
-end
+//always @(posedge i_clk)
+//begin
+//    if (w_phase_execute) begin
+//        case (r_ir[6:0])
+//        endcase
+//    end
+//end
 
 // top of return stack
 always @(posedge i_clk)

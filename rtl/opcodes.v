@@ -37,5 +37,3 @@ localparam
     OP_CARRY = 7'h3a,
     OP_FROM_R = 7'h3b,
     OP_SIMEND = 7'hff;
-
-    äü
