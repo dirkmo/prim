@@ -51,7 +51,7 @@ values. For example, `--asm '1 2 over 3'` checks a previously broken combination
 of OVER followed by PUSH; it now matches Python.
 
 The simulator's `-j retirement.jsonl` option emits PC, opcode, stack pointers,
-carry, stacks (top first), and byte writes after each EXECUTE edge. Python
+carry, stacks (top first), and byte reads/writes after each EXECUTE edge. Python
 advances its PC during fetch; the comparison uses its state after `step()`,
 when both PCs address the next instruction. BREAK/SIMEND are debugger markers
 and are checked before fetching/executing them in comparison mode.
@@ -110,5 +110,41 @@ Tests check arithmetic boundary pairs, signed/unsigned comparisons, preservation
 of carry, and every single-bit shift operand against independent expected
 results as well as comparing Python with RTL after each instruction.
 
-Memory timing, external interrupts, and the RAM controller in `memory.v` are
-not yet validated by this comparison.
+## Memory handshake
+
+`o_bs != 0` requests a transfer. It completes on a rising clock edge with
+`i_ack == 1`; read data must be valid on that edge. Until then, the CPU holds
+the address, byte selection, write enable, write data, and execution state.
+The memory accepts a write exactly once on its acknowledging edge.
+
+`o_bs = 01` accesses the byte at `o_addr` using the low data lane; `11` accesses
+that byte and the next byte as a little-endian word, including odd addresses.
+Address arithmetic wraps at 16 bits. The unused lane of a byte read is ignored.
+
+Instruction fetches happen in FETCH. Immediates, data reads, and data writes
+complete in MEMWAIT. EXECUTE changes the architectural state with the bus idle.
+There is no extra read before a store and no repeated access in EXECUTE.
+FETCH and MEMWAIT transfers can be back-to-back: the memory must support a new
+request immediately after an acknowledged one, without requiring a low-BS gap.
+Reset deasserts BS and WE and returns control to FETCH.
+
+Test fixed or reproducible random memory latency from the repository root:
+
+```sh
+python3 rtl/compare.py --wait-cycles 3
+python3 rtl/compare.py --wait-cycles 9 --wait-seed 42
+```
+
+The first waits three cycles on each transfer. The second chooses 0..9 wait
+cycles per transfer from the seeded generator. These options also work with
+`--asm` and `--binary`. The simulator equivalents are `-w 3` and `-w 9 -s 42`.
+
+The simulator checks that requests and CPU state remain stable until ACK and
+poisons invalid read data and unused byte lanes. The comparison checks ordered
+byte reads as well as writes, detecting extra accesses and duplicate stores.
+CTest includes all 45 baseline programs at five latency settings, odd/wrapped
+word accesses, repeated accesses, self-modifying code, memory instructions with
+the return bit, and 257-cycle stalls.
+
+External interrupts and the physical RAM controller in `memory.v` are not yet
+validated. These handshake tests use the C++ memory model.

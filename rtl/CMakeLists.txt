@@ -44,6 +44,9 @@ add_test(NAME python_rtl_comparison
 add_test(NAME comparison_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test_compare.py
         --simulator $<TARGET_FILE:simulator>)
+add_test(NAME memory_handshake_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test_memory.py
+        --simulator $<TARGET_FILE:simulator>)
 
 
 # Add the Verilated circuit to the target

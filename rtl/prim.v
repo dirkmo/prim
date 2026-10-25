@@ -229,8 +229,8 @@ always @(*) begin
     t_next = T;
     n_next = N;
     case (r_ir[6:0])
-        OP_PUSH, OP_PUSH8, OP_FETCH: t_next = r_mem_data;
-        OP_BYTE_FETCH: t_next = {8'h00, r_mem_data[7:0]};
+        OP_PUSH, OP_FETCH: t_next = r_mem_data;
+        OP_PUSH8, OP_BYTE_FETCH: t_next = {8'h00, r_mem_data[7:0]};
         OP_SWAP, OP_OVER, OP_NROT, OP_DROP, OP_CALL, OP_JP, OP_TO_R:
             t_next = N;
         OP_ROT, OP_STORE, OP_BYTE_STORE, OP_JZ: t_next = w_stack_third;
@@ -357,7 +357,7 @@ always @(*) begin
     if (w_phase_fetch) begin
         // instruction fetch is always an 8-bit read from the current PC byte.
         r_bs = 2'b01;
-    end else if (w_phase_memop || w_phase_execute) begin
+    end else if (w_phase_memop) begin
         if (w_memop8) begin
             r_bs = 2'b01;
         end else if (w_memop16) begin
@@ -378,26 +378,11 @@ always @(*) begin
         // instruction fetch from pc
         r_addr = r_pc;
     end else if (w_phase_memop) begin
-        if (w_memwrite) begin
-            // store address is already on the stack during execute phase
-            r_addr = T;
-        end else if (r_ir[6:0] == OP_PUSH8) begin
-            // byte immediate follows the opcode
-            r_addr = r_pc + 1'd1;
-        end else if (r_ir[6:0] == OP_PUSH) begin
-            // 16-bit immediate follows the opcode
+        if (w_pushop) begin
             r_addr = r_pc + 1'd1;
         end else begin
-            // data memory access uses the stack address
+            // Both reads and writes complete in MEMWAIT before stack changes.
             r_addr = T;
-        end
-    end else if (w_phase_execute) begin
-        if (w_memwrite) begin
-            r_addr = T;
-        end else if (r_ir[6:0] == OP_FETCH || r_ir[6:0] == OP_BYTE_FETCH) begin
-            r_addr = T;
-        end else begin
-            r_addr = r_pc;
         end
     end else begin
         r_addr = r_pc;
@@ -405,7 +390,7 @@ always @(*) begin
 end
 
 assign o_addr = r_addr;
-assign o_we = w_phase_execute && w_memwrite;
+assign o_we = !i_reset && w_phase_memop && w_memwrite;
 assign o_bs = r_bs;
 assign o_dat = N;
 

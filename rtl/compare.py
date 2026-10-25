@@ -23,9 +23,13 @@ class Memory(MemoryIf):
         self.data = bytearray([0xff]) * 65536
         self.data[:len(image)] = image
         self.writes = []
+        self.reads = []
 
     def read8(self, addr):
-        return self.data[addr & 0xffff]
+        addr &= 0xffff
+        value = self.data[addr]
+        self.reads.append([addr, value])
+        return value
 
     def read16(self, addr):
         return self.read8(addr) | self.read8(addr + 1) << 8
@@ -44,9 +48,13 @@ class Difference(AssertionError):
     pass
 
 
-def compare(image, simulator, max_steps=1000):
+def compare(image, simulator, max_steps=1000, wait_cycles=0, wait_seed=None):
     if not image or len(image) > 65536:
         raise ValueError('Image must contain 1..65536 bytes')
+    if not 0 <= wait_cycles <= 10000:
+        raise ValueError('wait_cycles must be in 0..10000')
+    if wait_seed is not None and not 0 <= wait_seed <= 0xffffffff:
+        raise ValueError('wait_seed must be an unsigned 32-bit integer')
     memory = Memory(image)
     cpu = Prim(memory)
     ds_depth = rs_depth = 0
@@ -54,12 +62,16 @@ def compare(image, simulator, max_steps=1000):
         directory = Path(directory)
         binary, trace = directory / 'image.bin', directory / 'retirement.jsonl'
         binary.write_bytes(image)
+        command = [str(simulator), '-i', str(binary), '-j', str(trace),
+                   '-c', str(max_steps * (2 * wait_cycles + 3) + wait_cycles + 20),
+                   '-w', str(wait_cycles)]
+        if wait_seed is not None:
+            command += ['-s', str(wait_seed)]
         run = subprocess.run(
-            [str(simulator), '-i', str(binary), '-j', str(trace),
-             '-c', str(max_steps * 3 + 10)],
+            command,
             cwd=directory, capture_output=True, text=True, timeout=30,
         )
-        if run.returncode and not trace.exists():
+        if run.returncode not in (0, 1) or not trace.exists():
             raise RuntimeError(f'RTL simulator failed ({run.returncode})\n{run.stdout[-3000:]}\n{run.stderr}')
         records = [json.loads(line) for line in trace.read_text().splitlines()]
 
@@ -85,6 +97,7 @@ def compare(image, simulator, max_steps=1000):
         if steps >= max_steps:
             raise RuntimeError(f'Instruction limit exceeded ({max_steps})')
         memory.writes.clear()
+        memory.reads.clear()
         cpu.step()
         op = ir & 0x7f
         ds_delta = (1 if op in (Op.PUSH, Op.PUSH8, Op.DUP, Op.OVER, Op.CARRY, Op.FROM_R)
@@ -101,6 +114,7 @@ def compare(image, simulator, max_steps=1000):
             rs_depth = max(0, rs_depth - 1)
         for field, expected in [('pc', cpu._pc), ('dsp', cpu._dsp),
                                 ('rsp', cpu._rsp), ('carry', int(cpu._carry)),
+                                ('reads', memory.reads),
                                 ('writes', memory.writes)]:
             equal(field, record[field], expected)
         # Ignore unused cells: Python clears popped cells; hardware may retain them.
@@ -119,6 +133,10 @@ def main():
     source.add_argument('--asm', help='Assembly text; BREAK is appended')
     source.add_argument('--binary', type=Path, help='Raw binary with BREAK or SIMEND marker')
     parser.add_argument('--max-steps', type=int, default=1000)
+    parser.add_argument('--wait-cycles', type=int, default=0,
+                        help='Wait cycles per memory transfer (0..10000)')
+    parser.add_argument('--wait-seed', type=int,
+                        help='Seed for random waits from 0 to --wait-cycles')
     args = parser.parse_args()
     if args.max_steps < 1:
         parser.error('--max-steps must be positive')
@@ -139,7 +157,7 @@ def main():
     failures = 0
     for name, image in cases:
         try:
-            steps = compare(image, simulator, args.max_steps)
+            steps = compare(image, simulator, args.max_steps, args.wait_cycles, args.wait_seed)
             print(f'PASS {name}: {steps} instructions')
         except (Difference, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
             failures += 1

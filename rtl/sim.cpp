@@ -6,6 +6,7 @@
 #include <vector>
 #include <utility>
 #include <cstdlib>
+#include <random>
 
 using namespace std;
 
@@ -18,7 +19,21 @@ uint64_t clockcycle_ps = 10000; // clock cycle length in ps
 uint8_t mem[0x10000];
 FILE *json_trace = nullptr;
 uint64_t max_cycles = 1000;
-vector<pair<unsigned, unsigned>> writes;
+vector<pair<unsigned, unsigned>> writes, reads;
+unsigned wait_cycles = 0;
+bool random_waits = false;
+std::mt19937 wait_rng(0);
+
+static vector<unsigned> cpu_state() {
+    auto *cpu = pCore->Prim;
+    vector<unsigned> state = {cpu->r_pc, cpu->r_dsp, cpu->r_rsp,
+        cpu->r_carry, cpu->T, cpu->N, cpu->r_ir, cpu->r_phase};
+    for (unsigned i = 0; i < 16; ++i) {
+        state.push_back(cpu->r_dstack[i]);
+        state.push_back(cpu->r_rstack[i]);
+    }
+    return state;
+}
 
 // Architectural snapshots at retirement, independent of fetch/memory latency.
 static void trace_step(unsigned pc, unsigned ir) {
@@ -36,11 +51,15 @@ static void trace_step(unsigned pc, unsigned ir) {
     fprintf(json_trace, "],\"rs\":[");
     for (unsigned i = 0; i < 16; ++i)
         fprintf(json_trace, "%s%u", i ? "," : "", cpu->r_rstack[(cpu->r_rsp + 16 - i) & 15]);
+    fprintf(json_trace, "],\"reads\":[");
+    for (size_t i = 0; i < reads.size(); ++i)
+        fprintf(json_trace, "%s[%u,%u]", i ? "," : "", reads[i].first, reads[i].second);
     fprintf(json_trace, "],\"writes\":[");
     for (size_t i = 0; i < writes.size(); ++i)
         fprintf(json_trace, "%s[%u,%u]", i ? "," : "", writes[i].first, writes[i].second);
     fprintf(json_trace, "]}\n");
     writes.clear();
+    reads.clear();
 }
 
 void opentrace(const char *vcdname) {
@@ -72,31 +91,62 @@ void reset() {
     pCore->i_reset = 0;
 }
 
-int handle(Vprim *pCore) {
-    if (pCore->o_bs) {
-        if (json_trace || pCore->o_addr < 0xfffe) {
-            // memory
-            pCore->i_dat = 0;
-            if (pCore->o_bs & 1) {
-                pCore->i_dat |= mem[pCore->o_addr];
+// A transfer completes on each rising edge with BS != 0 and ACK == 1.
+// The next transfer may begin immediately, without a low-CS gap.
+int handle(Vprim *core) {
+    static bool pending = false;
+    static unsigned address, data, bs, we, remaining;
+    static vector<unsigned> held_state;
+    core->i_ack = 0;
+    core->i_dat = 0xdead; // Invalid until ACK; unused read lanes are also poisoned.
+    if (pending && (address != core->o_addr || bs != core->o_bs ||
+                    we != core->o_we || data != core->o_dat || held_state != cpu_state())) {
+        fprintf(stderr, "Memory protocol error: request or CPU state changed before ACK\n");
+        return 2;
+    }
+    if (!core->o_bs) return 0;
+    if (core->Prim->r_phase == 2) {
+        fprintf(stderr, "Memory protocol error: repeated request during EXECUTE\n");
+        return 2;
+    }
+    if (!pending) {
+        address = core->o_addr;
+        data = core->o_dat;
+        bs = core->o_bs;
+        we = core->o_we;
+        remaining = random_waits ?
+            std::uniform_int_distribution<unsigned>(0, wait_cycles)(wait_rng) : wait_cycles;
+        held_state = cpu_state();
+        pending = true;
+    }
+    if (remaining) {
+        --remaining;
+        return 0;
+    }
+    if (json_trace || address < 0xfffe) {
+        if (we) {
+            if (bs & 1) {
+                mem[address] = data & 0xff;
+                if (json_trace) writes.emplace_back(address, mem[address]);
             }
-            if (pCore->o_bs & 2) {
-                pCore->i_dat |= mem[(pCore->o_addr+1) & 0xffff] << 8;
-            }
-            if (pCore->o_we) {
-                if (pCore->o_bs & 1) {
-                    mem[pCore->o_addr] = pCore->o_dat;
-                    if (json_trace) writes.emplace_back(pCore->o_addr, pCore->o_dat & 0xff);
-                }
-                if (pCore->o_bs & 2) {
-                    mem[(pCore->o_addr+1) & 0xffff] = pCore->o_dat >> 8;
-                    if (json_trace) writes.emplace_back((pCore->o_addr+1) & 0xffff, pCore->o_dat >> 8);
-                }
+            if (bs & 2) {
+                mem[(address + 1) & 0xffff] = data >> 8;
+                if (json_trace) writes.emplace_back((address + 1) & 0xffff, data >> 8);
             }
         } else {
+            core->i_dat = 0xa500;
+            if (bs & 1) {
+                core->i_dat = (core->i_dat & 0xff00) | mem[address];
+                if (json_trace) reads.emplace_back(address, mem[address]);
+            }
+            if (bs & 2) {
+                core->i_dat = (core->i_dat & 0xff) | (mem[(address + 1) & 0xffff] << 8);
+                if (json_trace) reads.emplace_back((address + 1) & 0xffff, mem[(address + 1) & 0xffff]);
+            }
         }
     }
-    pCore->i_ack = pCore->o_bs != 0;
+    core->i_ack = 1;
+    pending = false;
     return 0;
 }
 
@@ -128,7 +178,7 @@ string getbasename(string asm_fn) {
 int parse_cmdline(int argc, char *argv[]) {
     int c;
     bool loaded = false;
-    while ((c = getopt(argc, argv, "i:j:c:")) != -1) {
+    while ((c = getopt(argc, argv, "i:j:c:w:s:")) != -1) {
         switch (c) {
             case 'i': {
                 printf("Load image '%s'\n", optarg);
@@ -143,6 +193,21 @@ int parse_cmdline(int argc, char *argv[]) {
                 json_trace = fopen(optarg, "w");
                 if (!json_trace) return -1;
                 break;
+            case 'w': {
+                char *end = nullptr;
+                unsigned long value = strtoul(optarg, &end, 10);
+                if (*end || optarg[0] == '-' || value > 10000) return -1;
+                wait_cycles = static_cast<unsigned>(value);
+                break;
+            }
+            case 's': {
+                char *end = nullptr;
+                unsigned long value = strtoul(optarg, &end, 10);
+                if (*end || optarg[0] == '-' || value > 0xffffffffUL) return -1;
+                wait_rng.seed(static_cast<unsigned>(value));
+                random_waits = true;
+                break;
+            }
             case 'c': {
                 char *end = nullptr;
                 max_cycles = strtoull(optarg, &end, 10);
@@ -173,7 +238,7 @@ int main(int argc, char *argv[]) {
     printf("prim simulator\n\n");
 
     if (parse_cmdline(argc, argv)) {
-        fprintf(stderr, "%s -i image [-j retirement.jsonl] [-c max_cycles]\n", argv[0]);
+        fprintf(stderr, "%s -i image [-j retirement.jsonl] [-c max_cycles] [-w wait_cycles] [-s seed]\n", argv[0]);
         fprintf(stderr, "  -i <image>      path to binary image\n");
         return -1;
     }
@@ -186,12 +251,13 @@ int main(int argc, char *argv[]) {
     reset();
 
     while(tickcount < max_cycles * clockcycle_ps) {
-        handle(pCore);
+        result = handle(pCore);
+        if (result) goto finish;
         // Python step() treats these as debugger markers, not instructions.
         if (json_trace && pCore->Prim->r_phase == 0 && pCore->i_ack &&
-            (pCore->i_dat == 0x22 || pCore->i_dat == 0xff)) {
+            ((pCore->i_dat & 0xff) == 0x22 || (pCore->i_dat & 0xff) == 0xff)) {
             fprintf(json_trace, "{\"kind\":\"halt\",\"pc\":%u,\"ir\":%u}\n",
-                pCore->Prim->r_pc, pCore->i_dat);
+                pCore->Prim->r_pc, pCore->i_dat & 0xff);
             goto finish;
         }
         const bool retiring = pCore->Prim->r_phase == 2;
