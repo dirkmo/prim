@@ -23,20 +23,21 @@ void opentrace(const char *vcdname) {
 }
 
 void tick() {
+    pCore->i_clk = 0;
     pCore->eval();
-    tickcount += clockcycle_ps / 4;
-    if ((tickcount % clockcycle_ps) == (clockcycle_ps/2)) {
-        pCore->i_clk = !pCore->i_clk;
-    }
+    pCore->i_clk = 1;
     pCore->eval();
+    tickcount += clockcycle_ps;
     if(pTrace) pTrace->dump(static_cast<vluint64_t>(tickcount));
+    pCore->i_clk = 0;
+    pCore->eval();
 }
 
 void reset() {
     pCore->i_reset = 1;
     pCore->i_dat = 0;
     pCore->i_ack = 0;
-    pCore->i_clk = 1;
+    pCore->i_clk = 0;
     tick();
     tick();
     pCore->i_reset = 0;
@@ -53,7 +54,7 @@ int handle(Vprim *pCore) {
             if (pCore->o_bs & 2) {
                 pCore->i_dat |= mem[(pCore->o_addr+1) & 0xffff] << 8;
             }
-            if (pCore->o_we && pCore->i_clk) {
+            if (pCore->o_we) {
                 if (pCore->o_bs & 1) {
                     mem[pCore->o_addr] = pCore->o_dat;
                 }
@@ -64,10 +65,7 @@ int handle(Vprim *pCore) {
         } else {
         }
     }
-    static bool ack_pulse = false;
-    const bool mem_ready = (pCore->o_bs != 0) && !pCore->i_clk;
-    pCore->i_ack = mem_ready && !ack_pulse;
-    ack_pulse = mem_ready;
+    pCore->i_ack = pCore->o_bs != 0;
     return 0;
 }
 
@@ -144,8 +142,7 @@ int main(int argc, char *argv[]) {
     while(tickcount < 20 * clockcycle_ps) {
         handle(pCore);
         tick();
-        printf("after-tick: phase=%d pc=%04x ir=%02x addr=%04x bs=%d i_dat=%04x i_ack=%d T=%04x N=%04x R=%04x rsp=%u\n", (int)pCore->Prim->r_phase, (unsigned)pCore->Prim->r_pc, (unsigned)pCore->Prim->r_ir, (unsigned)pCore->o_addr, (int)pCore->o_bs, (unsigned)pCore->i_dat, (int)pCore->i_ack, (unsigned)pCore->Prim->T, (unsigned)pCore->Prim->N, (unsigned)pCore->Prim->R, (unsigned)pCore->Prim->r_rsp);
-        if (pCore->Prim->r_ir == 0x22 || pCore->Prim->r_ir == 0xff) {
+        if (pCore->Prim->r_ir == 0x22 && pCore->Prim->r_phase == 0) {
             dump_state("state:");
             printf("Simulation halted on BREAK\n");
             goto finish;

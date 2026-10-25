@@ -32,12 +32,12 @@ CASES = [
     ),
     (
         'jz_zero',
-        '6 0 jz BREAK 0xfe',
-        {'pc': 0x0006, 'dsp': 0, 'rsp': 0, 'T': 0x0000, 'N': 0x0000, 'R': 0x0000},
+        '0 8 jz BREAK 0xfe',
+        {'pc': 0x0009, 'dsp': 0, 'rsp': 0, 'T': 0x0000, 'N': 0x0000, 'R': 0x0000},
     ),
     (
         'jz_nonzero',
-        '6 1 jz BREAK 0xfe',
+        '1 8 jz BREAK 0xfe',
         {'pc': 0x0006, 'dsp': 0, 'rsp': 0, 'T': 0x0000, 'N': 0x0000, 'R': 0x0000},
     ),
 ]

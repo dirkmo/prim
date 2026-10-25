@@ -117,18 +117,11 @@ begin
     end else begin
         case (r_phase)
             PHASE_FETCH:
-                if (i_ack) begin
-                    r_ir <= i_dat[7:0];
-                    `ifdef SIM
-                    if (i_dat[6:0] == OP_SIMEND) $finish();
-                    `endif
+                if (i_ack)
                     r_phase <= w_fetch_memop ? PHASE_MEMWAIT : PHASE_EXECUTE;
-                end
             PHASE_MEMWAIT:
-                if (i_ack) begin
-                    r_mem_data <= i_dat;
+                if (i_ack)
                     r_phase <= PHASE_EXECUTE;
-                end
             PHASE_EXECUTE:
                 r_phase <= PHASE_FETCH;
             default:
@@ -148,7 +141,7 @@ begin
         casez (r_ir)
             {1'b0, OP_CALL}: r_pc_next = T;
             {1'b0, OP_JP}: r_pc_next = T;
-            {1'b0, OP_JZ}: r_pc_next = (T==16'h0) ? N : pc_plus_1;
+            {1'b0, OP_JZ}: r_pc_next = (N==16'h0) ? T : pc_plus_1;
             {1'b0, OP_PUSH8}: r_pc_next = r_pc + 2;
             {1'b0, OP_PUSH}:  r_pc_next = r_pc + 3;
             default: r_pc_next = pc_plus_1;
@@ -235,7 +228,6 @@ begin
             OP_DROP,
             OP_CALL,
             OP_JP,
-            OP_JZ,
             OP_AND,
             OP_OR,
             OP_XOR,
@@ -250,6 +242,9 @@ begin
             OP_BYTE_STORE,
             OP_RDROP:
                 T <= N;
+            OP_JZ: begin
+                T <= w_stack_third;
+            end
             OP_FROM_R: begin
                 T <= R;
             end
@@ -317,8 +312,8 @@ begin
             OP_FROM_R: begin
                 N <= T;
             end
-            default:
-                N <= r_alu[15:0];
+            default: begin
+            end
         endcase
     end
 end
