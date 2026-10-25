@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 import unittest
 
-from compare import ROOT, PrimAsm, Op, compare_records
+from compare import ROOT, Prim, Memory, PrimAsm, Op, compare_records
 from control_flow_regressions import CASES
 
 parser = argparse.ArgumentParser()
@@ -19,7 +19,9 @@ RTL = ROOT / 'rtl'
 TIMINGS = ((1, 1, 3), (2, 2, 12), (3, 4, 19))
 
 
-class SramChecks(unittest.TestCase):
+class SramHarness:
+    with_uart = False
+
     @classmethod
     def setUpClass(cls):
         cls.temporary = tempfile.TemporaryDirectory(prefix='prim-sram-')
@@ -33,7 +35,9 @@ class SramChecks(unittest.TestCase):
                 '-P', f'tb_memory.READ_CYCLES={read}',
                 '-P', f'tb_memory.WRITE_CYCLES={write}', '-o', str(simulator),
                 '-P', f'tb_memory.SRAM_DELAY_NS={delay}',
+                '-P', f'tb_memory.WITH_UART={int(cls.with_uart)}',
                 str(RTL / 'tb_memory.sv'), str(RTL / 'memory.v'), str(RTL / 'prim.v'),
+                str(RTL / 'uart_tx.v'), str(RTL / 'memory_io.v'),
             ], check=True, capture_output=True, text=True, timeout=30)
             cls.simulators[read, write, delay] = simulator
 
@@ -49,12 +53,29 @@ class SramChecks(unittest.TestCase):
         memory[:len(image)] = image
         image_path = self.directory / 'image.hex'
         trace_path = self.directory / 'retirement.jsonl'
+        uart_path = self.directory / 'uart.hex'
         image_path.write_text(''.join(f'{memory[i+1]:02x}{memory[i]:02x}\n'
                                       for i in range(0, 65536, 2)))
-        output = self.run_simulator(timing, '+cpu', f'+image={image_path}', f'+trace={trace_path}')
+        output = self.run_simulator(timing, '+cpu', f'+image={image_path}', f'+trace={trace_path}',
+                                    f'+uart={uart_path}')
         self.assertIn('PASS CPU SRAM integration', output)
         records = [json.loads(line) for line in trace_path.read_text().splitlines()]
-        compare_records(image, records)
+        compare_records(image, records, uart=self.with_uart)
+        if self.with_uart:
+            memory = Memory(image, uart=True)
+            cpu = Prim(memory)
+            for _ in range(1000):
+                if memory.read8(cpu._pc) in (Op.BREAK, Op.SIMEND):
+                    break
+                cpu.step()
+            else:
+                self.fail('Python UART reference did not halt')
+            actual = bytes(int(line, 16) for line in uart_path.read_text().splitlines())
+            self.assertEqual(actual, bytes(memory.tx))
+            return actual
+
+
+class SramChecks(SramHarness, unittest.TestCase):
 
     def test_controller_transactions_and_bus_timing(self):
         # All masks, aligned/odd/boundary addresses, adjacent-byte preservation,

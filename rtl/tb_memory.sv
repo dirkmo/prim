@@ -2,10 +2,12 @@
 // Whole-word asynchronous SRAM, with delayed bus release and write timing checks.
 module tb_memory;
 parameter integer READ_CYCLES = 2, WRITE_CYCLES = 2, SRAM_DELAY_NS = 3;
+parameter integer WITH_UART = 0, CLKS_PER_BIT = 4;
 reg clk = 0;
 always #10 clk = ~clk;
 reg reset = 1;
 reg cpu_mode = 0;
+reg halted = 0;
 reg [15:0] addr = 0, data = 0;
 reg [1:0] bs = 0;
 reg we = 0;
@@ -13,18 +15,33 @@ wire [15:0] cpu_addr, cpu_data, cpu_read, ram_addr;
 wire [1:0] cpu_bs;
 wire cpu_we, ack, cs_n, oe_n, we_n;
 wire [15:0] ram_data;
+wire serial_tx, uart_busy, controller_drive;
 wire [15:0] request_addr = cpu_mode ? cpu_addr : addr;
 wire [15:0] request_data = cpu_mode ? cpu_data : data;
 wire [1:0] request_bs = cpu_mode ? cpu_bs : bs;
 wire request_we = cpu_mode ? cpu_we : we;
 
-Prim cpu(.i_clk(clk), .i_reset(reset || !cpu_mode), .o_addr(cpu_addr), .o_dat(cpu_data),
+Prim cpu(.i_clk(clk), .i_reset(reset || !cpu_mode || halted), .o_addr(cpu_addr), .o_dat(cpu_data),
          .i_dat(cpu_read), .o_bs(cpu_bs), .o_we(cpu_we), .i_ack(ack), .i_irq(1'b0));
+generate if (WITH_UART) begin: io
+memory_io #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES),
+            .CLKS_PER_BIT(CLKS_PER_BIT)) dut(
+    .i_clk(clk), .i_reset(reset), .i_addr(request_addr), .i_cpu_to_mem(request_data),
+    .o_mem_to_cpu(cpu_read), .i_bs(request_bs), .i_we(request_we), .o_ack(ack),
+    .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(cs_n),
+    .ram_oe_n(oe_n), .ram_we_n(we_n), .o_tx(serial_tx));
+assign controller_drive = dut.sram.drive;
+assign uart_busy = !dut.uart.o_ready;
+end else begin: flat
 memory #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) dut(
     .i_clk(clk), .i_reset(reset), .i_addr(request_addr), .i_cpu_to_mem(request_data),
     .o_mem_to_cpu(cpu_read), .i_bs(request_bs), .i_we(request_we), .o_ack(ack),
     .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(cs_n),
     .ram_oe_n(oe_n), .ram_we_n(we_n));
+assign controller_drive = dut.drive;
+assign serial_tx = 1'b1;
+assign uart_busy = 1'b0;
+end endgenerate
 
 reg [15:0] sram [0:32767];
 reg [7:0] reference [0:65535];
@@ -54,7 +71,7 @@ always @(ram_addr or ram_data) begin
 end
 always @(negedge we_n) begin
     if (!reset) begin
-        if (cs_n || !oe_n || !dut.drive) $fatal(1, "Invalid write bus direction");
+        if (cs_n || !oe_n || !controller_drive) $fatal(1, "Invalid write bus direction");
         if ((^ram_data) === 1'bx) $fatal(1, "Invalid SRAM write data");
         if ($time - last_bus_change < 19) $fatal(1, "Missing write setup time");
         write_pending = 1;
@@ -81,7 +98,7 @@ always @(posedge clk) begin
     if (!reset && !cs_n && !oe_n && (^ram_data) === 1'bx)
         $fatal(1, "Unknown read data or SRAM/FPGA bus contention");
     #1;
-    if (!reset && dut.drive && !oe_n) $fatal(1, "SRAM/FPGA bus contention");
+    if (!reset && controller_drive && !oe_n) $fatal(1, "SRAM/FPGA bus contention");
 end
 
 function [15:0] expected_word(input integer word_index);
@@ -93,6 +110,28 @@ endfunction
 function integer trace_value(input [15:0] value);
     trace_value = ((^value) === 1'bx) ? 65536 : value;
 endfunction
+
+reg [7:0] expected_tx [0:4095];
+integer expected_count = 0, received_count = 0;
+integer uart_file = 0, serial_bit;
+reg [7:0] serial_byte;
+string uart_path;
+always @(negedge serial_tx) begin
+    if (WITH_UART && !reset) begin
+        #(CLKS_PER_BIT * 10);
+        if (serial_tx !== 0) $fatal(1, "Invalid UART start bit");
+        for (serial_bit=0; serial_bit<8; serial_bit=serial_bit+1) begin
+            #(CLKS_PER_BIT * 20);
+            serial_byte[serial_bit] = serial_tx;
+        end
+        #(CLKS_PER_BIT * 20);
+        if (serial_tx !== 1) $fatal(1, "Invalid UART stop bit");
+        if (cpu_mode) $fwrite(uart_file, "%02x\n", serial_byte);
+        else if (received_count >= expected_count || serial_byte !== expected_tx[received_count])
+            $fatal(1, "Wrong/duplicate UART byte %h at index %0d", serial_byte, received_count);
+        received_count = received_count + 1;
+    end
+end
 
 task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
     reg [15:0] expected;
@@ -106,6 +145,12 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
         read_count = (b == 3 && a[0]) ? 2 : 1;
         write_count = wr ? read_count : 0;
         if (wr && b == 3 && !a[0]) read_count = 0;
+        if (WITH_UART && wr && ((b[0] && a==16'hffff) || (b[1] && a==16'hfffe))) begin
+            expected_tx[expected_count] = a==16'hffff ? d[7:0] : d[15:8];
+            expected_count = expected_count + 1;
+            read_count = b==3 ? 1 : 0;
+            write_count = read_count;
+        end
         n = 0;
         do begin
             @(posedge clk);
@@ -118,8 +163,8 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
         if (!wr && cpu_read !== expected)
             $fatal(1, "Read mismatch addr=%h bs=%b actual=%h expected=%h", a, b, cpu_read, expected);
         if (wr) begin
-            if (b[0]) reference[a] = d[7:0];
-            if (b[1]) reference[(a+1)&65535] = d[15:8];
+            if (b[0] && !(WITH_UART && a==16'hffff)) reference[a] = d[7:0];
+            if (b[1] && !(WITH_UART && a==16'hfffe)) reference[(a+1)&65535] = d[15:8];
         end
         if (sram[a>>1] !== expected_word(a>>1) ||
             sram[((a+1)&65535)>>1] !== expected_word(((a+1)&65535)>>1))
@@ -140,13 +185,21 @@ reg [7:0] ir;
 always @(posedge clk) begin
     cycles = cycles + 1;
     if (cycles > 100000) $fatal(1, "Simulation timeout");
-    if (cpu_mode && !reset) begin
+    if (cpu_mode && halted && !uart_busy) begin
+        if (uart_file) $fclose(uart_file);
+        $display("PASS CPU SRAM integration");
+        $finish;
+    end
+    if (cpu_mode && !reset && !halted) begin
         if (ack && |cpu_bs) begin
             if (cpu.r_phase == 0 && (cpu_read[7:0] == 8'h22 || cpu_read[7:0] == 8'hff)) begin
                 $fwrite(trace_file, "{\"kind\":\"halt\",\"pc\":%0d,\"ir\":%0d}\n", cpu.r_pc, cpu_read[7:0]);
                 $fclose(trace_file);
-                $display("PASS CPU SRAM integration");
-                $finish;
+                halted = 1;
+                if (!WITH_UART) begin
+                    $display("PASS CPU SRAM integration");
+                    $finish;
+                end
             end
             if (cpu_bs[0]) begin
                 if (cpu_we) pending_writes = {pending_writes, pending_writes == "" ? "" : ",",
@@ -190,6 +243,11 @@ initial begin
         $readmemh(image_path, sram);
         trace_file = $fopen(trace_path, "w");
         if (!trace_file) $fatal(1, "Cannot open trace");
+        if (WITH_UART) begin
+            if (!$value$plusargs("uart=%s", uart_path)) $fatal(1, "UART path required");
+            uart_file = $fopen(uart_path, "w");
+            if (!uart_file) $fatal(1, "Cannot open UART output");
+        end
     end
     repeat(2) @(negedge clk);
     reset = 0;
@@ -207,6 +265,7 @@ initial begin
             access(random_addr, random_data, 1+(i%3), i%2);
         end
         // Reset discards controller state, retaining external SRAM contents.
+        wait(!uart_busy);
         @(negedge clk); bs=0; reset=1;
         #1;
         if (!cs_n || !oe_n || !we_n || ack || ram_data !== 16'hzzzz)
@@ -223,6 +282,8 @@ initial begin
         access(16'hffff, 0, 3, 0);
         @(negedge clk); bs=0;
         repeat(3) @(negedge clk);
+        wait(!uart_busy);
+        if (WITH_UART && received_count != expected_count) $fatal(1, "Missing UART bytes");
         if (ack || !cs_n || !oe_n || !we_n || ram_data !== 16'hzzzz)
             $fatal(1, "SRAM bus active while idle");
         for (i=0; i<32768; i=i+1)

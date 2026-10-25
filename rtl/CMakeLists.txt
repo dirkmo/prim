@@ -55,6 +55,9 @@ add_test(NAME memory_handshake_checks
 add_test(NAME sram_controller_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test_sram.py
         --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
+add_test(NAME uart_io_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test_io.py
+        --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
 
 
 # Add the Verilated circuit to the target

@@ -17,13 +17,15 @@ from control_flow_regressions import CASES
 
 
 class Memory(MemoryIf):
-    """Shared test contract: 64 KiB flat RAM, little endian, wrapped addresses."""
+    """64 KiB little-endian RAM; optionally map writes at FFFF to UART."""
 
-    def __init__(self, image):
+    def __init__(self, image, uart=False):
         self.data = bytearray([0xff]) * 65536
         self.data[:len(image)] = image
         self.writes = []
         self.reads = []
+        self.uart = uart
+        self.tx = []
 
     def read8(self, addr):
         addr &= 0xffff
@@ -36,7 +38,10 @@ class Memory(MemoryIf):
 
     def write8(self, addr, value):
         addr, value = addr & 0xffff, value & 0xff
-        self.data[addr] = value
+        if self.uart and addr == 0xffff:
+            self.tx.append(value)
+        else:
+            self.data[addr] = value
         self.writes.append([addr, value])
 
     def write16(self, addr, value):
@@ -75,9 +80,9 @@ def compare(image, simulator, max_steps=1000, wait_cycles=0, wait_seed=None):
     return compare_records(image, records, max_steps, run.returncode)
 
 
-def compare_records(image, records, max_steps=1000, exit_code=0):
+def compare_records(image, records, max_steps=1000, exit_code=0, uart=False):
     """Check retirement records from either the C++ or the SRAM simulation."""
-    memory = Memory(image)
+    memory = Memory(image, uart=uart)
     cpu = Prim(memory)
     ds_depth = rs_depth = 0
 
