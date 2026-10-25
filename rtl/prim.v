@@ -35,7 +35,8 @@ reg [15:0] r_dstack[0:2**DSS-1] /* verilator public */;
 reg [15:0] r_rstack[0:2**RSS-1] /* verilator public */;
 
 //
-wire [15:0] THIRD = r_dstack[r_dsp]; // third element
+wire [DSS-1:0] w_dsp_dec2_amt = {{(DSS-2){1'b0}}, 2'b10};
+wire [15:0] THIRD = r_dstack[(r_dsp - w_dsp_dec2_amt) & ((1 << DSS)-1)]; // third element
 
 // pop from stack
 wire w_popop;
@@ -174,29 +175,71 @@ begin
     end
 end
 
+// stack helpers for stack-depth management in the execution phase.
+wire [DSS-1:0] w_dsp_dec1 = r_dsp - {{(DSS-1){1'b0}}, 1'b1};
+wire [DSS-1:0] w_dsp_dec2 = r_dsp - w_dsp_dec2_amt;
+wire [DSS-1:0] w_dsp_inc1 = r_dsp + {{(DSS-1){1'b0}}, 1'b1};
+wire [DSS-1:0] w_second_idx = (r_dsp - {{(DSS-1){1'b0}}, 1'b1}) & ((1 << DSS)-1);
+wire [DSS-1:0] w_third_idx  = (r_dsp - w_dsp_dec2_amt) & ((1 << DSS)-1);
+wire [15:0] w_stack_second = r_dstack[w_second_idx];
+wire [15:0] w_stack_third  = r_dstack[w_third_idx];
+
 // top of data stack
 always @(posedge i_clk)
 begin
     if (i_reset) begin
         T <= 16'h00;
     end else if (w_phase_execute) begin
-        if (w_popop) begin
-            T <= N;
-        end else if (w_pushop) begin
-            T <= i_dat;
-        end else begin
-        end
-
-        // case (r_ir[6:0])
-        //     OP_JP: T <= N;
-        //     OP_JZ: T <= N;
-        //     OP_PUSH8: begin T <= i_dat; $display("push8 %x", i_dat); end
-        //     OP_PUSH: begin T <= i_dat; $display("push %x", i_dat); end
-        //     OP_SWAP: T <= N;
-        //     OP_ROT: T <= THIRD;
-        //     OP_NROT: T <= N;
-        //     default: begin T <= r_alu[15:0]; $display("alu: %x", r_alu); end
-        // endcase
+        case (r_ir[6:0])
+            OP_PUSH,
+            OP_PUSH8: begin
+                T <= i_dat;
+            end
+            OP_DUP: begin
+                T <= T;
+            end
+            OP_SWAP: begin
+                T <= N;
+            end
+            OP_OVER: begin
+                T <= N;
+            end
+            OP_NIP: begin
+                T <= N;
+            end
+            OP_ROT: begin
+                T <= N;
+            end
+            OP_NROT: begin
+                T <= w_stack_third;
+            end
+            OP_DROP,
+            OP_CALL,
+            OP_JP,
+            OP_JZ,
+            OP_AND,
+            OP_OR,
+            OP_XOR,
+            OP_NOT,
+            OP_ADD,
+            OP_SUB,
+            OP_LTS,
+            OP_LTU,
+            OP_TO_R,
+            OP_INT,
+            OP_FETCH,
+            OP_BYTE_FETCH,
+            OP_STORE,
+            OP_BYTE_STORE,
+            OP_RDROP:
+                T <= N;
+            default:
+                if (r_ir[6:0] == OP_CARRY) begin
+                    T <= {15'h0, r_carry};
+                end else begin
+                    T <= r_alu[15:0];
+                end
+        endcase
     end else if (w_phase_fetch) begin
         $display("T: %x, N: %x, 3rd: %x, R: %x", T, N, THIRD, R);
     end
@@ -208,23 +251,117 @@ begin
     if (i_reset) begin
         N <= 16'h00;
     end else if (w_phase_execute) begin
-        if (w_popop) begin
-            N <= THIRD;
-        end else if (w_pushop) begin
-            N <= T;
-        end else begin
-        end
+        case (r_ir[6:0])
+            OP_PUSH,
+            OP_PUSH8: begin
+                N <= T;
+            end
+            OP_DUP: begin
+                N <= T;
+            end
+            OP_SWAP: begin
+                N <= T;
+            end
+            OP_OVER: begin
+                N <= T;
+            end
+            OP_NIP: begin
+                N <= w_stack_third;
+            end
+            OP_ROT: begin
+                N <= w_stack_third;
+            end
+            OP_NROT: begin
+                N <= T;
+            end
+            OP_DROP,
+            OP_CALL,
+            OP_JP,
+            OP_JZ,
+            OP_AND,
+            OP_OR,
+            OP_XOR,
+            OP_NOT,
+            OP_ADD,
+            OP_SUB,
+            OP_LTS,
+            OP_LTU,
+            OP_TO_R,
+            OP_INT,
+            OP_FETCH,
+            OP_BYTE_FETCH,
+            OP_STORE,
+            OP_BYTE_STORE,
+            OP_RDROP:
+                N <= w_stack_third;
+            default:
+                N <= r_alu[15:0];
+        endcase
     end
 end
 
-// 3rd on data stack
-//always @(posedge i_clk)
-//begin
-//    if (w_phase_execute) begin
-//        case (r_ir[6:0])
-//        endcase
-//    end
-//end
+// 3rd on data stack / stack-depth bookkeeping
+always @(posedge i_clk)
+begin
+    if (i_reset) begin
+        r_dstack[0] <= 16'h0;
+        r_dstack[1] <= 16'h0;
+        r_dstack[2] <= 16'h0;
+        r_dstack[3] <= 16'h0;
+    end else if (w_phase_execute) begin
+        // preserve the virtual stack order for later third-element access.
+        case (r_ir[6:0])
+            OP_PUSH,
+            OP_PUSH8: begin
+                r_dstack[w_dsp_inc1] <= T;
+            end
+            OP_DROP,
+            OP_NIP,
+            OP_CALL,
+            OP_JP,
+            OP_JZ,
+            OP_AND,
+            OP_OR,
+            OP_XOR,
+            OP_NOT,
+            OP_ADD,
+            OP_SUB,
+            OP_LTS,
+            OP_LTU,
+            OP_TO_R,
+            OP_INT,
+            OP_FETCH,
+            OP_BYTE_FETCH,
+            OP_STORE,
+            OP_BYTE_STORE,
+            OP_RDROP: begin
+                r_dstack[r_dsp] <= N;
+            end
+            OP_DUP: begin
+                r_dstack[w_dsp_inc1] <= T;
+            end
+            OP_SWAP: begin
+                r_dstack[r_dsp] <= N;
+                r_dstack[w_dsp_dec1] <= T;
+            end
+            OP_OVER: begin
+                r_dstack[w_dsp_inc1] <= N;
+            end
+            OP_ROT: begin
+                r_dstack[r_dsp] <= N;
+                r_dstack[w_dsp_dec1] <= w_stack_third;
+                r_dstack[w_dsp_dec2] <= T;
+            end
+            OP_NROT: begin
+                r_dstack[r_dsp] <= w_stack_third;
+                r_dstack[w_dsp_dec1] <= T;
+                r_dstack[w_dsp_dec2] <= N;
+            end
+            default: begin
+            end
+        endcase
+    end
+end
 
 // top of return stack
 always @(posedge i_clk)
@@ -245,11 +382,40 @@ begin
     if (i_reset) begin
         r_dsp <= 'h00;
     end else if (w_phase_execute) begin
-        if (w_popop) begin
-            r_dsp <= r_dsp - ((r_ir[6:0] == OP_JZ) ? 'h2 : 'h1);
-        end else if (w_pushop) begin
-            r_dsp <= r_dsp + 'h1;
-        end
+        case (r_ir[6:0])
+            OP_PUSH,
+            OP_PUSH8,
+            OP_DUP,
+            OP_OVER: begin
+                r_dsp <= w_dsp_inc1;
+            end
+            OP_DROP,
+            OP_NIP,
+            OP_CALL,
+            OP_JP,
+            OP_AND,
+            OP_OR,
+            OP_XOR,
+            OP_NOT,
+            OP_ADD,
+            OP_SUB,
+            OP_LTS,
+            OP_LTU,
+            OP_TO_R,
+            OP_INT,
+            OP_FETCH,
+            OP_BYTE_FETCH,
+            OP_STORE,
+            OP_BYTE_STORE,
+            OP_RDROP: begin
+                r_dsp <= w_dsp_dec1;
+            end
+            OP_JZ: begin
+                r_dsp <= w_dsp_dec2;
+            end
+            default: begin
+            end
+        endcase
     end
 end
 
