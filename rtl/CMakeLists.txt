@@ -22,6 +22,11 @@ if(APPLE)
 endif()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_program(IVERILOG_EXECUTABLE iverilog)
+find_program(VVP_EXECUTABLE vvp)
+if(NOT IVERILOG_EXECUTABLE OR NOT VVP_EXECUTABLE)
+    message(FATAL_ERROR "Icarus Verilog (iverilog and vvp) is required for SRAM controller tests")
+endif()
 
 find_package(VERILATOR HINTS $ENV{VERILATOR_ROOT} ${VERILATOR_ROOT})
 if (NOT verilator_FOUND)
@@ -47,6 +52,9 @@ add_test(NAME comparison_checks
 add_test(NAME memory_handshake_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test_memory.py
         --simulator $<TARGET_FILE:simulator>)
+add_test(NAME sram_controller_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test_sram.py
+        --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
 
 
 # Add the Verilated circuit to the target

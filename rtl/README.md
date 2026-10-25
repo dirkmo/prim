@@ -1,6 +1,7 @@
 # RTL simulation
 
-Requirements: CMake, Verilator, a C++17 compiler, and Python 3. On macOS,
+Requirements: CMake, Verilator, Icarus Verilog (`iverilog` and `vvp`),
+a C++17 compiler, and Python 3. On macOS,
 install the Xcode Command Line Tools. CMake falls back to the active SDK's
 libc++ headers if the compiler cannot find them automatically.
 
@@ -146,5 +147,66 @@ CTest includes all 45 baseline programs at five latency settings, odd/wrapped
 word accesses, repeated accesses, self-modifying code, memory instructions with
 the return bit, and 257-cycle stalls.
 
-External interrupts and the physical RAM controller in `memory.v` are not yet
-validated. These handshake tests use the C++ memory model.
+These handshake tests use the C++ memory model. The physical controller has
+separate tests described below; external interrupts remain outside the tests.
+
+## Whole-word SRAM controller
+
+`memory.v` adapts the CPU bus to asynchronous SRAM with no FPGA-controlled byte
+enables, as required for the iCE40HX8K-EVB connection. Board references:
+[Olimex board documentation](https://www.olimex.com/Products/FPGA/iCE40/iCE40HX8K-EVB/)
+and [Rev B1 schematic](https://github.com/OLIMEX/iCE40HX8K-EVB/blob/master/HARDWARE/REV-B1/iCE40HX8K-EVB_Rev_B1.pdf).
+
+| CPU operation | Physical SRAM operations |
+|---------------|--------------------------|
+| Byte read | One word read, select the byte |
+| Aligned word read | One word read |
+| Odd-address word read | Two word reads, combine bytes |
+| Byte write | One word read and one full-word write |
+| Aligned word write | One full-word write, no read |
+| Odd-address word write | Two word reads and two full-word writes |
+
+Read-modify-write preserves the unselected neighbouring bytes. CPU BS=01
+selects the byte at `i_addr` in bits 7:0; BS=10 selects only `i_addr+1` in bits
+15:8; BS=11 selects both. All address arithmetic wraps within the CPU's 64 KiB.
+The controller uses one shared 16-bit data buffer and relies on stable CPU
+inputs until ACK, avoiding request registers. SRAM contents and the data buffer
+have no reset; only controller state resets.
+
+The interface now includes `i_reset` and active-low `ram_cs_n`, alongside OE
+and WE. Connect the CPU reset to both CPU and controller. `ram_addr` is a
+**word** address: its low 15 bits address the first 64 KiB of SRAM, and bit 15
+is zero. Connect it to the SRAM address lines and tie any remaining upper
+address lines low; bank switching is not implemented. Both physical byte
+enables remain asserted as on the board. Instantiate the bidirectional
+`ram_data` connection at FPGA I/O, not as an internal tri-state bus.
+
+`READ_CYCLES` and `WRITE_CYCLES` are positive integer parameters, both defaulting
+to 2. A read holds OE active for READ_CYCLES clocks; a write holds WE active for
+WRITE_CYCLES clocks. One clock each is reserved for read-to-write bus release,
+write setup, write hold, and FPGA bus release. ACK follows the last operation
+with the SRAM controls inactive. The controller accepts consecutive CPU
+requests without requiring BS to go low between them.
+
+These cycle counts must meet SRAM access, output-disable, pulse, setup, and
+hold times at the chosen clock frequency, including FPGA I/O/routing delays.
+They have not been verified by board place-and-route or a hardware test.
+Reset disables SRAM controls and releases the bus; resetting during an active
+write does not guarantee atomic preservation of that SRAM word.
+
+Run the physical controller tests directly:
+
+```sh
+python3 rtl/test_sram.py
+```
+
+CTest also includes them as `sram_controller_checks`. The four-state Icarus
+model supports only full 16-bit SRAM writes, delays SRAM data and bus release,
+and checks write setup/pulse/hold times and bus contention. Three configurations
+exercise read/write cycles of 1/1, 2/2, and 3/4, with model delays of 3, 12, and
+19 ns at a 20 ns clock period. Controller tests cover all masks, neighbouring
+bytes, wrapping, 512 random requests per configuration, reset, and idle bus
+release. CPU + controller + SRAM tests run all 45 baseline programs and extra
+memory/return/self-modifying cases against Python after every instruction.
+Unused stack cells stay undefined in this simulation; unknown occupied cells
+are reported as mismatches rather than silently treated as zero.

@@ -55,9 +55,6 @@ def compare(image, simulator, max_steps=1000, wait_cycles=0, wait_seed=None):
         raise ValueError('wait_cycles must be in 0..10000')
     if wait_seed is not None and not 0 <= wait_seed <= 0xffffffff:
         raise ValueError('wait_seed must be an unsigned 32-bit integer')
-    memory = Memory(image)
-    cpu = Prim(memory)
-    ds_depth = rs_depth = 0
     with tempfile.TemporaryDirectory(prefix='prim-compare-') as directory:
         directory = Path(directory)
         binary, trace = directory / 'image.bin', directory / 'retirement.jsonl'
@@ -74,6 +71,15 @@ def compare(image, simulator, max_steps=1000, wait_cycles=0, wait_seed=None):
         if run.returncode not in (0, 1) or not trace.exists():
             raise RuntimeError(f'RTL simulator failed ({run.returncode})\n{run.stdout[-3000:]}\n{run.stderr}')
         records = [json.loads(line) for line in trace.read_text().splitlines()]
+
+    return compare_records(image, records, max_steps, run.returncode)
+
+
+def compare_records(image, records, max_steps=1000, exit_code=0):
+    """Check retirement records from either the C++ or the SRAM simulation."""
+    memory = Memory(image)
+    cpu = Prim(memory)
+    ds_depth = rs_depth = 0
 
     steps = 0
     for record in records:
@@ -123,7 +129,7 @@ def compare(image, simulator, max_steps=1000, wait_cycles=0, wait_seed=None):
         equal('rs', record['rs'][:rs_depth],
               [cpu._rs[(cpu._rsp - i) % 16] for i in range(rs_depth)])
         steps += 1
-    raise RuntimeError(f'RTL trace ended without a BREAK/SIMEND marker (exit {run.returncode})')
+    raise RuntimeError(f'RTL trace ended without a BREAK/SIMEND marker (exit {exit_code})')
 
 
 def main():
