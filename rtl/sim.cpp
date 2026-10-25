@@ -64,7 +64,10 @@ int handle(Vprim *pCore) {
         } else {
         }
     }
-    pCore->i_ack = (pCore->o_bs != 0) && !pCore->i_clk;
+    static bool ack_pulse = false;
+    const bool mem_ready = (pCore->o_bs != 0) && !pCore->i_clk;
+    pCore->i_ack = mem_ready && !ack_pulse;
+    ack_pulse = mem_ready;
     return 0;
 }
 
@@ -110,6 +113,18 @@ int parse_cmdline(int argc, char *argv[]) {
 }
 
 
+static void dump_state(const char *prefix) {
+    printf("%s pc=%04x dsp=%u rsp=%u T=%04x N=%04x R=%04x ir=%02x\n",
+           prefix,
+           static_cast<unsigned>(pCore->Prim->r_pc),
+           static_cast<unsigned>(pCore->Prim->r_dsp),
+           static_cast<unsigned>(pCore->Prim->r_rsp),
+           static_cast<unsigned>(pCore->Prim->T),
+           static_cast<unsigned>(pCore->Prim->N),
+           static_cast<unsigned>(pCore->Prim->R),
+           static_cast<unsigned>(pCore->Prim->r_ir));
+}
+
 int main(int argc, char *argv[]) {
     printf("prim simulator\n\n");
 
@@ -129,11 +144,20 @@ int main(int argc, char *argv[]) {
     while(tickcount < 20 * clockcycle_ps) {
         handle(pCore);
         tick();
+        printf("after-tick: phase=%d pc=%04x ir=%02x addr=%04x bs=%d i_dat=%04x i_ack=%d T=%04x N=%04x R=%04x rsp=%u\n", (int)pCore->Prim->r_phase, (unsigned)pCore->Prim->r_pc, (unsigned)pCore->Prim->r_ir, (unsigned)pCore->o_addr, (int)pCore->o_bs, (unsigned)pCore->i_dat, (int)pCore->i_ack, (unsigned)pCore->Prim->T, (unsigned)pCore->Prim->N, (unsigned)pCore->Prim->R, (unsigned)pCore->Prim->r_rsp);
+        if (pCore->Prim->r_ir == 0x22 || pCore->Prim->r_ir == 0xff) {
+            dump_state("state:");
+            printf("Simulation halted on BREAK\n");
+            goto finish;
+        }
         if(Verilated::gotFinish()) {
             printf("Simulation finished\n");
             goto finish;
         }
     }
+
+    dump_state("state:");
+    printf("Simulation timeout\n");
 
 finish:
     pCore->final();

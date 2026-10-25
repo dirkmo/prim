@@ -62,8 +62,10 @@ class PrimAsm:
         return sign*num
 
     def tokenize(line):
-        tok = line.split(" ")
-        for i,t in enumerate(tok):
+        tok = [t for t in line.split() if t != ""]
+        for i, t in enumerate(tok):
+            if not t:
+                continue
             if t[0] in [";", "#"]:
                 tok = tok[0:i]
                 break

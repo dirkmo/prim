@@ -52,8 +52,7 @@ wire w_phase_fetch = (r_phase == PHASE_FETCH);
 wire w_phase_execute = (r_phase == PHASE_EXECUTE);
 wire w_phase_memop = (r_phase == PHASE_MEMWAIT);
 
-//
-reg r_next_is_memop;
+reg [15:0] r_mem_data;
 
 // alu
 reg [16:0] r_alu;
@@ -101,10 +100,15 @@ end
 // r_phase
 // Strict 3-phase flow:
 //   FETCH -> (optional MEMWAIT) -> EXECUTE -> FETCH
-// Memory instructions always stall one cycle in MEMWAIT after fetch so the
-// immediate / operand read or write can complete before the execute phase runs.
-wire w_fetch_complete = w_phase_fetch && i_ack;
-wire w_memwait_complete = w_phase_memop && i_ack;
+// The phase transition is driven together with the fetch latch so the decision
+// to enter MEMWAIT is based on the opcode that was just fetched, not a stale
+// value from a separate combinational path.
+wire w_fetch_memop = (i_dat[6:0] == OP_PUSH) ||
+                    (i_dat[6:0] == OP_PUSH8) ||
+                    (i_dat[6:0] == OP_BYTE_FETCH) ||
+                    (i_dat[6:0] == OP_FETCH) ||
+                    (i_dat[6:0] == OP_BYTE_STORE) ||
+                    (i_dat[6:0] == OP_STORE);
 
 always @(posedge i_clk)
 begin
@@ -113,11 +117,18 @@ begin
     end else begin
         case (r_phase)
             PHASE_FETCH:
-                if (w_fetch_complete)
-                    r_phase <= r_next_is_memop ? PHASE_MEMWAIT : PHASE_EXECUTE;
+                if (i_ack) begin
+                    r_ir <= i_dat[7:0];
+                    `ifdef SIM
+                    if (i_dat[6:0] == OP_SIMEND) $finish();
+                    `endif
+                    r_phase <= w_fetch_memop ? PHASE_MEMWAIT : PHASE_EXECUTE;
+                end
             PHASE_MEMWAIT:
-                if (w_memwait_complete)
+                if (i_ack) begin
+                    r_mem_data <= i_dat;
                     r_phase <= PHASE_EXECUTE;
+                end
             PHASE_EXECUTE:
                 r_phase <= PHASE_FETCH;
             default:
@@ -131,15 +142,18 @@ reg [15:0] r_pc_next;
 wire [15:0] pc_plus_1 = r_pc + 1'd1;
 always @(*)
 begin
-    casez (r_ir)
-        {1'b0, OP_CALL}: r_pc_next = T;
-        {1'b0, OP_JP}: r_pc_next = T;
-        {1'b0, OP_JZ}: r_pc_next = (T==16'h0) ? N : pc_plus_1;
-        {1'b0, OP_PUSH8}: if (r_ir[7]) r_pc_next = T; else r_pc_next = r_pc + 2;
-        {1'b0, OP_PUSH}:  if (r_ir[7]) r_pc_next = T; else r_pc_next = r_pc + 3;
-        {1'b1, 7'b???????}: r_pc_next = R;
-        default: r_pc_next = pc_plus_1;
-    endcase
+    if (r_ir[7]) begin
+        r_pc_next = R;
+    end else begin
+        casez (r_ir)
+            {1'b0, OP_CALL}: r_pc_next = T;
+            {1'b0, OP_JP}: r_pc_next = T;
+            {1'b0, OP_JZ}: r_pc_next = (T==16'h0) ? N : pc_plus_1;
+            {1'b0, OP_PUSH8}: r_pc_next = r_pc + 2;
+            {1'b0, OP_PUSH}:  r_pc_next = r_pc + 3;
+            default: r_pc_next = pc_plus_1;
+        endcase
+    end
 end
 
 always @(posedge i_clk)
@@ -150,6 +164,7 @@ begin
         // PC is advanced only after the instruction has fully completed its
         // fetch / memory wait sequence. This keeps immediate operands and memory
         // transactions aligned with the execute phase.
+        $display("EXEC pc=%0d ir=%02x next=%04x T=%04x N=%04x R=%04x dsp=%0d rsp=%0d", r_pc, r_ir, r_pc_next, T, N, R, r_dsp, r_rsp);
         r_pc <= r_pc_next;
     end
 end
@@ -159,19 +174,17 @@ always @(posedge i_clk)
 begin
     if (i_reset) begin
         r_ir <= 8'h00;
-        r_next_is_memop <= 1'b0;
+        r_mem_data <= 16'h0000;
     end else if (w_phase_fetch && i_ack) begin
         r_ir <= i_dat[7:0];
-        r_next_is_memop <= (i_dat[6:0] == OP_PUSH) ||
-                           (i_dat[6:0] == OP_PUSH8) ||
-                           (i_dat[6:0] == OP_BYTE_FETCH) ||
-                           (i_dat[6:0] == OP_FETCH) ||
-                           (i_dat[6:0] == OP_BYTE_STORE) ||
-                           (i_dat[6:0] == OP_STORE);
-        $display("pc: %04x, ir: %02x", r_pc, i_dat);
         `ifdef SIM
         if (i_dat[6:0] == OP_SIMEND) $finish();
         `endif
+    end else if (w_phase_memop && i_ack) begin
+        // Latch the immediate or memory operand once in MEMWAIT and consume it in
+        // EXECUTE. Doing so avoids using stale fetched bytes when the next control
+        // flow instruction sees the top-of-stack.
+        r_mem_data <= i_dat;
     end
 end
 
@@ -193,13 +206,13 @@ begin
         case (r_ir[6:0])
             OP_PUSH,
             OP_PUSH8: begin
-                T <= i_dat;
+                T <= r_mem_data;
             end
             OP_FETCH: begin
-                T <= i_dat;
+                T <= r_mem_data;
             end
             OP_BYTE_FETCH: begin
-                T <= {8'h00, i_dat[7:0]};
+                T <= {8'h00, r_mem_data[7:0]};
             end
             OP_DUP: begin
                 T <= T;
@@ -237,6 +250,9 @@ begin
             OP_BYTE_STORE,
             OP_RDROP:
                 T <= N;
+            OP_FROM_R: begin
+                T <= R;
+            end
             default:
                 if (r_ir[6:0] == OP_CARRY) begin
                     T <= {15'h0, r_carry};
@@ -298,6 +314,9 @@ begin
             OP_BYTE_STORE,
             OP_RDROP:
                 N <= w_stack_third;
+            OP_FROM_R: begin
+                N <= T;
+            end
             default:
                 N <= r_alu[15:0];
         endcase
@@ -367,14 +386,22 @@ begin
     end
 end
 
-// top of return stack
+// return stack
+// Match the Python model: push first increments the pointer, then writes to the
+// new top-of-stack cell. Return pops by decrementing the pointer and reading
+// the new top-of-stack value.
 always @(posedge i_clk)
 begin
-    if (w_phase_execute) begin
+    if (i_reset) begin
+        r_rstack[0] <= 16'h0000;
+        r_rstack[1] <= 16'h0000;
+        r_rstack[2] <= 16'h0000;
+        r_rstack[3] <= 16'h0000;
+    end else if (w_phase_execute) begin
         case (r_ir[7:0])
-            {1'b0, OP_CALL}: r_rstack[r_rsp] <= r_pc;
-            {1'b0, OP_INT}: r_rstack[r_rsp] <= r_pc;
-            {1'b0, OP_TO_R}: r_rstack[r_rsp] <= T;
+            {1'b0, OP_CALL}: r_rstack[r_rsp + 1'b1] <= pc_plus_1;
+            {1'b0, OP_INT}:  r_rstack[r_rsp + 1'b1] <= pc_plus_1;
+            {1'b0, OP_TO_R}: r_rstack[r_rsp + 1'b1] <= T;
             default: ;
         endcase
     end
@@ -390,7 +417,8 @@ begin
             OP_PUSH,
             OP_PUSH8,
             OP_DUP,
-            OP_OVER: begin
+            OP_OVER,
+            OP_FROM_R: begin
                 r_dsp <= w_dsp_inc1;
             end
             OP_DROP,
