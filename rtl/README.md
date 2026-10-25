@@ -89,5 +89,26 @@ this within the normal EXECUTE cycle, without resetting or clearing return
 stack cells. Tests include ring boundary cases, up to 16 nested calls, and a
 CALL at address `0xffff` whose return address wraps to zero.
 
+## ALU and carry
+
+Results are 16 bits. Signed and unsigned comparisons return `0xffff` for true
+and zero for false. ADD sets carry on unsigned overflow; SUB sets it on borrow
+(`N < T`). Shifts are logical and replace carry with the last bit shifted out:
+
+| Instruction | Result | Carry from original T |
+|-------------|--------|-----------------------|
+| SR | T >> 1 | Bit 0 |
+| SRW | T >> 8 | Bit 7 |
+| SL | (T << 1) & 0xffff | Bit 15 |
+| SLW | (T << 8) & 0xffff | Bit 8 |
+
+All other instructions preserve carry; CARRY pushes its value as 0 or 1.
+Python and RTL implement the same rules. This changes the previous SRW carry
+tap (bit 0) and the previous SL/SLW carry behavior (always zero).
+
+Tests check arithmetic boundary pairs, signed/unsigned comparisons, preservation
+of carry, and every single-bit shift operand against independent expected
+results as well as comparing Python with RTL after each instruction.
+
 Memory timing, external interrupts, and the RAM controller in `memory.v` are
 not yet validated by this comparison.

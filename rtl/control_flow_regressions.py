@@ -148,7 +148,7 @@ CASES = [
     (
         'alu_srw_carry',
         '0x8123 srw carry BREAK',
-        {'dsp': 2, 'T': 1, 'N': 0x0081},
+        {'dsp': 2, 'T': 0, 'N': 0x0081},
     ),
     (
         'alu_sl',
@@ -158,7 +158,7 @@ CASES = [
     (
         'alu_sl_carry',
         '0x8000 sl carry BREAK',
-        {'dsp': 2, 'T': 0, 'N': 0x0000},
+        {'dsp': 2, 'T': 1, 'N': 0x0000},
     ),
     (
         'alu_slw',
@@ -168,7 +168,7 @@ CASES = [
     (
         'alu_slw_carry',
         '0x0181 slw carry BREAK',
-        {'dsp': 2, 'T': 0, 'N': 0x8100},
+        {'dsp': 2, 'T': 1, 'N': 0x8100},
     ),
     (
         'alu_add',

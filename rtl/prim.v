@@ -28,17 +28,16 @@ reg [RSS-1:0] r_rsp /* verilator public */;
 reg [15:0] r_pc /* verilator public */; // program counter
 reg [15:0] T /* verilator public */; // top of dstack
 reg [15:0] N /* verilator public */; // 2nd on dstack
-wire [15:0] R /* verilator public */ = r_rstack[r_rsp]; // top of rstack
 reg [7:0] r_ir /* verilator public */; // instruction register
-reg r_carry;
+reg r_carry /* verilator public */;
 
-// stacks
+// Stack storage is intentionally not reset; unused cells are undefined.
 reg [15:0] r_dstack[0:2**DSS-1] /* verilator public */;
 reg [15:0] r_rstack[0:2**RSS-1] /* verilator public */;
+wire [15:0] R /* verilator public */ = r_rstack[r_rsp]; // top of rstack
 
 //
 wire [DSS-1:0] w_dsp_dec2_amt = {{(DSS-2){1'b0}}, 2'b10};
-wire [15:0] THIRD = r_dstack[(r_dsp - 1'b1) & ((1 << DSS)-1)]; // third element
 
 // pop from stack
 wire w_popop;
@@ -135,18 +134,35 @@ end
 // Program counter r_pc
 reg [15:0] r_pc_next;
 wire [15:0] pc_plus_1 = r_pc + 1'd1;
+// Control-flow instructions ignore the return bit, as in the Python ISA.
+wire w_return = r_ir[7] && (r_ir[6:0] != OP_CALL) &&
+                (r_ir[6:0] != OP_JP) && (r_ir[6:0] != OP_JZ) &&
+                (r_ir[6:0] != OP_INT);
+wire w_rpush = (r_ir[6:0] == OP_CALL) || (r_ir[6:0] == OP_INT) ||
+               (r_ir[6:0] == OP_TO_R);
+wire w_rpop = (r_ir[6:0] == OP_FROM_R) || (r_ir[6:0] == OP_RDROP);
+wire [RSS-1:0] w_rsp_inc1 = r_rsp + 1'b1;
+wire [RSS-1:0] w_rsp_dec1 = r_rsp - 1'b1;
+wire [RSS-1:0] w_rsp_dec2 = r_rsp - 2;
+wire [RSS-1:0] w_rsp_next = w_rpush ? (w_return ? r_rsp : w_rsp_inc1) :
+                          w_rpop ? (w_return ? w_rsp_dec2 : w_rsp_dec1) :
+                          w_return ? w_rsp_dec1 : r_rsp;
+// Return happens after the opcode: >R returns through T, R>/RDROP through
+// the cell below the old R. Neither case needs an additional execution cycle.
+wire [15:0] w_return_addr = (r_ir[6:0] == OP_TO_R) ? T :
+                           w_rpop ? r_rstack[w_rsp_dec1] : R;
 always @(*)
 begin
-    if (r_ir[7]) begin
-        r_pc_next = R;
+    if (w_return) begin
+        r_pc_next = w_return_addr;
     end else begin
-        casez (r_ir)
-            {1'b0, OP_CALL}: r_pc_next = T;
-            {1'b0, OP_JP}: r_pc_next = T;
-            {1'b0, OP_JZ}: r_pc_next = (N==16'h0) ? T : pc_plus_1;
-            {1'b0, OP_INT}: r_pc_next = ISR_ADDR;
-            {1'b0, OP_PUSH8}: r_pc_next = r_pc + 2;
-            {1'b0, OP_PUSH}:  r_pc_next = r_pc + 3;
+        case (r_ir[6:0])
+            OP_CALL: r_pc_next = T;
+            OP_JP: r_pc_next = T;
+            OP_JZ: r_pc_next = (N==16'h0) ? T : pc_plus_1;
+            OP_INT: r_pc_next = ISR_ADDR;
+            OP_PUSH8: r_pc_next = r_pc + 2;
+            OP_PUSH:  r_pc_next = r_pc + 3;
             default: r_pc_next = pc_plus_1;
         endcase
     end
@@ -188,266 +204,91 @@ end
 wire [DSS-1:0] w_dsp_dec1 = r_dsp - {{(DSS-1){1'b0}}, 1'b1};
 wire [DSS-1:0] w_dsp_dec2 = r_dsp - w_dsp_dec2_amt;
 wire [DSS-1:0] w_dsp_inc1 = r_dsp + {{(DSS-1){1'b0}}, 1'b1};
-wire [DSS-1:0] w_second_idx = (r_dsp - {{(DSS-1){1'b0}}, 1'b1}) & ((1 << DSS)-1);
-wire [DSS-1:0] w_third_idx  = (r_dsp - {{(DSS-1){1'b0}}, 1'b1}) & ((1 << DSS)-1);
-wire [DSS-1:0] w_fourth_idx = (r_dsp - w_dsp_dec2_amt) & ((1 << DSS)-1);
-wire [15:0] w_stack_second = r_dstack[w_second_idx];
-wire [15:0] w_stack_third  = r_dstack[w_third_idx];
+// The array uses the same circular indices as Python: T at dsp, N at dsp-1.
+wire [DSS-1:0] w_third_idx = r_dsp - 2;
+wire [DSS-1:0] w_fourth_idx = r_dsp - 3;
+wire [15:0] w_stack_third = r_dstack[w_third_idx];
 wire [15:0] w_stack_fourth = r_dstack[w_fourth_idx];
-
-// top of data stack
-always @(posedge i_clk)
-begin
-    if (i_reset) begin
-        T <= 16'h00;
-    end else if (w_phase_execute) begin
-        case (r_ir[6:0])
-            OP_PUSH,
-            OP_PUSH8: begin
-                T <= r_mem_data;
-            end
-            OP_FETCH: begin
-                T <= r_mem_data;
-            end
-            OP_BYTE_FETCH: begin
-                T <= {8'h00, r_mem_data[7:0]};
-            end
-            OP_DUP: begin
-                T <= T;
-            end
-            OP_SWAP: begin
-                T <= N;
-            end
-            OP_OVER: begin
-                T <= N;
-            end
-            OP_ROT: begin
-                T <= w_stack_third;
-            end
-            OP_NROT: begin
-                T <= N;
-            end
-            OP_DROP,
-            OP_CALL,
-            OP_JP,
-            OP_TO_R: begin
-                T <= N;
-            end
-            OP_INT: begin
-                T <= T;
-            end
-            OP_AND,
-            OP_OR,
-            OP_XOR,
-            OP_NOT,
-            OP_SR,
-            OP_SRW,
-            OP_SL,
-            OP_SLW,
-            OP_ADD,
-            OP_SUB,
-            OP_LTS,
-            OP_LTU: begin
-                T <= r_alu[15:0];
-            end
-            OP_STORE,
-            OP_BYTE_STORE: begin
-                T <= w_stack_third;
-            end
-            OP_JZ: begin
-                T <= w_stack_third;
-            end
-            OP_FROM_R: begin
-                T <= R;
-            end
-            default:
-                if (r_ir[6:0] == OP_CARRY) begin
-                    T <= {15'h0, r_carry};
-                end else begin
-                    T <= r_alu[15:0];
-                end
-        endcase
-    end else if (w_phase_fetch) begin
-        $display("T: %x, N: %x, 3rd: %x, R: %x", T, N, THIRD, R);
-    end
+reg [15:0] t_next, n_next;
+reg [DSS-1:0] dsp_next;
+always @(*) begin
+    dsp_next = r_dsp;
+    case (r_ir[6:0])
+        OP_PUSH, OP_PUSH8, OP_DUP, OP_OVER, OP_CARRY, OP_FROM_R:
+            dsp_next = w_dsp_inc1;
+        OP_DROP, OP_NIP, OP_CALL, OP_JP, OP_AND, OP_OR, OP_XOR,
+        OP_ADD, OP_SUB, OP_LTS, OP_LTU, OP_TO_R:
+            dsp_next = w_dsp_dec1;
+        OP_STORE, OP_BYTE_STORE, OP_JZ: dsp_next = w_dsp_dec2;
+        default: ;
+    endcase
 end
 
-// 2nd on data stack
-always @(posedge i_clk)
-begin
-    if (i_reset) begin
-        N <= 16'h00;
-    end else if (w_phase_execute) begin
-        case (r_ir[6:0])
-            OP_PUSH,
-            OP_PUSH8: begin
-                N <= T;
-            end
-            OP_CARRY: begin
-                N <= T;
-            end
-            OP_DUP: begin
-                N <= T;
-            end
-            OP_SWAP: begin
-                N <= T;
-            end
-            OP_OVER: begin
-                N <= T;
-            end
-            OP_NIP: begin
-                N <= w_stack_third;
-            end
-            OP_ROT: begin
-                N <= T;
-            end
-            OP_NROT: begin
-                N <= w_stack_third;
-            end
-            OP_DROP,
-            OP_CALL,
-            OP_JP,
-            OP_AND,
-            OP_OR,
-            OP_XOR,
-            OP_ADD,
-            OP_SUB,
-            OP_LTS,
-            OP_LTU,
-            OP_TO_R: begin
-                N <= w_stack_third;
-            end
-            OP_JZ,
-            OP_STORE,
-            OP_BYTE_STORE: begin
-                N <= w_stack_fourth;
-            end
-            OP_FROM_R: begin
-                N <= T;
-            end
-            default: begin
-            end
-        endcase
-    end
+// Cached top cells: compute the complete result before updating any storage.
+always @(*) begin
+    t_next = T;
+    n_next = N;
+    case (r_ir[6:0])
+        OP_PUSH, OP_PUSH8, OP_FETCH: t_next = r_mem_data;
+        OP_BYTE_FETCH: t_next = {8'h00, r_mem_data[7:0]};
+        OP_SWAP, OP_OVER, OP_NROT, OP_DROP, OP_CALL, OP_JP, OP_TO_R:
+            t_next = N;
+        OP_ROT, OP_STORE, OP_BYTE_STORE, OP_JZ: t_next = w_stack_third;
+        OP_FROM_R: t_next = R;
+        OP_AND, OP_OR, OP_XOR, OP_NOT, OP_SR, OP_SRW, OP_SL, OP_SLW,
+        OP_ADD, OP_SUB, OP_LTS, OP_LTU, OP_CARRY: t_next = r_alu[15:0];
+        default: ;
+    endcase
+    case (r_ir[6:0])
+        OP_PUSH, OP_PUSH8, OP_CARRY, OP_DUP, OP_SWAP, OP_OVER, OP_ROT, OP_FROM_R:
+            n_next = T;
+        OP_NIP, OP_NROT, OP_DROP, OP_CALL, OP_JP, OP_AND, OP_OR, OP_XOR,
+        OP_ADD, OP_SUB, OP_LTS, OP_LTU, OP_TO_R:
+            n_next = w_stack_third;
+        OP_JZ, OP_STORE, OP_BYTE_STORE: n_next = w_stack_fourth;
+        default: ;
+    endcase
 end
 
-// 3rd on data stack / stack-depth bookkeeping
-always @(posedge i_clk)
-begin
+// Keep the cached top cells and the circular array coherent at retirement.
+// Clearing consumed cells preserves Python's behavior across pointer wraparound.
+always @(posedge i_clk) begin
     if (i_reset) begin
-        r_dstack[0] <= 16'h0;
-        r_dstack[1] <= 16'h0;
-        r_dstack[2] <= 16'h0;
-        r_dstack[3] <= 16'h0;
+        T <= 16'h0;
+        N <= 16'h0;
     end else if (w_phase_execute) begin
-        // preserve the virtual stack order for later third-element access.
+        T <= t_next;
+        N <= n_next;
+        if (dsp_next == w_dsp_dec1 || dsp_next == w_dsp_dec2)
+            r_dstack[r_dsp] <= 16'h0;
+        if (dsp_next == w_dsp_dec2)
+            r_dstack[w_dsp_dec1] <= 16'h0;
         case (r_ir[6:0])
-            OP_PUSH,
-            OP_PUSH8: begin
-                r_dstack[w_dsp_inc1] <= T;
-            end
-            OP_CARRY: begin
-                r_dstack[w_dsp_inc1] <= T;
-            end
-            OP_DROP,
-            OP_NIP,
-            OP_CALL,
-            OP_JP,
-            OP_AND,
-            OP_OR,
-            OP_XOR,
-            OP_ADD,
-            OP_SUB,
-            OP_LTS,
-            OP_LTU,
-            OP_TO_R: begin
-                r_dstack[r_dsp] <= N;
-            end
-            OP_DUP: begin
-                r_dstack[w_dsp_inc1] <= T;
-            end
-            OP_SWAP: begin
-                r_dstack[r_dsp] <= N;
-                r_dstack[w_dsp_dec1] <= T;
-            end
-            OP_OVER: begin
-                r_dstack[w_dsp_inc1] <= N;
-            end
-            OP_ROT: begin
-                r_dstack[r_dsp] <= T;
-                r_dstack[w_dsp_dec1] <= N;
-            end
-            OP_NROT: begin
-                r_dstack[r_dsp] <= w_stack_third;
-                r_dstack[w_dsp_dec1] <= T;
-            end
-            default: begin
-            end
+            OP_ROT: r_dstack[w_third_idx] <= N;
+            OP_NROT: r_dstack[w_third_idx] <= T;
+            default: ;
         endcase
+        r_dstack[dsp_next] <= t_next;
+        r_dstack[(dsp_next - 1'b1) & ((1 << DSS)-1)] <= n_next;
     end
 end
 
 // return stack
-// Match the Python model: push first increments the pointer, then writes to the
-// new top-of-stack cell. Return pops by decrementing the pointer and reading
-// the new top-of-stack value.
+// Push first increments the circular pointer, then writes the new top.
+// >R.RET consumes the pushed value immediately as the return address, so it
+// needs no array write. Popped cells remain unused and are not cleared.
 always @(posedge i_clk)
 begin
-    if (i_reset) begin
-        r_rstack[0] <= 16'h0000;
-        r_rstack[1] <= 16'h0000;
-        r_rstack[2] <= 16'h0000;
-        r_rstack[3] <= 16'h0000;
-    end else if (w_phase_execute) begin
-        case (r_ir[7:0])
-            {1'b0, OP_CALL}: r_rstack[r_rsp + 1'b1] <= pc_plus_1;
-            {1'b0, OP_INT}:  r_rstack[r_rsp + 1'b1] <= pc_plus_1;
-            {1'b0, OP_TO_R}: r_rstack[r_rsp + 1'b1] <= T;
-            default: ;
-        endcase
-    end
+    if (!i_reset && w_phase_execute && w_rpush && !w_return)
+        r_rstack[w_rsp_inc1] <= (r_ir[6:0] == OP_TO_R) ? T : pc_plus_1;
 end
 
 // data stack pointer
-always @(posedge i_clk)
-begin
-    if (i_reset) begin
-        r_dsp <= 'h00;
-    end else if (w_phase_execute) begin
-        case (r_ir[6:0])
-            OP_PUSH,
-            OP_PUSH8,
-            OP_DUP,
-            OP_OVER,
-            OP_CARRY,
-            OP_FROM_R: begin
-                r_dsp <= w_dsp_inc1;
-            end
-            OP_DROP,
-            OP_NIP,
-            OP_CALL,
-            OP_JP,
-            OP_AND,
-            OP_OR,
-            OP_XOR,
-            OP_ADD,
-            OP_SUB,
-            OP_LTS,
-            OP_LTU,
-            OP_TO_R: begin
-                r_dsp <= w_dsp_dec1;
-            end
-            OP_STORE,
-            OP_BYTE_STORE: begin
-                r_dsp <= w_dsp_dec2;
-            end
-            OP_JZ: begin
-                r_dsp <= w_dsp_dec2;
-            end
-            default: begin
-            end
-        endcase
-    end
+always @(posedge i_clk) begin
+    if (i_reset)
+        r_dsp <= 'h0;
+    else if (w_phase_execute)
+        r_dsp <= dsp_next;
 end
 
 // return stack pointer
@@ -456,19 +297,11 @@ begin
     if (i_reset) begin
         r_rsp <= 'h00;
     end else if (w_phase_execute) begin
-        casez (r_ir[7:0])
-            {1'b0, OP_CALL}: r_rsp <= r_rsp + 1;
-            {1'b0, OP_INT}: r_rsp <= r_rsp + 1;
-            {1'b0, OP_TO_R}: r_rsp <= r_rsp + 1;
-            {1'b0, OP_FROM_R}: r_rsp <= r_rsp - 1;
-            {1'b0, OP_RDROP}: r_rsp <= r_rsp - 1;
-            {1'b1, 7'b???????}: r_rsp <= r_rsp - 1;
-            default: ;
-        endcase
+        r_rsp <= w_rsp_next;
     end
 end
 
-// carry
+// Carry for shifts is the last bit shifted out of the 16-bit operand.
 always @(posedge i_clk)
 begin
     if (i_reset) begin
@@ -478,9 +311,9 @@ begin
             OP_ADD: r_carry <= r_alu[16];
             OP_SUB: r_carry <= r_alu[16];
             OP_SR: r_carry <= T[0];
-            OP_SRW: r_carry <= T[0];
-            OP_SL: r_carry <= 1'b0;
-            OP_SLW: r_carry <= 1'b0;
+            OP_SRW: r_carry <= T[7];
+            OP_SL: r_carry <= T[15];
+            OP_SLW: r_carry <= T[8];
             default: ;
         endcase
     end

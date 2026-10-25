@@ -145,15 +145,15 @@ class Prim:
         elif ir == PrimOpcodes.SRW:
             T = self.dpop()
             self.dpush(T >> 8)
-            self._carry = (T & 1) != 0
+            self._carry = (T & 0x80) != 0
         elif ir == PrimOpcodes.SL:
             T = self.dpop()
             self.dpush(T << 1)
-            self._carry = (T & 0x10000) != 0
+            self._carry = (T & 0x8000) != 0
         elif ir == PrimOpcodes.SLW:
             T = self.dpop()
             self.dpush(T << 8)
-            self._carry = (T & 0x10000) != 0
+            self._carry = (T & 0x0100) != 0
         elif ir == PrimOpcodes.ADD:
             (T, N) = (self.dpop(), self.dpop())
             self.dpush(N + T)
