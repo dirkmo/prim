@@ -29,6 +29,65 @@ regressions against another existing build:
 python3 rtl/control_flow_regressions.py --simulator /path/to/simulator
 ```
 
-The cases check selected final register values against fixed expectations.
-They do not yet compare each instruction with the Python CPU model or validate
-the external RAM controller in `memory.v`.
+## Python/RTL comparison
+
+Build and compare the 45 existing programs after every completed instruction:
+
+```sh
+python3 rtl/compare.py
+```
+
+Run an individual assembly program or a raw binary (assembly gets an appended
+BREAK; binaries must reach a BREAK or SIMEND marker):
+
+```sh
+python3 rtl/compare.py --asm '0xffff 1 + carry'
+python3 rtl/compare.py --binary build/rtl/test.bin --max-steps 10000
+```
+
+Use `--simulator build/rtl/simulator` to skip building. Differences produce a
+nonzero exit code and identify the first instruction, address, field, and both
+values. For example, `--asm '1 2 over 3'` checks a previously broken combination
+of OVER followed by PUSH; it now matches Python.
+
+The simulator's `-j retirement.jsonl` option emits PC, opcode, stack pointers,
+carry, stacks (top first), and byte writes after each EXECUTE edge. Python
+advances its PC during fetch; the comparison uses its state after `step()`,
+when both PCs address the next instruction. BREAK/SIMEND are debugger markers
+and are checked before fetching/executing them in comparison mode.
+
+The comparison uses the default 16-cell stacks. It compares the occupied stack
+cells, excluding unused cells that Python clears on pop but hardware retains.
+Depth is tracked from instruction effects, capped at 16; stack underflow and
+reset contents of unused cells are outside this check.
+
+To keep the CPU minimal, neither stack array has a reset. Unused cells are
+undefined after reset; programs must write stack entries before reading them.
+PC, stack pointers, cached T/N registers, carry, and execution control still
+reset. Python's zero-filled stack arrays are not part of the RTL contract.
+
+Both sides start with identical 64 KiB RAM filled with `0xff` outside the image.
+In comparison mode the simulator treats **all** addresses as flat RAM, including
+`0xfffe`/`0xffff`, with little-endian words and address wrapping. Ordered byte
+writes are compared after every instruction; equal initial memory plus equal
+writes ensures equal memory contents. This mode does not emulate UART/MMIO.
+The normal simulator mode keeps its existing memory map.
+
+CTest runs the original final-state regressions, the instruction comparisons,
+and integration checks. The stack checks cover every depth from 3 to 16,
+repeated data stack pointer wraparound, memory/branch interactions, and 20
+reproducible sequences of 200 mixed instructions followed by stack draining.
+The RTL array uses Python's circular indexing (T at DSP, N at DSP-1) and is
+updated together with the cached T/N registers at instruction retirement.
+
+Return-bit checks cover regular operations, immediates, memory operations, and
+the CALL/JP/JZ/INT exceptions (these ignore the return bit). The instruction's
+return stack effect precedes the return: `>R.RET` jumps through the consumed
+data stack value without changing RSP; `R>.RET` and `RDROP.RET` remove two
+return stack entries and jump through the second one. The implementation does
+this within the normal EXECUTE cycle, without resetting or clearing return
+stack cells. Tests include ring boundary cases, up to 16 nested calls, and a
+CALL at address `0xffff` whose return address wraps to zero.
+
+Memory timing, external interrupts, and the RAM controller in `memory.v` are
+not yet validated by this comparison.

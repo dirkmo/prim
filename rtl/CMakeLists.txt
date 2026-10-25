@@ -38,6 +38,12 @@ enable_testing()
 add_test(NAME control_flow_regressions
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/control_flow_regressions.py
         --simulator $<TARGET_FILE:simulator>)
+add_test(NAME python_rtl_comparison
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/compare.py
+        --simulator $<TARGET_FILE:simulator>)
+add_test(NAME comparison_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test_compare.py
+        --simulator $<TARGET_FILE:simulator>)
 
 
 # Add the Verilated circuit to the target
