@@ -12,8 +12,8 @@ RTL = ROOT / 'rtl'
 BUILD = RTL / 'build'
 SIM = BUILD / 'simulator'
 
-# These focused control-flow and stack cases are exercised against the Verilog
-# implementation before the broader instruction set is added.
+# Focused control-flow, stack, memory, and ALU cases exercised against the
+# Verilog implementation before the broader instruction set is added.
 CASES = [
     (
         'call_ret_1',
@@ -99,6 +99,106 @@ CASES = [
         'stack_from_r',
         '1 >r 2 r> BREAK',
         {'pc': 0x0007, 'dsp': 2, 'rsp': 0, 'T': 0x0001, 'N': 0x0002, 'R': 0x0000},
+    ),
+    (
+        'alu_and',
+        '0xf0f0 0x0ff0 and BREAK',
+        {'dsp': 1, 'T': 0x00f0, 'N': 0x0000},
+    ),
+    (
+        'alu_or',
+        '0xf00f 0x0ff0 or BREAK',
+        {'dsp': 1, 'T': 0xffff, 'N': 0x0000},
+    ),
+    (
+        'alu_xor',
+        '0xaaaa 0x0ff0 xor BREAK',
+        {'dsp': 1, 'T': 0xa55a, 'N': 0x0000},
+    ),
+    (
+        'alu_not',
+        '0x0ff0 not BREAK',
+        {'dsp': 1, 'T': 0xf00f, 'N': 0x0000},
+    ),
+    (
+        'alu_sr',
+        '0x8003 sr BREAK',
+        {'dsp': 1, 'T': 0x4001, 'N': 0x0000},
+    ),
+    (
+        'alu_sr_carry',
+        '0x8003 sr carry BREAK',
+        {'dsp': 2, 'T': 1, 'N': 0x4001},
+    ),
+    (
+        'alu_srw',
+        '0x8123 srw BREAK',
+        {'dsp': 1, 'T': 0x0081, 'N': 0x0000},
+    ),
+    (
+        'alu_srw_carry',
+        '0x8123 srw carry BREAK',
+        {'dsp': 2, 'T': 1, 'N': 0x0081},
+    ),
+    (
+        'alu_sl',
+        '0x4001 sl BREAK',
+        {'dsp': 1, 'T': 0x8002, 'N': 0x0000},
+    ),
+    (
+        'alu_sl_carry',
+        '0x8000 sl carry BREAK',
+        {'dsp': 2, 'T': 0, 'N': 0x0000},
+    ),
+    (
+        'alu_slw',
+        '0x0181 slw BREAK',
+        {'dsp': 1, 'T': 0x8100, 'N': 0x0000},
+    ),
+    (
+        'alu_slw_carry',
+        '0x0181 slw carry BREAK',
+        {'dsp': 2, 'T': 0, 'N': 0x8100},
+    ),
+    (
+        'alu_add',
+        '0x1234 0x0102 + BREAK',
+        {'dsp': 1, 'T': 0x1336, 'N': 0x0000},
+    ),
+    (
+        'alu_add_carry',
+        '0xffff 1 + carry BREAK',
+        {'dsp': 2, 'T': 1, 'N': 0x0000},
+    ),
+    (
+        'alu_sub',
+        '0x1234 0x0102 - BREAK',
+        {'dsp': 1, 'T': 0x1132, 'N': 0x0000},
+    ),
+    (
+        'alu_sub_borrow',
+        '0 1 - carry BREAK',
+        {'dsp': 2, 'T': 1, 'N': 0xffff},
+    ),
+    (
+        'alu_lts_true',
+        '0xffff 1 < BREAK',
+        {'dsp': 1, 'T': 0xffff, 'N': 0x0000},
+    ),
+    (
+        'alu_lts_false',
+        '1 0xffff < BREAK',
+        {'dsp': 1, 'T': 0x0000, 'N': 0x0000},
+    ),
+    (
+        'alu_ltu_true',
+        '1 2 <u BREAK',
+        {'dsp': 1, 'T': 0xffff, 'N': 0x0000},
+    ),
+    (
+        'alu_ltu_false',
+        '2 1 <u BREAK',
+        {'dsp': 1, 'T': 0x0000, 'N': 0x0000},
     ),
     (
         'memory_fetch_word',

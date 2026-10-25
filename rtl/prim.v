@@ -56,7 +56,7 @@ reg [15:0] r_mem_data;
 
 // alu
 reg [16:0] r_alu;
-always @(posedge i_clk) begin
+always @(*) begin
     case (r_ir[6:0])
         OP_NOP:         r_alu = {1'b0, T};
         OP_CALL:        r_alu = {1'b0, T};
@@ -69,7 +69,7 @@ always @(posedge i_clk) begin
         OP_SR:          r_alu = {2'b0, T[15:1]};
         OP_SRW:         r_alu = {9'b0, T[15:8]};
         OP_SL:          r_alu = {T[15:0], 1'b0};
-        OP_SLW:         r_alu = {T[7:0], 9'b0};
+        OP_SLW:         r_alu = {1'b0, T[7:0], 8'b0};
         OP_ADD:         r_alu = {1'b0, N} + {1'b0, T};
         OP_SUB:         r_alu = {1'b0, N} - {1'b0, T};
         OP_LTS:         r_alu = {17{($signed(N) < $signed(T))}};
@@ -227,17 +227,23 @@ begin
             OP_DROP,
             OP_CALL,
             OP_JP,
+            OP_TO_R,
+            OP_INT: begin
+                T <= N;
+            end
             OP_AND,
             OP_OR,
             OP_XOR,
             OP_NOT,
+            OP_SR,
+            OP_SRW,
+            OP_SL,
+            OP_SLW,
             OP_ADD,
             OP_SUB,
             OP_LTS,
-            OP_LTU,
-            OP_TO_R,
-            OP_INT: begin
-                T <= N;
+            OP_LTU: begin
+                T <= r_alu[15:0];
             end
             OP_STORE,
             OP_BYTE_STORE: begin
@@ -272,6 +278,9 @@ begin
             OP_PUSH8: begin
                 N <= T;
             end
+            OP_CARRY: begin
+                N <= T;
+            end
             OP_DUP: begin
                 N <= T;
             end
@@ -296,7 +305,6 @@ begin
             OP_AND,
             OP_OR,
             OP_XOR,
-            OP_NOT,
             OP_ADD,
             OP_SUB,
             OP_LTS,
@@ -334,6 +342,9 @@ begin
             OP_PUSH8: begin
                 r_dstack[w_dsp_inc1] <= T;
             end
+            OP_CARRY: begin
+                r_dstack[w_dsp_inc1] <= T;
+            end
             OP_DROP,
             OP_NIP,
             OP_CALL,
@@ -341,7 +352,6 @@ begin
             OP_AND,
             OP_OR,
             OP_XOR,
-            OP_NOT,
             OP_ADD,
             OP_SUB,
             OP_LTS,
@@ -406,6 +416,7 @@ begin
             OP_PUSH8,
             OP_DUP,
             OP_OVER,
+            OP_CARRY,
             OP_FROM_R: begin
                 r_dsp <= w_dsp_inc1;
             end
@@ -416,7 +427,6 @@ begin
             OP_AND,
             OP_OR,
             OP_XOR,
-            OP_NOT,
             OP_ADD,
             OP_SUB,
             OP_LTS,
@@ -465,10 +475,10 @@ begin
         casez (r_ir[6:0])
             OP_ADD: r_carry <= r_alu[16];
             OP_SUB: r_carry <= r_alu[16];
-            OP_SL: r_carry <= r_alu[16];
-            OP_LTS: r_carry <= r_alu[16];
-            OP_LTU: r_carry <= r_alu[16];
-            OP_CARRY: r_carry <= r_alu[16];
+            OP_SR: r_carry <= T[0];
+            OP_SRW: r_carry <= T[0];
+            OP_SL: r_carry <= 1'b0;
+            OP_SLW: r_carry <= 1'b0;
             default: ;
         endcase
     end
