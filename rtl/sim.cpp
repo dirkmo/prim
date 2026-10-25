@@ -59,7 +59,7 @@ int handle(Vprim *pCore) {
                     mem[pCore->o_addr] = pCore->o_dat;
                 }
                 if (pCore->o_bs & 2) {
-                    mem[(pCore->o_addr+1) & 0xffff] = pCore->o_dat;
+                    mem[(pCore->o_addr+1) & 0xffff] = pCore->o_dat >> 8;
                 }
             }
         } else {
@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
 
     reset();
 
-    while(tickcount < 20 * clockcycle_ps) {
+    while(tickcount < 1000 * clockcycle_ps) {
         handle(pCore);
         tick();
         if (pCore->Prim->r_ir == 0x22 && pCore->Prim->r_phase == 0) {

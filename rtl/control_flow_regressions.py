@@ -100,6 +100,36 @@ CASES = [
         '1 >r 2 r> BREAK',
         {'pc': 0x0007, 'dsp': 2, 'rsp': 0, 'T': 0x0001, 'N': 0x0002, 'R': 0x0000},
     ),
+    (
+        'memory_fetch_word',
+        '0x1234 0x100 ! 0x100 @ BREAK',
+        {'pc': 0x000c, 'dsp': 1, 'rsp': 0, 'T': 0x1234, 'N': 0x0000, 'R': 0x0000},
+    ),
+    (
+        'memory_store_word',
+        '0x1234 0x100 ! BREAK',
+        {'pc': 0x0008, 'dsp': 0, 'rsp': 0, 'T': 0x0000, 'N': 0x0000, 'R': 0x0000},
+    ),
+    (
+        'memory_fetch_byte_low',
+        '0x1234 0x100 ! 0x100 c@ BREAK',
+        {'pc': 0x000c, 'dsp': 1, 'rsp': 0, 'T': 0x0034, 'N': 0x0000, 'R': 0x0000},
+    ),
+    (
+        'memory_fetch_byte_high',
+        '0x1234 0x100 ! 0x101 c@ BREAK',
+        {'pc': 0x000c, 'dsp': 1, 'rsp': 0, 'T': 0x0012, 'N': 0x0000, 'R': 0x0000},
+    ),
+    (
+        'memory_store_byte_low',
+        '0x1234 0x100 ! 0xab 0x100 c! 0x100 @ BREAK',
+        {'pc': 0x0012, 'dsp': 1, 'rsp': 0, 'T': 0x12ab, 'N': 0x0000, 'R': 0x0000},
+    ),
+    (
+        'memory_store_byte_high',
+        '0x1234 0x100 ! 0xab 0x101 c! 0x100 @ BREAK',
+        {'pc': 0x0012, 'dsp': 1, 'rsp': 0, 'T': 0xab34, 'N': 0x0000, 'R': 0x0000},
+    ),
 ]
 
 assert SIM.exists(), f'Verilator simulator not built yet: {SIM}'

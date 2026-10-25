@@ -187,8 +187,10 @@ wire [DSS-1:0] w_dsp_dec2 = r_dsp - w_dsp_dec2_amt;
 wire [DSS-1:0] w_dsp_inc1 = r_dsp + {{(DSS-1){1'b0}}, 1'b1};
 wire [DSS-1:0] w_second_idx = (r_dsp - {{(DSS-1){1'b0}}, 1'b1}) & ((1 << DSS)-1);
 wire [DSS-1:0] w_third_idx  = (r_dsp - {{(DSS-1){1'b0}}, 1'b1}) & ((1 << DSS)-1);
+wire [DSS-1:0] w_fourth_idx = (r_dsp - w_dsp_dec2_amt) & ((1 << DSS)-1);
 wire [15:0] w_stack_second = r_dstack[w_second_idx];
 wire [15:0] w_stack_third  = r_dstack[w_third_idx];
+wire [15:0] w_stack_fourth = r_dstack[w_fourth_idx];
 
 // top of data stack
 always @(posedge i_clk)
@@ -234,10 +236,13 @@ begin
             OP_LTS,
             OP_LTU,
             OP_TO_R,
-            OP_INT,
-            OP_STORE,
-            OP_BYTE_STORE:
+            OP_INT: begin
                 T <= N;
+            end
+            OP_STORE,
+            OP_BYTE_STORE: begin
+                T <= w_stack_third;
+            end
             OP_JZ: begin
                 T <= w_stack_third;
             end
@@ -288,7 +293,6 @@ begin
             OP_DROP,
             OP_CALL,
             OP_JP,
-            OP_JZ,
             OP_AND,
             OP_OR,
             OP_XOR,
@@ -298,12 +302,14 @@ begin
             OP_LTS,
             OP_LTU,
             OP_TO_R,
-            OP_INT,
-            OP_FETCH,
-            OP_BYTE_FETCH,
-            OP_STORE,
-            OP_BYTE_STORE:
+            OP_INT: begin
                 N <= w_stack_third;
+            end
+            OP_JZ,
+            OP_STORE,
+            OP_BYTE_STORE: begin
+                N <= w_stack_fourth;
+            end
             OP_FROM_R: begin
                 N <= T;
             end
@@ -332,7 +338,6 @@ begin
             OP_NIP,
             OP_CALL,
             OP_JP,
-            OP_JZ,
             OP_AND,
             OP_OR,
             OP_XOR,
@@ -342,11 +347,7 @@ begin
             OP_LTS,
             OP_LTU,
             OP_TO_R,
-            OP_INT,
-            OP_FETCH,
-            OP_BYTE_FETCH,
-            OP_STORE,
-            OP_BYTE_STORE: begin
+            OP_INT: begin
                 r_dstack[r_dsp] <= N;
             end
             OP_DUP: begin
@@ -421,12 +422,12 @@ begin
             OP_LTS,
             OP_LTU,
             OP_TO_R,
-            OP_INT,
-            OP_FETCH,
-            OP_BYTE_FETCH,
+            OP_INT: begin
+                r_dsp <= w_dsp_dec1;
+            end
             OP_STORE,
             OP_BYTE_STORE: begin
-                r_dsp <= w_dsp_dec1;
+                r_dsp <= w_dsp_dec2;
             end
             OP_JZ: begin
                 r_dsp <= w_dsp_dec2;
