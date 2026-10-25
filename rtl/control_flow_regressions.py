@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import re
-import shutil
+import argparse
 import subprocess
 import sys
 import tempfile
@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RTL = ROOT / 'rtl'
-BUILD = RTL / 'build'
+BUILD = ROOT / 'build' / 'rtl'
 SIM = BUILD / 'simulator'
 
 # Focused control-flow, stack, memory, and ALU cases exercised against the
@@ -242,9 +242,6 @@ CASES = [
     ),
 ]
 
-assert SIM.exists(), f'Verilator simulator not built yet: {SIM}'
-
-
 def assemble(asm):
     import sys
     sys.path.insert(0, str(ROOT / 'src'))
@@ -266,12 +263,16 @@ def run_case(name, asm, expected):
             [str(SIM), '-i', tmp_name],
             capture_output=True,
             text=True,
-            check=False,
+            check=True,
+            timeout=10,
+            cwd=SIM.parent,
         )
     finally:
         Path(tmp_name).unlink(missing_ok=True)
 
     text = (out.stdout or '') + (out.stderr or '')
+    if 'Simulation halted on BREAK' not in text:
+        raise AssertionError(f'{name}: simulator did not halt on BREAK\n{text}')
     match = re.search(r'state:\s+pc=([0-9a-fA-F]+)\s+dsp=(\d+)\s+rsp=(\d+)\s+T=([0-9a-fA-F]+)\s+N=([0-9a-fA-F]+)\s+R=([0-9a-fA-F]+)\s+ir=([0-9a-fA-F]+)', text, re.IGNORECASE)
     if not match:
         raise AssertionError(f'{name}: simulator did not emit a final state\n{text}')
@@ -294,9 +295,16 @@ def run_case(name, asm, expected):
 
 
 def main():
-    # Ensure the simulator is present; the project already contains a built copy under
-    # rtl/build, but a fresh build is attempted if it is missing.
-    if not SIM.exists():
+    global SIM
+    parser = argparse.ArgumentParser(description='Build and run RTL regressions')
+    parser.add_argument('--simulator', type=Path,
+                        help='Use an already built simulator (skip configure/build)')
+    args = parser.parse_args()
+    if args.simulator is not None:
+        SIM = args.simulator.resolve()
+        if not SIM.is_file():
+            parser.error(f'Simulator not found: {SIM}')
+    else:
         subprocess.run(['cmake', '-S', str(RTL), '-B', str(BUILD)], check=True)
         subprocess.run(['cmake', '--build', str(BUILD)], check=True)
     failures = 0
@@ -306,6 +314,7 @@ def main():
         except Exception as exc:
             print(f'FAIL {name}: {exc}', file=sys.stderr)
             failures += 1
+    print(f'{len(CASES) - failures}/{len(CASES)} regressions passed')
     return 1 if failures else 0
 
 

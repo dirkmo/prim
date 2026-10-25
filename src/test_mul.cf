@@ -1,0 +1,5 @@
+\ Test multiplication
+:test1 3 4 mul ;
+:test2 7 8 mul ;
+:test3 0x100 0x100 mul ;
+:test4 0xffff 0xffff mul ;

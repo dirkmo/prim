@@ -2,6 +2,27 @@ cmake_minimum_required(VERSION 3.12)
 cmake_policy(SET CMP0074 NEW)
 project(prim-simulator)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Some Command Line Tools installations keep libc++ headers only in the SDK.
+if(APPLE)
+    include(CheckIncludeFileCXX)
+    check_include_file_cxx(cstdint PRIM_HAS_CSTDINT)
+    if(NOT PRIM_HAS_CSTDINT)
+        execute_process(COMMAND xcrun --show-sdk-path
+            OUTPUT_VARIABLE PRIM_MACOS_SDK OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE PRIM_SDK_RESULT)
+        if(PRIM_SDK_RESULT EQUAL 0 AND EXISTS "${PRIM_MACOS_SDK}/usr/include/c++/v1/cstdint")
+            include_directories(SYSTEM "${PRIM_MACOS_SDK}/usr/include/c++/v1")
+        else()
+            message(FATAL_ERROR "C++ standard headers missing; repair the Xcode Command Line Tools installation")
+        endif()
+    endif()
+endif()
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
 find_package(VERILATOR HINTS $ENV{VERILATOR_ROOT} ${VERILATOR_ROOT})
 if (NOT verilator_FOUND)
   message(FATAL_ERROR "Verilator was not found. Either install it, or set the VERILATOR_ROOT environment variable")
@@ -12,6 +33,11 @@ endif()
 
 # Create a new executable target that will contain all your sources
 add_executable(simulator sim.cpp)
+
+enable_testing()
+add_test(NAME control_flow_regressions
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/control_flow_regressions.py
+        --simulator $<TARGET_FILE:simulator>)
 
 
 # Add the Verilated circuit to the target
