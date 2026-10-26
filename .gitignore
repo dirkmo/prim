@@ -12,3 +12,6 @@ prim.v
 prim.vcd
 *.gtkw
 *.vcd
+!pyproject.toml
+*.egg-info/
+dist/

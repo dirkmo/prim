@@ -1,4 +1,4 @@
-"""Focused regressions for the TokenForth Python tools (requires toml)."""
+"""Focused regressions for the TokenForth Python tools (installed package)."""
 import contextlib
 import io
 from pathlib import Path
@@ -8,12 +8,12 @@ import tempfile
 import unittest
 
 import toml
-import tokenforth as tf
-from tokenizer import scan, tokenizeFragments, tokenize_text, tokenize_file, convert
-from tferrors import CompileError
-from tokens import Token
-from prim import Prim
-from primconsts import Consts, PrimOpcodes as Op
+from prim import compiler as tf
+from prim.tokenizer import scan, tokenizeFragments, tokenize_text, tokenize_file, convert
+from prim.errors import CompileError
+from prim.tokens import Token
+from prim.cpu import Prim
+from prim.isa import Consts, PrimOpcodes as Op
 from test import Mif as TestMemory
 
 SRC = Path(__file__).resolve().parent

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prim-tokenforth"
+version = "0.1.0"
+description = "Prim stack CPU and TokenForth compiler tools"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["toml==0.10.2"]
+
+[project.optional-dependencies]
+debug = ["blessed"]
+hdl = [
+    "amaranth @ git+https://github.com/amaranth-lang/amaranth.git",
+    "amaranth-boards @ git+https://github.com/amaranth-lang/amaranth-boards.git",
+    "colorama",
+]
+
+[project.scripts]
+prim = "prim.cli:main"
+prim-asm = "prim.assembler:main"
+prim-tokenize = "prim.tokenizer:main"
+prim-compile = "prim.compiler:main"
+prim-export = "prim.exporter:main"
+prim-disasm = "prim.disassembler:main"
+prim-debug = "prim.cli:debug_main"
+prim-opcodes = "prim.isa:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["prim", "prim.*"]

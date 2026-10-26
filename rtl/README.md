@@ -2,9 +2,14 @@
 
 Requirements: CMake, Verilator, Icarus Verilog (`iverilog` and `vvp`),
 a C++17 compiler, and Python 3.11 or newer. The TokenForth compiler also needs
-`toml==0.10.2` (declared in requirements.txt). On macOS,
+the installed local `prim-tokenforth` package (dependencies in pyproject.toml). On macOS,
 install the Xcode Command Line Tools. CMake falls back to the active SDK's
 libc++ headers if the compiler cannot find them automatically.
+
+First run `bash setup.sh` and `source .venv/bin/activate` from the repository
+root. The commands below assume this environment is active. CMake prefers
+`.venv/bin/python` when available; override with `-DPython3_EXECUTABLE=...` if
+needed, using an interpreter where `pip install -e .` has been run.
 
 From the repository root, build the simulator and run the existing regressions:
 
@@ -278,11 +283,11 @@ Run the complete source-to-serial pipeline from the repository root:
 python3 rtl/test_tokenforth.py
 ```
 
-The runner uses a Python with `toml` installed, checking its own interpreter
+The runner uses a Python with `prim-tokenforth` installed, checking its own interpreter
 first, then `.venv/bin/python`. To select one explicitly:
 
 ```sh
-.venv/bin/python -m pip install toml==0.10.2
+.venv/bin/python -m pip install -e .
 python3 rtl/test_tokenforth.py --compiler-python .venv/bin/python
 ```
 
@@ -315,8 +320,9 @@ for each example/timing combination. CTest runs this as `tokenforth_end_to_end`.
 This tests the host compiler toolchain; `src/interpreter.cf` (the unfinished
 on-CPU token interpreter) is a separate component and is not required here.
 
-The same CTest entry runs the focused Python toolchain regressions and the
-original Python CPU tests. Run the focused checks separately with:
+The same CTest entry runs the focused Python toolchain regressions, the original
+Python CPU tests, and installed-package/CLI checks from a foreign working
+directory. Run the focused checks separately with:
 
 ```sh
 .venv/bin/python src/test_toolchain.py
@@ -361,11 +367,11 @@ tokenization owns a SymbolTable, tokens retain resolved indices, and each
 compiler Mif owns a Dictionary. Input library lists and memory are copied.
 Repeated, failed, and interleaved compilations are tested in one Python process.
 
-From Python with `src` on the import path:
+From Python with the package installed:
 
 ```python
-from tokenizer import tokenize_text
-from tokenforth import compile_document
+from prim.tokenizer import tokenize_text
+from prim.compiler import compile_document
 
 result = tokenize_text(':answer 42 ;', filename='example.cf')
 image = compile_document({

@@ -21,7 +21,16 @@ if(APPLE)
     endif()
 endif()
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
+# Prefer the editable project environment; callers can override explicitly.
+if(NOT DEFINED Python3_EXECUTABLE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../.venv/bin/python")
+    set(Python3_EXECUTABLE "${CMAKE_CURRENT_SOURCE_DIR}/../.venv/bin/python")
+endif()
+find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
+execute_process(COMMAND ${Python3_EXECUTABLE} -c "import prim; import toml"
+    RESULT_VARIABLE PRIM_PYTHON_RESULT OUTPUT_QUIET ERROR_QUIET)
+if(NOT PRIM_PYTHON_RESULT EQUAL 0)
+    message(FATAL_ERROR "Install the Python package first: ${Python3_EXECUTABLE} -m pip install -e ${CMAKE_CURRENT_SOURCE_DIR}/..")
+endif()
 find_program(IVERILOG_EXECUTABLE iverilog)
 find_program(VVP_EXECUTABLE vvp)
 if(NOT IVERILOG_EXECUTABLE OR NOT VVP_EXECUTABLE)
@@ -72,17 +81,17 @@ SOURCES prim.v)
 # target_link_libraries(simulator PUBLIC ${CURSES_LIBRARIES} readline)
 
 add_custom_target(genopcodes
-    COMMAND ${PROJECT_SOURCE_DIR}/../src/primconsts.py ${PROJECT_SOURCE_DIR}/opcodes.v
+    COMMAND ${Python3_EXECUTABLE} -m prim.isa ${PROJECT_SOURCE_DIR}/opcodes.v
 )
 
 
 add_custom_target(assemble
-    COMMAND ${PROJECT_SOURCE_DIR}/../src/primasm.py -i ${PROJECT_SOURCE_DIR}/test.asm -o ${CMAKE_BINARY_DIR}/test.bin
+    COMMAND ${Python3_EXECUTABLE} -m prim.assembler -i ${PROJECT_SOURCE_DIR}/test.asm -o ${CMAKE_BINARY_DIR}/test.bin
     COMMAND xxd -g1 ${CMAKE_BINARY_DIR}/test.bin
 )
 
 add_custom_target(disassemble
-    COMMAND ${PROJECT_SOURCE_DIR}/../src/primasm.py -d ${CMAKE_BINARY_DIR}/test.bin
+    COMMAND ${Python3_EXECUTABLE} -m prim.assembler -d ${CMAKE_BINARY_DIR}/test.bin
 )
 
 add_custom_target(simulate

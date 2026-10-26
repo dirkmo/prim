@@ -1,5 +1,52 @@
 # prim
 
+## Python development setup
+
+Python 3.11 or newer is required. Install the local package and activate its
+environment from the repository root:
+
+```sh
+bash setup.sh
+source .venv/bin/activate
+prim --help
+```
+
+`pyproject.toml` declares the runtime dependency (`toml`) and command-line tools.
+`pip install -e .` installs the tools in editable mode. Optional dependencies
+are separate: `pip install -e '.[debug]'` adds the terminal debugger;
+`pip install -e '.[hdl]'` adds the existing Amaranth tools. Neither is needed
+for the TokenForth compiler or Verilog simulations.
+
+The Python implementations live in `src/prim/`:
+
+```text
+prim/
+    cpu.py             Python CPU and memory interface
+    isa.py             Existing opcode constants and Verilog export
+    assembler.py       Assembly and binary disassembly
+    tokenizer.py       Scanner and source tokenization
+    compiler.py        TokenForth compilation
+    artifacts.py       Token/program models, validation and TOML/binary I/O
+    tokens.py          Token encoding
+    errors.py          Compiler diagnostics
+    exporter.py        TOML section -> binary export
+    disassembler.py    Annotated program-image disassembly
+    debugger.py        Optional terminal debugger
+    cli.py             Command-line dispatch
+```
+
+Use `prim asm`, `prim tokenize`, `prim compile`, `prim export`, `prim disasm`,
+`prim opcodes`, or `prim debug`. Separate `prim-asm`, `prim-tokenize`,
+`prim-compile`, `prim-export`, `prim-disasm`, `prim-opcodes`, and `prim-debug`
+commands are also available. `python -m prim` exposes the same subcommands.
+Each command accepts `--help`.
+
+The old `src/*.py` tool paths remain compatibility wrappers; existing
+`python src/tokenforth.py ...` and Makefile workflows still work in the active
+environment. Library imports use `prim.cpu`, `prim.tokenizer`, `prim.compiler`,
+etc. The RTL tests import the installed package without modifying `sys.path`.
+See [rtl/README.md](rtl/README.md) for simulation and end-to-end tests.
+
 ## The Plan
 
 Implement a primitive stack machine and a ColorForth like language that I call __TokenForth__.
@@ -27,12 +74,12 @@ Bit #7 of an opcode represents the return bit.
 
 Other instructions can be added easily, since there are a lot of unused opcodes.
 
-The CPU is implemented in file `prim.py`, a very primitive assembler/disassembler
-is implemented in `primasm.py`.
+The Python CPU is implemented in `src/prim/cpu.py`; the assembler/disassembler
+is implemented in `src/prim/assembler.py`.
 
 ## TokenForth
 
-A tokenizer (`tokenizer.py`) parses the source code and converts it into a binary representation. This is compiled then by `tokenforth.py`. Words in immediate mode are executed during compilation by the CPU.
+A tokenizer (`src/prim/tokenizer.py`) parses the source code and converts it into a binary representation. This is compiled by `src/prim/compiler.py`. Words in immediate mode are executed during compilation by the CPU.
 
 The TokenForth language recognizes the following token types:
 

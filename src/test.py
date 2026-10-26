@@ -1,8 +1,8 @@
 import sys
 
-from prim import Prim, MemoryIf
-from primasm import PrimAsm
-from primconsts import *
+from prim.cpu import Prim, MemoryIf
+from prim.assembler import PrimAsm
+from prim.isa import *
 
 class Mif(MemoryIf):
     def __init__(self, init=None):

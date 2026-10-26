@@ -1,4 +1,3 @@
-amaranth @ git+https://github.com/amaranth-lang/amaranth.git
-amaranth-boards @ git+https://github.com/amaranth-lang/amaranth-boards.git
-colorama
-toml==0.10.2
+# Runtime dependencies are declared in pyproject.toml.
+-e .
+# Optional tools: pip install -e '.[debug]' or pip install -e '.[hdl]'
