@@ -387,3 +387,42 @@ with independent `symbols`, literal lists and `memory`. To extend a library,
 pass its symbols to tokenization and its memory/literal lists into the next
 tokenizer document, as the CLI does. The former Token.D and Dictionary.D/S/N
 class attributes are replaced by these explicit per-compilation objects.
+
+## RTL test infrastructure
+
+`rtl/sim_support/` contains ordinary helper modules, separate from the test
+cases and command-line entry points:
+
+| Module | Responsibility |
+|--------|----------------|
+| build.py | Configure/build Verilator and compile Icarus testbenches |
+| process.py | Run external tools with timeouts, logs and failure diagnostics |
+| reference.py | Python memory model and instruction-retirement comparison |
+| traces.py | Read retirement JSON and final-state output |
+| verilator.py | Execute an image on the Verilator simulator |
+| sram.py | Execute SRAM/UART testbenches and collect simulation results |
+| tokenforth.py | Select compiler Python and freshly build TokenForth examples |
+| config.py, unittest_bridge.py | Explicit tool options and unittest lifecycle |
+| cases.py, scenarios.py | Shared instruction vectors and SRAM scenarios |
+
+Test modules no longer import other test modules, mutate their parsers, or
+parse command-line arguments on import. Importing them never launches a tool
+or creates a build directory. Script tool options are parsed only at the entry
+point and passed as an immutable Tools configuration. Direct test-script
+commands and CMake tool-path overrides keep the same syntax.
+
+SimulationResult supplies instruction counts, serial bytes and retirement
+records; its `save` method writes the existing `.jsonl`/`.uart.bin` artifacts.
+External-tool failures retain stdout/stderr and the exit code; timeouts and
+invalid traces report the command or filename/line. The dedicated
+`test_harness_checks` CTest suite covers these infrastructure guarantees.
+
+Unittest can also discover the RTL tests normally, without tool argument
+parsing. Build the Verilator simulator first, then run:
+
+```sh
+python -m unittest discover -s rtl -p 'test_*.py'
+```
+
+These helpers belong to the repository's tests and are not included in the
+installed runtime package.

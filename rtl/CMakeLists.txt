@@ -70,6 +70,8 @@ add_test(NAME uart_io_checks
 add_test(NAME tokenforth_end_to_end
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test_tokenforth.py
         --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
+add_test(NAME test_harness_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test_support.py)
 
 
 # Add the Verilated circuit to the target

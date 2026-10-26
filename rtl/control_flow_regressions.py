@@ -1,316 +1,35 @@
 #!/usr/bin/env python3
-
-import re
+"""Run the fixed final-state instruction regression vectors."""
 import argparse
-import subprocess
-import sys
-import tempfile
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent
-RTL = ROOT / 'rtl'
-BUILD = ROOT / 'build' / 'rtl'
-SIM = BUILD / 'simulator'
-
-# Focused control-flow, stack, memory, and ALU cases exercised against the
-# Verilog implementation before the broader instruction set is added.
-CASES = [
-    (
-        'call_ret_1',
-        '5 call BREAK nop 2.ret',
-        {'pc': 0x0004, 'dsp': 1, 'rsp': 0, 'T': 0x0002, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'call_ret_2',
-        '6 nop call BREAK nop 2.ret',
-        {'pc': 0x0005, 'dsp': 1, 'rsp': 0, 'T': 0x0002, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'int_isr_return',
-        'int nop BREAK nop 2.ret',
-        {'pc': 0x0003, 'dsp': 1, 'rsp': 0, 'T': 0x0002, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'int_preserves_data_stack',
-        '0x55 int BREAK 2.ret',
-        {'pc': 0x0004, 'dsp': 2, 'rsp': 0, 'T': 0x0002, 'N': 0x0055, 'R': 0x0000},
-    ),
-    (
-        'jp',
-        '4 jp BREAK 0xff',
-        {'pc': 0x0007, 'dsp': 1, 'rsp': 0, 'T': 0x00ff, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'jz_zero',
-        '0 8 jz BREAK 0xfe',
-        {'pc': 0x0009, 'dsp': 0, 'rsp': 0, 'T': 0x0000, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'jz_nonzero',
-        '1 8 jz BREAK 0xfe',
-        {'pc': 0x0006, 'dsp': 0, 'rsp': 0, 'T': 0x0000, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'stack_dup',
-        '1 2 dup BREAK',
-        {'pc': 0x0006, 'dsp': 3, 'rsp': 0, 'T': 0x0002, 'N': 0x0002, 'R': 0x0000},
-    ),
-    (
-        'stack_swap',
-        '1 2 swap BREAK',
-        {'pc': 0x0006, 'dsp': 2, 'rsp': 0, 'T': 0x0001, 'N': 0x0002, 'R': 0x0000},
-    ),
-    (
-        'stack_over',
-        '1 2 over BREAK',
-        {'pc': 0x0006, 'dsp': 3, 'rsp': 0, 'T': 0x0001, 'N': 0x0002, 'R': 0x0000},
-    ),
-    (
-        'stack_nip',
-        '1 2 nip BREAK',
-        {'pc': 0x0006, 'dsp': 1, 'rsp': 0, 'T': 0x0002, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'stack_rot',
-        '1 2 3 rot BREAK',
-        {'pc': 0x0008, 'dsp': 3, 'rsp': 0, 'T': 0x0001, 'N': 0x0003, 'R': 0x0000},
-    ),
-    (
-        'stack_rot_deep',
-        '1 2 3 rot nip BREAK',
-        {'pc': 0x0009, 'dsp': 2, 'rsp': 0, 'T': 0x0001, 'N': 0x0002, 'R': 0x0000},
-    ),
-    (
-        'stack_nrot',
-        '1 2 3 -rot BREAK',
-        {'pc': 0x0008, 'dsp': 3, 'rsp': 0, 'T': 0x0002, 'N': 0x0001, 'R': 0x0000},
-    ),
-    (
-        'stack_nrot_deep',
-        '1 2 3 -rot nip BREAK',
-        {'pc': 0x0009, 'dsp': 2, 'rsp': 0, 'T': 0x0002, 'N': 0x0003, 'R': 0x0000},
-    ),
-    (
-        'stack_drop',
-        '1 2 drop BREAK',
-        {'pc': 0x0006, 'dsp': 1, 'rsp': 0, 'T': 0x0001, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'stack_to_r',
-        '1 >r BREAK',
-        {'pc': 0x0004, 'dsp': 0, 'rsp': 1, 'T': 0x0000, 'N': 0x0000, 'R': 0x0001},
-    ),
-    (
-        'stack_rdrop',
-        '1 >r 2 >r rdrop BREAK',
-        {'pc': 0x0008, 'dsp': 0, 'rsp': 1, 'T': 0x0000, 'N': 0x0000, 'R': 0x0001},
-    ),
-    (
-        'stack_from_r',
-        '1 >r 2 r> BREAK',
-        {'pc': 0x0007, 'dsp': 2, 'rsp': 0, 'T': 0x0001, 'N': 0x0002, 'R': 0x0000},
-    ),
-    (
-        'alu_and',
-        '0xf0f0 0x0ff0 and BREAK',
-        {'dsp': 1, 'T': 0x00f0, 'N': 0x0000},
-    ),
-    (
-        'alu_or',
-        '0xf00f 0x0ff0 or BREAK',
-        {'dsp': 1, 'T': 0xffff, 'N': 0x0000},
-    ),
-    (
-        'alu_xor',
-        '0xaaaa 0x0ff0 xor BREAK',
-        {'dsp': 1, 'T': 0xa55a, 'N': 0x0000},
-    ),
-    (
-        'alu_not',
-        '0x0ff0 not BREAK',
-        {'dsp': 1, 'T': 0xf00f, 'N': 0x0000},
-    ),
-    (
-        'alu_sr',
-        '0x8003 sr BREAK',
-        {'dsp': 1, 'T': 0x4001, 'N': 0x0000},
-    ),
-    (
-        'alu_sr_carry',
-        '0x8003 sr carry BREAK',
-        {'dsp': 2, 'T': 1, 'N': 0x4001},
-    ),
-    (
-        'alu_srw',
-        '0x8123 srw BREAK',
-        {'dsp': 1, 'T': 0x0081, 'N': 0x0000},
-    ),
-    (
-        'alu_srw_carry',
-        '0x8123 srw carry BREAK',
-        {'dsp': 2, 'T': 0, 'N': 0x0081},
-    ),
-    (
-        'alu_sl',
-        '0x4001 sl BREAK',
-        {'dsp': 1, 'T': 0x8002, 'N': 0x0000},
-    ),
-    (
-        'alu_sl_carry',
-        '0x8000 sl carry BREAK',
-        {'dsp': 2, 'T': 1, 'N': 0x0000},
-    ),
-    (
-        'alu_slw',
-        '0x0181 slw BREAK',
-        {'dsp': 1, 'T': 0x8100, 'N': 0x0000},
-    ),
-    (
-        'alu_slw_carry',
-        '0x0181 slw carry BREAK',
-        {'dsp': 2, 'T': 1, 'N': 0x8100},
-    ),
-    (
-        'alu_add',
-        '0x1234 0x0102 + BREAK',
-        {'dsp': 1, 'T': 0x1336, 'N': 0x0000},
-    ),
-    (
-        'alu_add_carry',
-        '0xffff 1 + carry BREAK',
-        {'dsp': 2, 'T': 1, 'N': 0x0000},
-    ),
-    (
-        'alu_sub',
-        '0x1234 0x0102 - BREAK',
-        {'dsp': 1, 'T': 0x1132, 'N': 0x0000},
-    ),
-    (
-        'alu_sub_borrow',
-        '0 1 - carry BREAK',
-        {'dsp': 2, 'T': 1, 'N': 0xffff},
-    ),
-    (
-        'alu_lts_true',
-        '0xffff 1 < BREAK',
-        {'dsp': 1, 'T': 0xffff, 'N': 0x0000},
-    ),
-    (
-        'alu_lts_false',
-        '1 0xffff < BREAK',
-        {'dsp': 1, 'T': 0x0000, 'N': 0x0000},
-    ),
-    (
-        'alu_ltu_true',
-        '1 2 <u BREAK',
-        {'dsp': 1, 'T': 0xffff, 'N': 0x0000},
-    ),
-    (
-        'alu_ltu_false',
-        '2 1 <u BREAK',
-        {'dsp': 1, 'T': 0x0000, 'N': 0x0000},
-    ),
-    (
-        'memory_fetch_word',
-        '0x1234 0x100 ! 0x100 @ BREAK',
-        {'pc': 0x000c, 'dsp': 1, 'rsp': 0, 'T': 0x1234, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'memory_store_word',
-        '0x1234 0x100 ! BREAK',
-        {'pc': 0x0008, 'dsp': 0, 'rsp': 0, 'T': 0x0000, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'memory_fetch_byte_low',
-        '0x1234 0x100 ! 0x100 c@ BREAK',
-        {'pc': 0x000c, 'dsp': 1, 'rsp': 0, 'T': 0x0034, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'memory_fetch_byte_high',
-        '0x1234 0x100 ! 0x101 c@ BREAK',
-        {'pc': 0x000c, 'dsp': 1, 'rsp': 0, 'T': 0x0012, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'memory_store_byte_low',
-        '0x1234 0x100 ! 0xab 0x100 c! 0x100 @ BREAK',
-        {'pc': 0x0012, 'dsp': 1, 'rsp': 0, 'T': 0x12ab, 'N': 0x0000, 'R': 0x0000},
-    ),
-    (
-        'memory_store_byte_high',
-        '0x1234 0x100 ! 0xab 0x101 c! 0x100 @ BREAK',
-        {'pc': 0x0012, 'dsp': 1, 'rsp': 0, 'T': 0xab34, 'N': 0x0000, 'R': 0x0000},
-    ),
-]
-
-def assemble(asm):
-    import sys
-    sys.path.insert(0, str(ROOT / 'src'))
-    from primasm import PrimAsm
-    from primconsts import PrimOpcodes
-
-    prog = PrimAsm.assemble(asm.replace('SIMEND', 'BREAK'))
-    prog.append(PrimOpcodes.BREAK)
-    return bytes(prog)
+import sys
+from prim.assembler import PrimAsm
+from prim.isa import PrimOpcodes as Op
+from sim_support.build import verilator
+from sim_support.cases import CASES
+from sim_support.paths import SIMULATOR
+from sim_support.verilator import run_final_state
 
 
-def run_case(name, asm, expected):
-    image = assemble(asm)
-    with tempfile.NamedTemporaryFile(suffix='.bin', delete=False) as tmp:
-        tmp.write(image)
-        tmp_name = tmp.name
-    try:
-        out = subprocess.run(
-            [str(SIM), '-i', tmp_name],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10,
-            cwd=SIM.parent,
-        )
-    finally:
-        Path(tmp_name).unlink(missing_ok=True)
-
-    text = (out.stdout or '') + (out.stderr or '')
-    if 'Simulation halted on BREAK' not in text:
-        raise AssertionError(f'{name}: simulator did not halt on BREAK\n{text}')
-    match = re.search(r'state:\s+pc=([0-9a-fA-F]+)\s+dsp=(\d+)\s+rsp=(\d+)\s+T=([0-9a-fA-F]+)\s+N=([0-9a-fA-F]+)\s+R=([0-9a-fA-F]+)\s+ir=([0-9a-fA-F]+)', text, re.IGNORECASE)
-    if not match:
-        raise AssertionError(f'{name}: simulator did not emit a final state\n{text}')
-
-    actual = {
-        'pc': int(match.group(1), 16),
-        'dsp': int(match.group(2), 10),
-        'rsp': int(match.group(3), 10),
-        'T': int(match.group(4), 16),
-        'N': int(match.group(5), 16),
-        'R': int(match.group(6), 16),
-    }
-
+def run_case(name, asm, expected, simulator=SIMULATOR):
+    image = bytes(PrimAsm.assemble(asm.replace('SIMEND', 'BREAK')) + [Op.BREAK])
+    actual = run_final_state(image, simulator)
     mismatch = {key: (actual[key], expected[key]) for key in expected if actual[key] != expected[key]}
     if mismatch:
-        raise AssertionError(f'{name}: mismatch {mismatch}\n{text}')
-
+        raise AssertionError(f'{name}: mismatch {mismatch}')
     print(f'PASS {name}: {actual}')
-    return 0
 
 
 def main():
-    global SIM
     parser = argparse.ArgumentParser(description='Build and run RTL regressions')
     parser.add_argument('--simulator', type=Path,
                         help='Use an already built simulator (skip configure/build)')
     args = parser.parse_args()
-    if args.simulator is not None:
-        SIM = args.simulator.resolve()
-        if not SIM.is_file():
-            parser.error(f'Simulator not found: {SIM}')
-    else:
-        subprocess.run(['cmake', '-S', str(RTL), '-B', str(BUILD)], check=True)
-        subprocess.run(['cmake', '--build', str(BUILD)], check=True)
+    simulator = verilator(args.simulator)
     failures = 0
     for name, asm, expected in CASES:
         try:
-            run_case(name, asm, expected)
+            run_case(name, asm, expected, simulator)
         except Exception as exc:
             print(f'FAIL {name}: {exc}', file=sys.stderr)
             failures += 1

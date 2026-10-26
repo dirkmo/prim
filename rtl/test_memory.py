@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 """Memory handshake regressions with fixed and reproducible random latency."""
 
-import argparse
-from pathlib import Path
 import unittest
 
-from compare import compare, PrimAsm, Op
-from control_flow_regressions import CASES
+from prim.assembler import PrimAsm
+from prim.isa import PrimOpcodes as Op
+from sim_support.verilator import compare
+from sim_support.cases import CASES
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--simulator', type=Path, required=True)
-args, remaining = parser.parse_known_args()
-SIMULATOR = args.simulator.resolve()
+from sim_support.config import run_tests
+from sim_support.unittest_bridge import VerilatorHarness
 
 
-class MemoryChecks(unittest.TestCase):
+class MemoryChecks(VerilatorHarness, unittest.TestCase):
     def run_asm(self, asm, waits, seed=None):
-        return compare(bytes(PrimAsm.assemble(asm) + [Op.BREAK]), SIMULATOR,
+        return compare(bytes(PrimAsm.assemble(asm) + [Op.BREAK]), self.simulator,
                        wait_cycles=waits, wait_seed=seed)
 
     def test_existing_programs_with_waits(self):
@@ -56,4 +54,4 @@ class MemoryChecks(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main(argv=[__file__, *remaining])
+    run_tests(MemoryChecks, simulator=True)

@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
 """Instruction-by-instruction integration checks against the Python CPU."""
 
-import argparse
 import random
-from pathlib import Path
 import unittest
 
-from compare import compare, Prim, Memory, PrimAsm, Op
+from prim.cpu import Prim
+from prim.assembler import PrimAsm
+from prim.isa import PrimOpcodes as Op
+from sim_support.reference import Memory
+from sim_support.verilator import compare
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--simulator', type=Path, required=True)
-args, remaining = parser.parse_known_args()
-SIMULATOR = args.simulator.resolve()
+from sim_support.config import run_tests
+from sim_support.unittest_bridge import VerilatorHarness
 
 
-class ComparisonChecks(unittest.TestCase):
+class ComparisonChecks(VerilatorHarness, unittest.TestCase):
     def run_asm(self, asm, max_steps=1000):
-        return compare(bytes(PrimAsm.assemble(asm) + [Op.BREAK]), SIMULATOR, max_steps)
+        return compare(bytes(PrimAsm.assemble(asm) + [Op.BREAK]), self.simulator, max_steps)
 
     def test_empty_program(self):
         self.assertEqual(self.run_asm(''), 0)
 
     def test_simend_marker(self):
-        self.assertEqual(compare(bytes([Op.NOP, Op.SIMEND]), SIMULATOR), 1)
+        self.assertEqual(compare(bytes([Op.NOP, Op.SIMEND]), self.simulator), 1)
 
     def test_memory_wrapping_and_self_modifying_code(self):
         self.run_asm('0x1234 0xffff ! 0xffff @ 0xffff c@ 0 c@')
@@ -159,7 +159,7 @@ class ComparisonChecks(unittest.TestCase):
         image[:len(main)] = main
         image[0x100:0x102] = bytes(PrimAsm.assemble('7.ret'))
         image[0xffff] = Op.CALL
-        compare(image, SIMULATOR)
+        compare(image, self.simulator)
 
     def check_alu(self, asm, result, carry):
         # Check an independent arithmetic expectation as well as Python/RTL
@@ -172,7 +172,7 @@ class ComparisonChecks(unittest.TestCase):
         else:
             self.fail('ALU fixture did not halt')
         self.assertEqual((cpu.N(), cpu.T(), cpu._dsp), (result, carry, 2))
-        compare(image, SIMULATOR)
+        compare(image, self.simulator)
 
     def test_alu_binary_boundaries(self):
         values = (0, 1, 2, 0xff, 0x100, 0x7fff, 0x8000, 0xfffe, 0xffff)
@@ -230,4 +230,4 @@ class ComparisonChecks(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main(argv=[__file__, *remaining])
+    run_tests(ComparisonChecks, simulator=True)

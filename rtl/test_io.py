@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """UART framing plus CPU/SRAM/MMIO comparison with serial output decoding."""
-import subprocess
 import unittest
 
-import test_sram
-from compare import PrimAsm, Op
+from prim.assembler import PrimAsm
+from prim.isa import PrimOpcodes as Op
+from sim_support.config import run_tests
+from sim_support.paths import TIMINGS
+from sim_support.scenarios import SramScenarios
+from sim_support.unittest_bridge import SramHarness
 
 
-class IoChecks(test_sram.SramChecks):
+class IoChecks(SramScenarios, SramHarness, unittest.TestCase):
     with_uart = True
 
     def test_serial_hello_world(self):
         message = b'Hello, World!\r\n'
         asm = ' '.join(f'{byte} 0xffff c!' for byte in message)
-        for timing in test_sram.TIMINGS:
+        for timing in TIMINGS:
             with self.subTest(timing=timing):
                 actual = self.compare_image(bytes(PrimAsm.assemble(asm) + [Op.BREAK]), timing)
                 self.assertEqual(actual, message)
@@ -30,7 +33,7 @@ class IoChecks(test_sram.SramChecks):
                 self.assertEqual(actual, chunk)
 
     def test_serial_word_crossings(self):
-        for timing in test_sram.TIMINGS:
+        for timing in TIMINGS:
             with self.subTest(timing=timing):
                 # FFFE -> high byte to UART; FFFF -> low byte to UART, high to 0.
                 asm = ('0x4142 0xfffe ! 0xfffe @ '
@@ -42,17 +45,8 @@ class IoChecks(test_sram.SramChecks):
     def test_uart_unit(self):
         for divider in (1, 4, 7):
             with self.subTest(divider=divider):
-                binary = self.directory / f'uart-{divider}'
-                subprocess.run([
-                    test_sram.args.iverilog, '-g2012', '-s', 'tb_uart',
-                    '-P', f'tb_uart.CLKS_PER_BIT={divider}', '-o', str(binary),
-                    str(test_sram.RTL / 'tb_uart.sv'), str(test_sram.RTL / 'uart_tx.v'),
-                ], capture_output=True, text=True, check=True, timeout=30)
-                result = subprocess.run([test_sram.args.vvp, str(binary)],
-                                        capture_output=True, text=True, timeout=30)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertIn('PASS UART', result.stdout)
+                self.assertIn('PASS UART', self.simulation.run_uart(divider))
 
 
 if __name__ == '__main__':
-    unittest.main(argv=[__file__, *test_sram.remaining])
+    run_tests(IoChecks)
