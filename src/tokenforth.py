@@ -2,7 +2,6 @@
 
 import argparse
 from datetime import datetime
-import os
 import sys
 from prim import Prim, MemoryIf
 from primasm import PrimAsm
@@ -10,12 +9,14 @@ from primconsts import *
 from tokens import Token, BuildIn, encode_counted_string
 import toml
 import tomlfix
+from tferrors import CompileError
 
 DEFAULT_MAX_IMMEDIATE_STEPS = 100_000
 
 class Mif(MemoryIf):
     def __init__(self, init=None):
         self._mem = bytearray(0x10000)
+        self.dictionary = Dictionary()
         if init is not None:
             self.init(init)
 
@@ -44,42 +45,46 @@ class Mif(MemoryIf):
 
 
 class Dictionary:
-    D = [] # definition names
-    S = [] # string literal addresses
-    N = [] # number literal addresses
-    def addNameDefinition(name):
-        if name == "H":
-            assert len(Dictionary.D) == 0, "Definition of 'H' must be first."
-        if name == "LATEST":
-            assert len(Dictionary.D) == 1, "Definition of 'LATEST' must be second."
-        Dictionary.D.append(name)
-    def loadDefinitions(fn):
-        with open(fn, mode="rt") as f:
-            symbols = f.readlines()
-        for sym in symbols:
-            Dictionary.addNameDefinition(sym)
-    def lookupNameDefinition(idx):
-        return Dictionary.D[idx]
-    def addStringLiteral(addr):
-        Dictionary.S.append(addr)
-    def addNumberLiteral(addr):
-        Dictionary.N.append(addr)
+    def __init__(self, symbols=(), string_literals=(), number_literals=()):
+        self.D, self.S, self.N = [], list(string_literals), list(number_literals)
+        for name in symbols:
+            self.addNameDefinition(name)
+        for addresses in (self.S, self.N):
+            if any(type(addr) is not int or not 0 <= addr <= 65535 for addr in addresses):
+                raise CompileError('Literal addresses must be integers in 0..65535')
+
+    def addNameDefinition(self, name):
+        if not isinstance(name, str) or not name:
+            raise CompileError('Definition name must not be empty')
+        if name in self.D:
+            raise CompileError(f'Duplicate definition {name!r}')
+        if len(self.D) < 2 and name != ('H', 'LATEST')[len(self.D)]:
+            raise CompileError('The first definitions must be H and LATEST')
+        self.D.append(name)
+
+    def addStringLiteral(self, addr):
+        self.S.append(addr)
+
+    def addNumberLiteral(self, addr):
+        self.N.append(addr)
 
 
 def init(mif):
+    if not mif.dictionary.D:
+        mif.dictionary = Dictionary(("H", "LATEST"))
     # The word dictionary starts at address Consts.DICT and grows to lower addresses
     # Index 0: HERE pointer
     mif.write16(Consts.HERE, Consts.HERE+2)
     mif.write16(Consts.DICT, Consts.HERE)
-    Dictionary.addNumberLiteral(Consts.HERE)
-    # Dictionary.addNameDefinition("H")
+    mif.dictionary.addNumberLiteral(Consts.HERE)
     # Index 1: LATEST pointer, which points behind the last dict entry
     comma16(mif, Consts.DICT-2)
     appendToIndex(mif, HERE_FETCH(mif)-2)
-    Dictionary.addNumberLiteral(Consts.LATEST)
-    # Dictionary.addNameDefinition("LATEST")
+    mif.dictionary.addNumberLiteral(Consts.LATEST)
 
 def fetchFromIndex(mif, idx):
+    if not 0 <= idx < len(mif.dictionary.D):
+        raise CompileError(f'Unknown symbol index {idx}')
     return mif.read16(Consts.DICT-idx*2)
 
 def HERE_FETCH(mif):
@@ -141,7 +146,7 @@ def compile_string(mif, s):
     # continues "behind" the string data.
     counted = encode_counted_string(s)
     here = HERE_FETCH(mif)
-    Dictionary.addStringLiteral(here + 7)
+    mif.dictionary.addStringLiteral(here + 7)
     ops = []
     ops.extend(getPushOps(here + 7, shrink=False)) # 3 bytes
     ops.extend(getPushOps(here + 7 + len(counted), shrink=False)) # 3 bytes
@@ -150,130 +155,134 @@ def compile_string(mif, s):
     comma(mif, ops)
 
 
-def execute_string(cpu, s):
-    print("execute_string not implemented")
-
-
-def interpret(tokens, cpu, max_immediate_steps=DEFAULT_MAX_IMMEDIATE_STEPS):
+def decode_tokens(tokens, filename=None):
+    if not isinstance(tokens, (list, tuple, bytes, bytearray)) or any(type(t) is not int or not 0 <= t <= 255 for t in tokens):
+        raise CompileError('tokens must be a sequence of bytes', filename)
+    decoded = []
     idx = 0
-    mode = Token.MODE_COMPILE
+    words = (Token.WORD_CALL, Token.WORD_ADDRESS, Token.NUMBER, Token.LIT_NUMBER, Token.LIT_ADDRESS)
+    texts = (Token.STRING, Token.LIT_STRING, Token.DEFINITION,
+             Token.COMMENT_BACKSLASH, Token.COMMENT_BRACES, Token.WHITESPACE)
     while idx < len(tokens):
-        # print(f"here: {HERE(cpu._mif)}")
-        tag = tokens[idx]
-        # print(f"tag: {Token.tagnames[tag]} ({tag})")
+        offset, tag = idx, tokens[idx]
         idx += 1
-        if tag == Token.WORD_CALL:
-            di = tokens[idx] | (tokens[idx+1] << 8)
-            idx += 2
-            #(name, addr) = Dictionary.lookupNameDefinition(di)
-            addr = fetchFromIndex(cpu._mif, di)
-            ops = getPushOps(addr)
-            ops.append(PrimOpcodes.CALL)
-            # print(f"call {Dictionary.D[di]}")
-            if mode == Token.MODE_COMPILE:
-                comma(cpu._mif, ops)
-            else:
-                execute(cpu, ops, max_steps=max_immediate_steps)
-        elif tag == Token.WORD_ADDRESS:
-            di = tokens[idx] | (tokens[idx+1] << 8)
-            idx += 2
-            addr = fetchFromIndex(cpu._mif, di)
-            ops = getPushOps(addr)
-            # print(f"word address: {Dictionary.D[di]}")
-            if mode == Token.MODE_COMPILE:
-                comma(cpu._mif, ops)
-            else:
-                execute(cpu, ops, max_steps=max_immediate_steps)
-        elif tag == Token.NUMBER:
-            num = tokens[idx] | (tokens[idx+1] << 8)
-            idx += 2
-            ops = getPushOps(num)
-            # print(f"number: {num}")
-            if mode == Token.MODE_COMPILE:
-                comma(cpu._mif, ops)
-            else:
-                execute(cpu, ops, max_steps=max_immediate_steps)
-        elif tag == Token.STRING:
-            l = tokens[idx]
-            s = bytearray(tokens[idx+1:idx+1+l]).decode("utf-8")
-            idx += l + 1
-            # print(f"string: {s}")
-            if mode == Token.MODE_COMPILE:
-                compile_string(cpu._mif, s)
-            else:
-                execute_string(cpu, s)
-        elif tag == Token.MNEMONIC:
-            # print(f"mnemonic {PrimAsm.disassembleOpcode(tokens[idx])}")
-            if mode == Token.MODE_COMPILE:
-                comma(cpu._mif, [tokens[idx]])
-            else:
-                execute(cpu, [tokens[idx]], max_steps=max_immediate_steps)
+        if tag not in (*words, *texts, Token.MNEMONIC, Token.BUILDIN, Token.MODE):
+            raise CompileError(f'Unknown token tag {tag}', filename, offset=offset)
+        count = 2 if tag in words else 1
+        if idx + count > len(tokens):
+            raise CompileError('Truncated token payload', filename, offset=offset)
+        if tag in texts:
+            count = tokens[idx]
             idx += 1
-        elif tag == Token.BUILDIN:
-            asm = BuildIn.lookupByIndex(tokens[idx])[1]
-            ops = PrimAsm.assemble(asm)
-            # print(f"buildin {tokens[idx]}: '{asm}' {ops}")
-            idx += 1
-            if mode == Token.MODE_COMPILE:
-                comma(cpu._mif, ops)
-            else:
-                execute(cpu, ops, max_steps=max_immediate_steps)
-        elif tag == Token.LIT_NUMBER:
-            # print(f"Literal number: {tokens[idx] | (tokens[idx+1] << 8)}")
-            Dictionary.addNumberLiteral(HERE_FETCH(cpu._mif))
-            comma(cpu._mif, tokens[idx:idx+2])
-            idx += 2
-        elif tag == Token.LIT_STRING:
-            l = tokens[idx]
-            Dictionary.addStringLiteral(HERE_FETCH(cpu._mif))
-            comma(cpu._mif, tokens[idx:idx+1+l])
-            idx += l + 1
-        elif tag == Token.LIT_ADDRESS:
-            # print(f"Literal address: {tokens[idx] | (tokens[idx+1] << 8)}")
-            Dictionary.addNumberLiteral(HERE_FETCH(cpu._mif))
-            di = tokens[idx] | (tokens[idx+1] << 8)
-            idx += 2
-            addr = fetchFromIndex(cpu._mif, di)
-            comma16(cpu._mif, addr)
-        elif tag == Token.DEFINITION:
-            l = tokens[idx]
-            name_ba = bytearray(tokens[idx+1:idx+1+l])
-            name = name_ba.decode("utf-8")
-            idx += l + 1
-            print(f"Definition: {name} @ 0x{HERE_FETCH(cpu._mif):x}")
-            # Dictionary.addNameDefinition(name)
-            appendToIndex(cpu._mif, HERE_FETCH(cpu._mif))
-        elif tag == Token.MODE:
-            mode = tokens[idx]
-            idx += 1
-            # if mode == Token.MODE_COMPILE:
-            #     print("compile mode")
-            # else:
-            #     print("immediate mode")
-        elif tag in [Token.COMMENT_BACKSLASH, Token.COMMENT_BRACES, Token.WHITESPACE]:
-            l = tokens[idx]
-            idx += l + 1
+            if idx + count > len(tokens):
+                raise CompileError('Truncated text payload', filename, offset=offset)
+            value = bytes(tokens[idx:idx+count])
+            try:
+                value.decode('utf-8')
+            except UnicodeDecodeError as exc:
+                raise CompileError(f'Invalid UTF-8: {exc}', filename, offset=offset) from exc
+        elif tag in words:
+            value = tokens[idx] | tokens[idx+1] << 8
         else:
-            assert False, "Tag not handled!"
+            value = tokens[idx]
+        idx += count
+        if tag == Token.MODE and value not in (Token.MODE_COMPILE, Token.MODE_IMMEDIATE):
+            raise CompileError(f'Invalid mode {value}', filename, offset=offset)
+        if tag == Token.BUILDIN and value >= len(BuildIn.BUILDINS):
+            raise CompileError(f'Unknown builtin index {value}', filename, offset=offset)
+        decoded.append((offset, tag, value))
+    return decoded
+
+
+def interpret(tokens, cpu, max_immediate_steps=DEFAULT_MAX_IMMEDIATE_STEPS, filename=None):
+    mode = Token.MODE_COMPILE
+    mif = cpu._mif
+    for offset, tag, value in decode_tokens(tokens, filename):
+        try:
+            if mode == Token.MODE_IMMEDIATE and tag in (Token.DEFINITION, Token.LIT_NUMBER, Token.LIT_STRING, Token.LIT_ADDRESS, Token.STRING):
+                raise CompileError('Definitions, literals and strings are not allowed in immediate mode')
+            if tag in (Token.WORD_CALL, Token.WORD_ADDRESS, Token.NUMBER, Token.MNEMONIC, Token.BUILDIN):
+                if tag in (Token.WORD_CALL, Token.WORD_ADDRESS):
+                    ops = getPushOps(fetchFromIndex(mif, value))
+                    if tag == Token.WORD_CALL:
+                        ops.append(PrimOpcodes.CALL)
+                elif tag == Token.NUMBER:
+                    ops = getPushOps(value)
+                elif tag == Token.MNEMONIC:
+                    ops = [value]
+                else:
+                    ops = PrimAsm.assemble(BuildIn.lookupByIndex(value)[1])
+                if mode == Token.MODE_COMPILE:
+                    comma(mif, ops)
+                else:
+                    execute(cpu, ops, max_steps=max_immediate_steps)
+            elif tag == Token.STRING:
+                compile_string(mif, value.decode('utf-8'))
+            elif tag == Token.LIT_NUMBER:
+                mif.dictionary.addNumberLiteral(HERE_FETCH(mif))
+                comma16(mif, value)
+            elif tag == Token.LIT_STRING:
+                mif.dictionary.addStringLiteral(HERE_FETCH(mif))
+                comma(mif, [len(value), *value])
+            elif tag == Token.LIT_ADDRESS:
+                address = fetchFromIndex(mif, value)
+                mif.dictionary.addNumberLiteral(HERE_FETCH(mif))
+                comma16(mif, address)
+            elif tag == Token.DEFINITION:
+                name = value.decode('utf-8')
+                index = (Consts.DICT - mif.read16(Consts.LATEST)) // 2
+                if not name or not 0 <= index < len(mif.dictionary.D) or mif.dictionary.D[index] != name:
+                    raise CompileError(f'Definition {name!r} does not match symbol table index {index}')
+                appendToIndex(mif, HERE_FETCH(mif))
+            elif tag == Token.MODE:
+                mode = value
+        except ValueError as exc:
+            raise CompileError(str(exc), filename, offset=offset) from exc
+        except RuntimeError as exc:
+            location = CompileError(str(exc), filename, offset=offset)
+            raise RuntimeError(str(location)) from exc
+
+
+def snapshot(mif):
+    return {'type': 'tokenforth', 'symbols': mif.dictionary.D.copy(),
+            'string-literals': mif.dictionary.S.copy(),
+            'num-literals': mif.dictionary.N.copy(), 'memory': list(mif._mem)}
+
+
+def compile_document(document, max_immediate_steps=DEFAULT_MAX_IMMEDIATE_STEPS, filename=None):
+    """Compile one token document with independent CPU, memory and metadata."""
+    try:
+        if not isinstance(document, dict) or document.get('type') != 'tokenizer':
+            raise CompileError('Expected a tokenizer document')
+        if max_immediate_steps < 1:
+            raise CompileError('Immediate step limit must be positive')
+        symbols = document['symbols']
+        memory = document['memory']
+        if not isinstance(symbols, list):
+            raise CompileError('symbols must be a list')
+        if not isinstance(memory, list) or len(memory) not in (0, 65536) or any(type(b) is not int or not 0 <= b <= 255 for b in memory):
+            raise CompileError('memory must be empty or contain 65536 bytes')
+        dictionary = Dictionary(tomlfix.workaround(symbols), document['string-literals'], document['num-literals'])
+        if dictionary.D[:2] != ['H', 'LATEST']:
+            raise CompileError('symbols must start with H and LATEST')
+        tokens = document['tokens']
+    except (ValueError, KeyError, TypeError) as exc:
+        raise CompileError(str(exc), filename) from exc
+    mif = Mif(memory)
+    mif.dictionary = dictionary
+    if not memory:
+        init(mif)
+    interpret(tokens, Prim(mif), max_immediate_steps=max_immediate_steps, filename=filename)
+    return snapshot(mif)
 
 
 def saveData(infn, outfn, mif):
-    # symbolMap = {}
-    # for idx,sym in enumerate(Dictionary.D):
-    #     symbolMap[sym] = fetchFromIndex(mif, idx)
+    data = snapshot(mif)
+    data.update(title=f'tokenforthed {infn}', date=datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
+                **{'input-toml': str(infn)})
+    with open(outfn, mode='wt', encoding='utf-8') as output:
+        output.write(toml.dumps(data))
 
-    tomldata = {
-        "title": f"tokenforthed {infn}",
-        "date": f"{datetime.now().strftime('%d.%m.%Y %H:%M:%S')}",
-        "input-toml": f"{infn}",
-        "type": "tokenforth",
-        "symbols": Dictionary.D,
-        "string-literals": Dictionary.S,
-        "num-literals": Dictionary.N,
-        "memory": mif._mem
-    }
-    with open(outfn, mode="wt") as f:
-        f.write(toml.dumps(tomldata))
 
 def main():
     parser = argparse.ArgumentParser(description='Prim TokenForth compiler')
@@ -289,40 +298,16 @@ def main():
         inTomlData = toml.load(args.input_filename)
     except (OSError, ValueError) as exc:
         parser.error(f'{args.input_filename}: {exc}')
-    tokendata = inTomlData["tokens"]
-    memory = inTomlData["memory"]
-    symbols = tomlfix.workaround(inTomlData["symbols"])
-    strlits = inTomlData["string-literals"]
-    numlits = inTomlData["num-literals"]
-
-    for sym in symbols:
-        Dictionary.addNameDefinition(sym)
-
-    for lit in strlits:
-        Dictionary.S.append(lit)
-
-    for lit in numlits:
-        Dictionary.N.append(lit)
-
-    mif = Mif()
-    if len(memory) > 0:
-        mif.init(memory)
-    else:
-        init(mif)
-
-    cpu = Prim(mif)
-
     try:
-        interpret(tokendata, cpu, max_immediate_steps=args.max_immediate_steps)
-    except (ValueError, RuntimeError) as exc:
-        parser.error(f'{args.input_filename}: {exc}')
-
-    cpu.status()
-
-    try:
-        saveData(args.input_filename, args.output_filename, cpu._mif)
-    except OSError as exc:
-        parser.error(f'{args.output_filename}: {exc}')
+        data = compile_document(inTomlData, max_immediate_steps=args.max_immediate_steps,
+                                filename=args.input_filename)
+        data.update(title=f'tokenforthed {args.input_filename}',
+                    date=datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
+                    **{'input-toml': args.input_filename})
+        with open(args.output_filename, 'w', encoding='utf-8') as output:
+            output.write(toml.dumps(data))
+    except (OSError, ValueError, RuntimeError) as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":

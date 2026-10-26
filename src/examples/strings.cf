@@ -5,10 +5,11 @@
 :message "Grüße 🙂" ;
 :raw #"Raw ä"
 :empty #""
+:syntax ( " ignored \ [ ) ( second comment ) "\ ( )" ;
 :main
     message count type 32 tx
     'raw count type 32 tx
-    'empty count type "" count type
+    'empty count type "" count type syntax count type
     13 tx 10 tx
 ;
 [ 0x21 0 c! 'main 1 ! 1 3 c! 0x22 4 c! ]

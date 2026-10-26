@@ -1,216 +1,209 @@
 #!/usr/bin/env python3
 
 import argparse
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 import sys
 from tokens import *
 import primasm
 import toml
 import tomlfix
+from tferrors import CompileError
 
+
+@dataclass
 class Fragment:
-    def __init__(self, _s, _linenum):
-        self.s = _s
-        self.linenum = _linenum
+    s: str
+    linenum: int
+    column: int = 1
+    filename: str = '<string>'
+    kind: str = 'word'
+
+    def error(self, message):
+        return CompileError(message, self.filename, self.linenum, self.column)
 
 
-def fragment(s):
-    # create list of words and whitespaces
+class SymbolTable:
+    def __init__(self, names=()):
+        self.names = []
+        self.indices = {}
+        for name in names:
+            self.add(name)
+
+    def add(self, name):
+        if not isinstance(name, str) or not name:
+            raise CompileError('Definition name must not be empty')
+        if name in self.indices:
+            raise CompileError(f'Duplicate definition {name!r}')
+        if len(self.names) >= 65536:
+            raise CompileError('Too many definitions for a 16-bit symbol index')
+        self.indices[name] = len(self.names)
+        self.names.append(name)
+
+    def lookup(self, name):
+        try:
+            return self.indices[name]
+        except KeyError:
+            raise CompileError(f'Unknown word {name!r}') from None
+
+
+@dataclass
+class TokenizedSource:
+    tokens: list
+    symbols: list
+
+
+def scan(source, filename='<string>'):
+    """Scan once; quotes inside comments and comment markers inside strings are data.
+
+    Forth words are whitespace-delimited. Strings are single-line, with literal
+    backslashes (no new escape syntax). Parenthesized comments may span lines.
+    """
     fragments = []
-    t = ""
-    space = False
-    for c in s:
-        o = ord(c)
-        if space:
-            if ord(c) < 33:
-                t += c
-            else:
-                fragments.append(t)
-                t = c
-                space = False
+    pos, line, column = 0, 1, 1
+    while pos < len(source):
+        start, start_line, start_column = pos, line, column
+        kind = 'word'
+        if source[pos].isspace():
+            kind = 'whitespace'
+            while pos < len(source) and source[pos].isspace():
+                pos += 1
+        elif source[pos] == '\\' and (pos+1 == len(source) or source[pos+1].isspace()):
+            kind = 'line_comment'
+            end = source.find('\n', pos)
+            pos = len(source) if end < 0 else end
+        elif source[pos] == '(' and (pos+1 == len(source) or source[pos+1].isspace() or source[pos+1] == ')'):
+            kind = 'comment'
+            end = source.find(')', pos+1)
+            if end < 0:
+                raise CompileError('Unterminated parenthesized comment', filename, line, column)
+            pos = end + 1
+        elif source[pos] == '"' or source.startswith('#"', pos):
+            kind = 'raw_string' if source[pos] == '#' else 'string'
+            opening = pos + (2 if kind == 'raw_string' else 1)
+            end = source.find('"', opening)
+            newline = source.find('\n', opening)
+            if end < 0 or (newline >= 0 and newline < end):
+                raise CompileError('Unterminated string', filename, line, column)
+            pos = end + 1
         else:
-            if ord(c) < 33:
-                fragments.append(t)
-                space = True
-                t = c
-            else:
-                t += c
-    fragments.append(t)
+            while pos < len(source) and not source[pos].isspace():
+                pos += 1
+        if kind in ('string', 'raw_string', 'comment') and pos < len(source) and not source[pos].isspace():
+            raise CompileError('Expected whitespace after closing delimiter', filename, start_line, start_column)
+        text = source[start:pos]
+        fragments.append(Fragment(text, start_line, start_column, str(filename), kind))
+        lines = text.count('\n')
+        line += lines
+        column = len(text.rsplit('\n', 1)[-1]) + 1 if lines else column + len(text)
     return fragments
-
-
-def merge_comment_fragments(fragments):
-    ## merge comments to single fragment
-    merge = []
-    # \ comments
-    try:
-        f = fragments.index("\\")
-        merge = fragments[0:f] # fragments before "\""
-        if fragments[-1] == '\n':
-            merge.append("".join(fragments[f:-1])) # join fragments up to (but excluding) newline
-            merge.append(fragments[-1]) # append newline as separate fragment
-        else:
-            merge.append("".join(fragments[f:])) # join rest of line (there is no newline)
-        fragments = merge
-    except:
-        pass
-    # () comments
-    try:
-        c1 = fragments.index("(")
-        c2 = fragments.index(")")
-        merge = fragments[0:c1]
-        comment = "".join(fragments[c1:c2+1])
-        merge.append(comment)
-        merge.extend(fragments[c2+1:])
-        fragments = merge
-    except:
-        pass
-    return fragments
-
-def merge_string_fragments(fragments):
-    ## merge strings like "Hello World" to single fragment
-    merge = []
-    nfl = [] # new fragment list
-    stringfragment = False
-    for i in range(len(fragments)):
-        f = fragments[i]
-        if (not stringfragment):
-            opening = 2 if f.startswith('#"') else 1 if f.startswith('"') else 0
-            if opening and (len(f) == opening or not f.endswith('"')):
-                # start of string literal
-                stringfragment = True
-                merge = []
-                merge.append(f)
-            else:
-                nfl.append(f)
-        else:
-            if (len(f) > 0) and (f[-1] == '"'):
-                # end of string literal
-                merge.append(f)
-                nfl.append("".join(merge))
-                stringfragment = False
-            else:
-                merge.append(f)
-    assert stringfragment == False, f"ERROR: String literal {merge} missing double quote"
-    return nfl
 
 
 def isMnemonic(s):
     s = s.upper()
-    if s[-4:] == ".RET":
-        s = s[0:-4]
-    return s.upper() in primasm.PrimAsm.INSTRUCTIONS
-
-
-def isBuildin(s):
-    idx = BuildIn.getIndexByName(s)
-    return idx >= 0
+    if s.endswith('.RET'):
+        s = s[:-4]
+    return s in primasm.PrimAsm.INSTRUCTIONS
 
 
 def stringToNumber(s):
-    if s[0] == '$': # "$1a2b"
+    if s.startswith('$'):
         return int(s[1:], 16)
-    if s[0:2].lower() == "0x":
+    if s.lower().startswith('0x'):
         return int(s[2:], 16)
-    # "123"
     return int(s, 10)
 
 
-def tokenizeFragments(fragments):
+def tokenizeFragments(fragments, symbols=None):
+    symbols = SymbolTable() if symbols is None else symbols
     tokens = []
-    immediate = False
+    immediate = None
     for f in fragments:
-        t = f.s
-        newTokens = None
-        if len(t.strip()):
-            # print(f"'{t.strip()}'")
-            if t == "[":
-                newTokens = TokenMode(t, f, Token.MODE_IMMEDIATE)
-                immediate = True
-            elif t == "]":
-                newTokens = TokenMode(t, f, Token.MODE_COMPILE)
-                immediate = False
-            elif t[0] == ":": # add name to (virtual) dictionary ":name"
-                assert not immediate, f"ERROR on line {f.linenum}: Definition {t[1:]} not possible in immediate mode."
-                newTokens = TokenDefinition(t[1:], f)
-            elif isMnemonic(t):
-                newTokens = TokenMnemonic(t, f)
-                pass
-            elif isBuildin(t): # ";"
-                newTokens = TokenBuildin(t, f)
-            elif t[0] == "#":
-                assert not immediate, f"ERROR on line {f.linenum}: Literal {t} not possible in immediate mode."
-                if (len(t) >= 3) and (t[1] == '"') and t[-1] == '"':
-                    newTokens = TokenLiteralString(t[2:-1],f)
-                elif (len(t) > 1) and Token.definitionAvailable(t[1:]):
-                   newTokens = TokenLiteralAddress(t[1:],f)
+        text = f.s
+        try:
+            if f.kind == 'whitespace' or not text.strip():
+                token = TokenWhitespace(text, f) if text and text != ' ' else None
+            elif f.kind == 'line_comment':
+                token = TokenCommentBackslash(text, f)
+            elif f.kind == 'comment':
+                token = TokenCommentBraces(text, f)
+            elif f.kind in ('string', 'raw_string'):
+                if immediate is not None:
+                    raise CompileError('Strings are not allowed in immediate mode')
+                token = (TokenLiteralString(text[2:-1], f) if f.kind == 'raw_string'
+                         else TokenString(text[1:-1], f))
+            elif text == '[':
+                if immediate is not None:
+                    raise CompileError('Nested immediate mode is not allowed')
+                immediate = f
+                token = TokenMode(text, f, Token.MODE_IMMEDIATE)
+            elif text == ']':
+                if immediate is None:
+                    raise CompileError('Unexpected ] without [')
+                immediate = None
+                token = TokenMode(text, f, Token.MODE_COMPILE)
+            elif text.startswith(':'):
+                if immediate is not None:
+                    raise CompileError('Definitions are not allowed in immediate mode')
+                symbols.add(text[1:])
+                token = TokenDefinition(text[1:], f)
+            elif isMnemonic(text):
+                token = TokenMnemonic(text, f)
+            elif BuildIn.getIndexByName(text) >= 0:
+                token = TokenBuildin(text, f)
+            elif text.startswith('#'):
+                if immediate is not None:
+                    raise CompileError('Literals are not allowed in immediate mode')
+                value = text[1:]
+                if value in symbols.indices:
+                    token = TokenLiteralAddress(value, f, symbols.lookup(value))
                 else:
                     try:
-                        num = stringToNumber(t[1:])
-                        newTokens = TokenLiteralNumber(num, f)
-                    except:
-                        assert False, f"ERROR on line {f.linenum}: Unknown word '{t[1:]}'"
-            elif t[0] == "'" and len(t) > 2: # 'name
-                assert Token.definitionAvailable(t[1:]), f"ERROR on line {f.linenum}: Definition '{t[1:]}' not found."
-                newTokens = TokenWordAddress(t[1:], f)
-            elif t[0] == '"' and len(t) >= 2 and t[-1] == '"': # '"str"'
-                assert not immediate, f"ERROR on line {f.linenum}: String {t} not possible in immediate mode."
-                newTokens = TokenString(t[1:-1], f)
-            elif t[0:2] == "\\ ": # "\ comment"
-                newTokens = TokenCommentBackslash(t, f)
-            elif t[0:2] == "( ": # "( comment )"
-                newTokens = TokenCommentBraces(t, f)
-            elif t[0] == "'": # "'name"
-                newTokens = TokenWordAddress(t[1:], f)
-            else: # "name", "123", "$1a2b"
-                # compile word
-                if Token.definitionAvailable(t): # "name"
-                    newTokens = TokenWordCall(t, f)
-                else:
-                    # compile literal
-                    try:
-                        num = stringToNumber(t)
-                        newTokens = TokenNumber(num, f)
-                    except:
-                        assert False, f"ERROR on line {f.linenum}: Unknown word '{t}'"
-        else: # empty line or whitespace
-            if len(t) and t != ' ': # ignore single space
-                if ord(t[0]) < 33:
-                    newTokens = TokenWhitespace(t, f)
-        if newTokens is not None:
-            tokens.append(newTokens)
+                        token = TokenLiteralNumber(stringToNumber(value), f)
+                    except ValueError:
+                        raise CompileError(f'Unknown literal {value!r}') from None
+            elif text.startswith("'"):
+                name = text[1:]
+                token = TokenWordAddress(name, f, symbols.lookup(name))
+            elif text in symbols.indices:
+                token = TokenWordCall(text, f, symbols.lookup(text))
+            else:
+                try:
+                    token = TokenNumber(stringToNumber(text), f)
+                except ValueError:
+                    raise CompileError(f'Unknown word {text!r}') from None
+            if token is not None:
+                tokens.append(token)
+        except ValueError as exc:
+            raise f.error(str(exc)) from exc
+    if immediate is not None:
+        raise immediate.error('Unterminated immediate mode: missing ]')
     return tokens
 
-def convert(sourcefn, symbols):
-    for sym in symbols:
-        Token.addDefinition(sym)
 
-    with open(sourcefn, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    fragments = []
-    for num,line in enumerate(lines):
-        frags = merge_comment_fragments(fragment(line))
-        frags = merge_string_fragments(frags)
-        for f in frags:
-            fragments.append(Fragment(f, num+1))
-
-    tokens = tokenizeFragments(fragments)
-
-    # print("\nTokens:")
+def tokenize_text(source, symbols=('H', 'LATEST'), filename='<string>'):
+    try:
+        table = SymbolTable(symbols)
+    except ValueError as exc:
+        raise CompileError(str(exc), filename) from exc
+    tokens = tokenizeFragments(scan(source, filename), table)
     data = []
-    for t in tokens:
+    for token in tokens:
         try:
-            tokendata = t.generate()
+            data.extend(token.generate())
         except ValueError as exc:
-            raise ValueError(f'{sourcefn}:{t.fragment.linenum}: {exc}') from exc
-        # if t.tag == Token.WHITESPACE:
-        #     print(f"WS tag:{t.tag}")
-        # else:
-        #     print(f"'{t.fragment.s}' {Token.tagnames[t.tag]} data:{tokendata}")
-        data.extend(tokendata)
+            raise token.fragment.error(str(exc)) from exc
+    return TokenizedSource(data, table.names.copy())
 
-    return data
+
+def tokenize_file(filename, symbols=('H', 'LATEST')):
+    return tokenize_text(Path(filename).read_text(encoding='utf-8'), symbols, str(filename))
+
+
+def convert(sourcefn, symbols):
+    """Compatibility helper returning token bytes; no shared symbol state."""
+    return tokenize_file(sourcefn, symbols).tokens
 
 
 def load_library(filename):
@@ -226,6 +219,7 @@ def load_library(filename):
         if not isinstance(symbols, list) or not all(isinstance(s, str) for s in symbols):
             raise ValueError('symbols must be a list of names')
         library['symbols'] = tomlfix.workaround(symbols)
+        SymbolTable(library['symbols'])
         if library['symbols'][:2] != ['H', 'LATEST']:
             raise ValueError('symbols must start with H and LATEST')
         for field, maximum in (('memory', 255), ('string-literals', 65535), ('num-literals', 65535)):
@@ -242,20 +236,18 @@ def load_library(filename):
 def main():
     parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
     parser.add_argument("-i", help="Assembly input filename", action="store", metavar="<input filename>", type=str, required=True, dest="input_filename",default="")
-    parser.add_argument("-it", help="Input TOML filename", action="store", metavar="<input filename>", type=str, required=False, dest="input_toml_filename",default="")
+    parser.add_argument("-it", help="Input TOML filename", action="store", metavar="<input filename>", type=str, required=False, dest="input_toml_filename",default=None)
     parser.add_argument("-o", help="Output TOML filename", metavar="<output filename>", action="store", type=str, required=True, dest="output_toml_filename",default="")
     args = parser.parse_args()
 
     try:
-        inTomlData = load_library(args.input_toml_filename or None)
-        tokendata = convert(args.input_filename, inTomlData['symbols'])
+        inTomlData = load_library(args.input_toml_filename)
+        result = tokenize_file(args.input_filename, inTomlData['symbols'])
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
 
-    # make list from symbol dictionary
-    symbols = [""] * len(Token.D)
-    for key,value in Token.D.items():
-        symbols[value] = key
+    symbols = result.symbols
+    tokendata = result.tokens
 
     memory = inTomlData['memory']
     strlits = inTomlData['string-literals']
@@ -264,7 +256,7 @@ def main():
     # compile data to write toml file
     tomldata = { "title": f"Tokenized {args.input_filename}",
                  "date": f"{datetime.now().strftime('%d.%m.%Y %H:%M:%S')}",
-                 "input-toml": f"{args.input_toml_filename}",
+                 "input-toml": args.input_toml_filename or "",
                  "type": "tokenizer",
                  "symbols": symbols,
                  "string-literals": strlits,
@@ -273,8 +265,11 @@ def main():
                  "memory": memory }
 
     # write to file
-    with open(args.output_toml_filename, mode="wt") as f:
-        f.write(toml.dumps(tomldata))
+    try:
+        with open(args.output_toml_filename, mode="wt", encoding="utf-8") as f:
+            f.write(toml.dumps(tomldata))
+    except OSError as exc:
+        parser.error(str(exc))
 
 if __name__ == "__main__":
     sys.exit(main())

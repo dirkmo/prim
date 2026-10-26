@@ -296,7 +296,7 @@ files in `src/` are not used or overwritten. The four examples cover:
 | hello.cf | Compiled string, calls, while/repeat | `Hello, World!\r\n` |
 | control.cf | if/else/then, do/loop, for/next, i | `BACCC012` |
 | data.cf | Raw numeric/address literals, variable writes, indirect CALL | `ABCZ` |
-| strings.cf | UTF-8 byte counts, raw strings with spaces, empty strings | `Grüße 🙂 Raw ä \r\n` |
+| strings.cf | UTF-8, raw/empty strings, comment markers inside strings | `Grüße 🙂 Raw ä \ ( )\r\n` |
 
 Each source uses an immediate block to install `PUSH16 main; CALL; BREAK` at
 address zero. The test verifies this entry against the compiled dictionary;
@@ -338,3 +338,46 @@ the terminating BREAK step. Change it with the compiler option
 the input TOML filename, step limit and current PC instead of hanging.
 Python callers can pass `max_steps` to `execute` or `max_immediate_steps` to
 `interpret`. Opcode inputs are copied and remain reusable across executions.
+
+## Tokenizer/compiler API and diagnostics
+
+The tokenizer scans source once, distinguishing words, strings, line comments
+and parenthesized comments. Comment markers inside strings and quotes inside
+comments are literal text. Multiple comments on a line and multiline
+parenthesized comments are supported. Words and delimiters are separated by
+whitespace; strings remain single-line with literal backslashes (no escape
+syntax). Parenthesized comments are not nested. Immediate brackets must be
+balanced and cannot be nested.
+
+Input errors use `tferrors.CompileError` (a ValueError), with source locations
+such as `example.cf:3:5`. Compiler token errors include the input filename and
+byte offset, e.g. `example.tok.toml:token[12]`. Truncated payloads, invalid UTF-8,
+unknown tags, modes, builtins and symbol indices are rejected. Validation also
+runs under `python -O`; it no longer depends on assertions. The CLI reports
+these errors without a traceback and does not write a compiled result.
+
+There is no per-compilation class-global symbol or literal state. Each
+tokenization owns a SymbolTable, tokens retain resolved indices, and each
+compiler Mif owns a Dictionary. Input library lists and memory are copied.
+Repeated, failed, and interleaved compilations are tested in one Python process.
+
+From Python with `src` on the import path:
+
+```python
+from tokenizer import tokenize_text
+from tokenforth import compile_document
+
+result = tokenize_text(':answer 42 ;', filename='example.cf')
+image = compile_document({
+    'type': 'tokenizer', 'tokens': result.tokens, 'symbols': result.symbols,
+    'memory': [], 'string-literals': [], 'num-literals': [],
+}, filename='example.tok.toml')
+```
+
+`tokenize_file(path, symbols=...)` returns the same TokenizedSource structure.
+The existing `convert(path, symbols)` helper still returns token bytes, without
+leaving shared state behind. `compile_document` returns a compiled document
+with independent `symbols`, literal lists and `memory`. To extend a library,
+pass its symbols to tokenization and its memory/literal lists into the next
+tokenizer document, as the CLI does. The former Token.D and Dictionary.D/S/N
+class attributes are replaced by these explicit per-compilation objects.

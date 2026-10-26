@@ -19,7 +19,7 @@ ARTIFACTS = ROOT / 'build' / 'tokenforth'
 EXAMPLES = {'hello': b'Hello, World!\r\n',
             'control': b'BACCC012',
             'data': b'ABCZ',
-            'strings': 'Grüße 🙂 Raw ä \r\n'.encode('utf-8')}
+            'strings': 'Grüße 🙂 Raw ä \\ ( )\r\n'.encode('utf-8')}
 
 
 class TokenForthChecks(test_sram.SramHarness, unittest.TestCase):
