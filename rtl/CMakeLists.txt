@@ -26,7 +26,7 @@ if(NOT DEFINED Python3_EXECUTABLE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../.ve
     set(Python3_EXECUTABLE "${CMAKE_CURRENT_SOURCE_DIR}/../.venv/bin/python")
 endif()
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
-execute_process(COMMAND ${Python3_EXECUTABLE} -c "import prim; import toml"
+execute_process(COMMAND ${Python3_EXECUTABLE} -c "import prim.artifacts"
     RESULT_VARIABLE PRIM_PYTHON_RESULT OUTPUT_QUIET ERROR_QUIET)
 if(NOT PRIM_PYTHON_RESULT EQUAL 0)
     message(FATAL_ERROR "Install the Python package first: ${Python3_EXECUTABLE} -m pip install -e ${CMAKE_CURRENT_SOURCE_DIR}/..")

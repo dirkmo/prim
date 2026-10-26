@@ -459,8 +459,10 @@ export_section(load_program('answer.tf.toml'), 'memory', 'answer.bin')
 it. `save`, `section_bytes` and `export_section` centralize serialization and
 byte-section export. Paths appear in parse, schema and I/O errors. Unknown
 non-reserved metadata fields survive a load/save roundtrip. The existing field
-names and TOML document kinds remain unchanged, and the current TOML reader's
-comma-symbol workaround is confined to this I/O boundary.
+names and TOML document kinds remain unchanged. Reading uses Python 3.11's
+standard-library `tomllib`; writing uses `tomli-w`. The old `toml` dependency
+and its comma-symbol workaround have been removed. Existing TOML artifacts
+remain readable; newly written files can have different whitespace.
 
 Existing `compile_document`, `snapshot` and `load_library` mapping APIs and
 command-line flags remain available. For new code, `tokenize_document` and

@@ -5,9 +5,10 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar
 
-import toml
+import tomllib
+
+import tomli_w
 from .errors import CompileError
-from . import tomlfix
 
 _RESERVED = {'type', 'symbols', 'memory', 'tokens', 'string-literals', 'num-literals'}
 
@@ -109,17 +110,14 @@ class ProgramImage(_Document):
 def load(filename, expected=None):
     """Load and validate either existing TOML format; retain unknown metadata."""
     try:
-        with open(filename, encoding='utf-8') as source:
-            data = toml.load(source)
+        with open(filename, 'rb') as source:
+            data = tomllib.load(source)
         kind = data.get('type')
         if kind not in ('tokenizer', 'tokenforth'):
             raise CompileError(f'Unknown document type {kind!r}')
         document_type = TokenDocument if kind == 'tokenizer' else ProgramImage
         if expected is not None and document_type is not expected:
             raise CompileError(f'Expected a {expected.kind} document')
-        # Compatibility with the existing TOML reader; remove with its replacement.
-        if isinstance(data.get('symbols'), list):
-            data['symbols'] = tomlfix.workaround(data['symbols'])
     except (OSError, ValueError, TypeError) as exc:
         raise CompileError(str(exc), filename) from exc
     return document_type.from_mapping(data, filename=filename)
@@ -138,7 +136,7 @@ def save(document, filename):
         raise CompileError('save expects a TokenDocument or ProgramImage', filename)
     try:
         # Serialize before opening the output, so encoding errors cannot truncate it.
-        text = toml.dumps(document.to_mapping())
+        text = tomli_w.dumps(document.to_mapping())
         Path(filename).write_text(text, encoding='utf-8')
     except (OSError, ValueError, TypeError) as exc:
         raise CompileError(str(exc), filename) from exc

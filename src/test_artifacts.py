@@ -46,6 +46,31 @@ class ArtifactChecks(unittest.TestCase):
                 mapping['custom']['labels'].append('changed')
                 self.assertEqual(actual.metadata['custom']['labels'], ['x'])
 
+    def test_standard_toml_symbols_and_metadata(self):
+        path = self.directory / 'handwritten.tok.toml'
+        path.write_text('''# Legacy field names, independently of the writer.
+type = 'tokenizer'
+symbols = ['H', 'LATEST', ',', ',,', 'a,b', 'Grüße 🙂', '"', '\\']
+memory = []
+tokens = []
+string-literals = []
+num-literals = []
+[custom]
+label = 'a,b'
+''', encoding='utf-8')
+        document = load_tokens(path)
+        self.assertEqual(document.symbols, ('H', 'LATEST', ',', ',,', 'a,b', 'Grüße 🙂', '"', '\\'))
+        save(document, path)
+        self.assertEqual(load_tokens(path), document)
+
+    def test_empty_symbols_are_rejected_without_comma_repair(self):
+        path = self.directory / 'empty-symbols.tok.toml'
+        path.write_text("type = 'tokenizer'\nsymbols = ['H', 'LATEST', '', '']\n"
+                        "memory = []\ntokens = []\nstring-literals = []\nnum-literals = []\n",
+                        encoding='utf-8')
+        with self.assertRaisesRegex(CompileError, 'nonempty names'):
+            load_tokens(path)
+
     def test_inputs_and_exported_mappings_are_owned(self):
         memory, tokens, symbols, addresses = bytearray(65536), [4, Op.NOP], self.symbols.copy(), [100]
         metadata = {'custom': ['original']}

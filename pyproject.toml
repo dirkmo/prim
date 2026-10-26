@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Prim stack CPU and TokenForth compiler tools"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["toml==0.10.2"]
+dependencies = ["tomli-w==1.2.0"]
 
 [project.optional-dependencies]
 debug = ["blessed"]

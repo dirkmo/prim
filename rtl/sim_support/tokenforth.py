@@ -10,7 +10,7 @@ def compiler_python(explicit=None):
     for candidate in candidates:
         candidate = Path(candidate).absolute()  # Keep the venv symlink path.
         if candidate.is_file():
-            result = run([candidate, '-c', 'import prim; import toml'], timeout=10, allowed=(0, 1))
+            result = run([candidate, '-c', 'import prim.artifacts'], timeout=10, allowed=(0, 1))
             if result.returncode == 0:
                 return candidate
     raise RuntimeError('Install the project with pip install -e . or specify --compiler-python')

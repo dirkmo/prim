@@ -11,7 +11,7 @@ source .venv/bin/activate
 prim --help
 ```
 
-`pyproject.toml` declares the runtime dependency (`toml`) and command-line tools.
+`pyproject.toml` declares the runtime dependency (`tomli-w`) and command-line tools.
 `pip install -e .` installs the tools in editable mode. Optional dependencies
 are separate: `pip install -e '.[debug]'` adds the terminal debugger;
 `pip install -e '.[hdl]'` adds the existing Amaranth tools. Neither is needed

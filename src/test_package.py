@@ -23,6 +23,7 @@ class PackageChecks(unittest.TestCase):
         result = self.run_python('-c', '''
 import sys
 sys.argv = ['application', '--not-a-prim-option']
+sys.modules['toml'] = None  # The old parser must no longer be required.
 import prim
 from prim import Prim, MemoryIf, PrimAsm, Consts, PrimOpcodes
 from prim import cpu, isa, assembler, compiler, tokenizer, tokens, errors, exporter, disassembler, cli, artifacts
@@ -37,7 +38,7 @@ print('PASS imports')
     def test_metadata_and_optional_dependencies(self):
         package = metadata.distribution('prim-tokenforth')
         base = [item for item in package.requires if ';' not in item]
-        self.assertEqual(base, ['toml==0.10.2'])
+        self.assertEqual(base, ['tomli-w==1.2.0'])
         self.assertEqual(set(package.metadata.get_all('Provides-Extra')), {'debug', 'hdl'})
         commands = {entry.name for entry in package.entry_points if entry.group == 'console_scripts'}
         self.assertEqual(commands, {'prim', 'prim-asm', 'prim-tokenize', 'prim-compile',

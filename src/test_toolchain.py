@@ -7,7 +7,8 @@ import sys
 import tempfile
 import unittest
 
-import toml
+import tomllib
+import tomli_w
 from prim import compiler as tf
 from prim.tokenizer import scan, tokenizeFragments, tokenize_text, tokenize_file, convert
 from prim.errors import CompileError
@@ -141,7 +142,7 @@ class CommandLineChecks(unittest.TestCase):
     def test_no_library_is_valid(self):
         result = self.tokenize()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(toml.load(self.output)['symbols'], ['H', 'LATEST'])
+        self.assertEqual(tomllib.loads(self.output.read_text(encoding="utf-8"))['symbols'], ['H', 'LATEST'])
 
     def test_explicit_library_errors_do_not_fall_back(self):
         library = self.directory / 'library.toml'
@@ -159,10 +160,10 @@ class CommandLineChecks(unittest.TestCase):
         library = self.directory / 'library.toml'
         state = dict(type='tokenforth', symbols=['H', 'LATEST'], memory=[0]*65536,
                      **{'string-literals': [], 'num-literals': []})
-        library.write_text(toml.dumps(state))
+        library.write_text(tomli_w.dumps(state))
         result = self.tokenize('-it', str(library))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(toml.load(self.output)['memory'], state['memory'])
+        self.assertEqual(tomllib.loads(self.output.read_text(encoding="utf-8"))['memory'], state['memory'])
 
     def test_missing_source_has_filename_and_no_output(self):
         self.source = self.directory / 'missing.cf'
@@ -187,7 +188,7 @@ class CommandLineChecks(unittest.TestCase):
         state = dict(type='tokenizer', symbols=['H', 'LATEST', 'spin'], memory=memory,
                      tokens=[Token.MODE, Token.MODE_IMMEDIATE, Token.WORD_CALL, 2, 0],
                      **{'string-literals': [], 'num-literals': []})
-        library.write_text(toml.dumps(state))
+        library.write_text(tomli_w.dumps(state))
         result = subprocess.run([sys.executable, str(SRC / 'tokenforth.py'), '-i', str(library),
                                  '-o', str(self.output), '--max-immediate-steps', '12'],
                                 capture_output=True, text=True, timeout=10)
@@ -315,7 +316,7 @@ class OptimizedPythonChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / 'bad.tok.toml'
             output = Path(directory) / 'output.toml'
-            source.write_text(toml.dumps(dict(type='tokenizer', symbols=['H', 'LATEST'],
+            source.write_text(tomli_w.dumps(dict(type='tokenizer', symbols=['H', 'LATEST'],
                 memory=[], tokens=[Token.NUMBER, 1],
                 **{'string-literals': [], 'num-literals': []})))
             result = subprocess.run([sys.executable, '-O', str(SRC / 'tokenforth.py'),
