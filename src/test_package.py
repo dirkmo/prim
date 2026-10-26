@@ -25,7 +25,7 @@ import sys
 sys.argv = ['application', '--not-a-prim-option']
 import prim
 from prim import Prim, MemoryIf, PrimAsm, Consts, PrimOpcodes
-from prim import cpu, isa, assembler, compiler, tokenizer, tokens, errors, exporter, disassembler, cli
+from prim import cpu, isa, assembler, compiler, tokenizer, tokens, errors, exporter, disassembler, cli, artifacts
 assert Prim is cpu.Prim
 assert PrimOpcodes is isa.PrimOpcodes
 assert not {'blessed', 'amaranth', 'amaranth_boards'} & set(sys.modules)

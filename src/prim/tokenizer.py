@@ -7,8 +7,7 @@ from pathlib import Path
 import sys
 from .tokens import *
 from . import assembler as primasm
-import toml
-from . import tomlfix
+from .artifacts import TokenDocument, ProgramImage, load_program, save
 from .errors import CompileError
 
 
@@ -207,30 +206,22 @@ def convert(sourcefn, symbols):
 
 
 def load_library(filename):
+    """Compatibility mapping API; file validation lives in artifacts."""
     if filename is None:
         return {'symbols': ['H', 'LATEST'], 'memory': [],
                 'string-literals': [], 'num-literals': []}
-    try:
-        with open(filename, encoding='utf-8') as source:
-            library = toml.load(source)
-        if library.get('type') != 'tokenforth':
-            raise ValueError('Expected a compiled tokenforth library')
-        symbols = library['symbols']
-        if not isinstance(symbols, list) or not all(isinstance(s, str) for s in symbols):
-            raise ValueError('symbols must be a list of names')
-        library['symbols'] = tomlfix.workaround(symbols)
-        SymbolTable(library['symbols'])
-        if library['symbols'][:2] != ['H', 'LATEST']:
-            raise ValueError('symbols must start with H and LATEST')
-        for field, maximum in (('memory', 255), ('string-literals', 65535), ('num-literals', 65535)):
-            values = library[field]
-            if not isinstance(values, list) or not all(type(v) is int and 0 <= v <= maximum for v in values):
-                raise ValueError(f'{field} must be a list of integers in 0..{maximum}')
-        if len(library['memory']) != 65536:
-            raise ValueError('Library memory must contain exactly 65536 bytes')
-        return library
-    except (OSError, ValueError, KeyError) as exc:
-        raise ValueError(f'{filename}: {exc}') from exc
+    return load_program(filename).to_mapping()
+
+
+def tokenize_document(source, library=None, filename='<string>'):
+    """Tokenize against an optional compiled library without sharing its buffers."""
+    if library is not None:
+        library = ProgramImage.from_mapping(library)
+    result = tokenize_text(source, library.symbols if library else ('H', 'LATEST'), filename)
+    return TokenDocument(tokens=result.tokens, symbols=result.symbols,
+                         memory=library.memory if library else b'',
+                         string_literals=library.string_literals if library else (),
+                         number_literals=library.number_literals if library else ())
 
 
 def main(argv=None):
@@ -241,34 +232,14 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     try:
-        inTomlData = load_library(args.input_toml_filename)
-        result = tokenize_file(args.input_filename, inTomlData['symbols'])
+        library = load_program(args.input_toml_filename) if args.input_toml_filename is not None else None
+        document = tokenize_document(Path(args.input_filename).read_text(encoding='utf-8'),
+                                     library=library, filename=args.input_filename)
+        document = document.with_metadata(title=f'Tokenized {args.input_filename}',
+            date=datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
+            **{'input-toml': args.input_toml_filename or ''})
+        save(document, args.output_toml_filename)
     except (OSError, ValueError) as exc:
-        parser.error(str(exc))
-
-    symbols = result.symbols
-    tokendata = result.tokens
-
-    memory = inTomlData['memory']
-    strlits = inTomlData['string-literals']
-    numlits = inTomlData['num-literals']
-
-    # compile data to write toml file
-    tomldata = { "title": f"Tokenized {args.input_filename}",
-                 "date": f"{datetime.now().strftime('%d.%m.%Y %H:%M:%S')}",
-                 "input-toml": args.input_toml_filename or "",
-                 "type": "tokenizer",
-                 "symbols": symbols,
-                 "string-literals": strlits,
-                 "num-literals": numlits,
-                 "tokens": tokendata,
-                 "memory": memory }
-
-    # write to file
-    try:
-        with open(args.output_toml_filename, mode="wt", encoding="utf-8") as f:
-            f.write(toml.dumps(tomldata))
-    except OSError as exc:
         parser.error(str(exc))
 
 if __name__ == "__main__":

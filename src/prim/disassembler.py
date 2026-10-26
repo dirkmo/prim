@@ -2,8 +2,7 @@
 
 import argparse
 import sys
-import toml
-from . import tomlfix
+from .artifacts import ProgramImage, load_program
 
 from .assembler import PrimAsm
 from .isa import *
@@ -21,10 +20,11 @@ def disassembleOpcode(opcode):
 
 
 def disassemble(td, out_fn):
-    data = td["memory"]
-    strlits = td["string-literals"]
-    numlits = td["num-literals"]
-    symbols = tomlfix.workaround(td["symbols"])
+    image = ProgramImage.from_mapping(td)
+    data = image.memory
+    strlits = image.string_literals
+    numlits = image.number_literals
+    symbols = image.symbols
 
     symbolMap = {}
     for idx,sym in enumerate(symbols):
@@ -101,9 +101,10 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
 
-    tomldata = toml.load(args.input_filename)
-
-    disassemble(tomldata, args.output_filename)
+    try:
+        disassemble(load_program(args.input_filename), args.output_filename)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":

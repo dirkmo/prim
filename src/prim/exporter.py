@@ -2,7 +2,7 @@
 
 import argparse
 import sys
-import toml
+from .artifacts import load, export_section
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='binary data export tool')
@@ -11,16 +11,10 @@ def main(argv=None):
     parser.add_argument("-s", help="Section name", metavar="<section name>", action="store", type=str, required=True, dest="sectionname",default="")
     args = parser.parse_args(argv)
 
-    tomldata = toml.load(args.input_filename)
-
-    if args.sectionname in tomldata:
-        data = bytearray(tomldata[args.sectionname])
-    else:
-        print(f"ERROR: Section '{args.sectionname}' not found in {args.input_filename}")
-        exit(1)
-
-    with open(args.output_filename, "wb") as f:
-        f.write(data)
+    try:
+        export_section(load(args.input_filename), args.sectionname, args.output_filename)
+    except ValueError as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":

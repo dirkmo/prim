@@ -7,8 +7,7 @@ from .cpu import Prim, MemoryIf
 from .assembler import PrimAsm
 from .isa import *
 from .tokens import Token, BuildIn, encode_counted_string
-import toml
-from . import tomlfix
+from .artifacts import TokenDocument, ProgramImage, load_tokens, save
 from .errors import CompileError
 
 DEFAULT_MAX_IMMEDIATE_STEPS = 100_000
@@ -243,45 +242,39 @@ def interpret(tokens, cpu, max_immediate_steps=DEFAULT_MAX_IMMEDIATE_STEPS, file
             raise RuntimeError(str(location)) from exc
 
 
+def program_image(mif, metadata=None):
+    return ProgramImage(symbols=mif.dictionary.D, memory=mif._mem,
+                        string_literals=mif.dictionary.S, number_literals=mif.dictionary.N,
+                        metadata=metadata or {})
+
+
 def snapshot(mif):
-    return {'type': 'tokenforth', 'symbols': mif.dictionary.D.copy(),
-            'string-literals': mif.dictionary.S.copy(),
-            'num-literals': mif.dictionary.N.copy(), 'memory': list(mif._mem)}
+    """Compatibility mapping API; typed callers use program_image."""
+    return program_image(mif).to_mapping()
+
+
+def compile_tokens(document, max_immediate_steps=DEFAULT_MAX_IMMEDIATE_STEPS, filename=None):
+    """Compile a validated token document into an owned program image."""
+    document = TokenDocument.from_mapping(document, filename=filename)
+    if max_immediate_steps < 1:
+        raise CompileError('Immediate step limit must be positive', filename)
+    mif = Mif(document.memory)
+    mif.dictionary = Dictionary(document.symbols, document.string_literals, document.number_literals)
+    if not document.memory:
+        init(mif)
+    interpret(document.tokens, Prim(mif), max_immediate_steps=max_immediate_steps, filename=filename)
+    return program_image(mif, document.metadata)
 
 
 def compile_document(document, max_immediate_steps=DEFAULT_MAX_IMMEDIATE_STEPS, filename=None):
-    """Compile one token document with independent CPU, memory and metadata."""
-    try:
-        if not isinstance(document, dict) or document.get('type') != 'tokenizer':
-            raise CompileError('Expected a tokenizer document')
-        if max_immediate_steps < 1:
-            raise CompileError('Immediate step limit must be positive')
-        symbols = document['symbols']
-        memory = document['memory']
-        if not isinstance(symbols, list):
-            raise CompileError('symbols must be a list')
-        if not isinstance(memory, list) or len(memory) not in (0, 65536) or any(type(b) is not int or not 0 <= b <= 255 for b in memory):
-            raise CompileError('memory must be empty or contain 65536 bytes')
-        dictionary = Dictionary(tomlfix.workaround(symbols), document['string-literals'], document['num-literals'])
-        if dictionary.D[:2] != ['H', 'LATEST']:
-            raise CompileError('symbols must start with H and LATEST')
-        tokens = document['tokens']
-    except (ValueError, KeyError, TypeError) as exc:
-        raise CompileError(str(exc), filename) from exc
-    mif = Mif(memory)
-    mif.dictionary = dictionary
-    if not memory:
-        init(mif)
-    interpret(tokens, Prim(mif), max_immediate_steps=max_immediate_steps, filename=filename)
-    return snapshot(mif)
+    """Compatibility API accepting mappings and returning an independent mapping."""
+    return compile_tokens(document, max_immediate_steps, filename).to_mapping()
 
 
 def saveData(infn, outfn, mif):
-    data = snapshot(mif)
-    data.update(title=f'tokenforthed {infn}', date=datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-                **{'input-toml': str(infn)})
-    with open(outfn, mode='wt', encoding='utf-8') as output:
-        output.write(toml.dumps(data))
+    image = program_image(mif).with_metadata(title=f'tokenforthed {infn}',
+        date=datetime.now().strftime('%d.%m.%Y %H:%M:%S'), **{'input-toml': str(infn)})
+    save(image, outfn)
 
 
 def main(argv=None):
@@ -295,17 +288,13 @@ def main(argv=None):
         parser.error('--max-immediate-steps must be positive')
 
     try:
-        inTomlData = toml.load(args.input_filename)
-    except (OSError, ValueError) as exc:
-        parser.error(f'{args.input_filename}: {exc}')
-    try:
-        data = compile_document(inTomlData, max_immediate_steps=args.max_immediate_steps,
-                                filename=args.input_filename)
-        data.update(title=f'tokenforthed {args.input_filename}',
+        image = compile_tokens(load_tokens(args.input_filename),
+                               max_immediate_steps=args.max_immediate_steps,
+                               filename=args.input_filename)
+        image = image.with_metadata(title=f'tokenforthed {args.input_filename}',
                     date=datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
                     **{'input-toml': args.input_filename})
-        with open(args.output_filename, 'w', encoding='utf-8') as output:
-            output.write(toml.dumps(data))
+        save(image, args.output_filename)
     except (OSError, ValueError, RuntimeError) as exc:
         parser.error(str(exc))
 

@@ -3,7 +3,7 @@
 import unittest
 
 from prim.isa import PrimOpcodes as Op
-import tomllib
+from prim.artifacts import TokenDocument, ProgramImage, load_tokens, load_program
 from sim_support.config import run_tests
 from sim_support.paths import ROOT, TIMINGS
 from sim_support.tokenforth import TokenForthBuild
@@ -27,26 +27,26 @@ class TokenForthChecks(SramHarness, unittest.TestCase):
         cls.images = cls.pipeline.compile_examples(EXAMPLES)
 
     def test_artifacts_and_reset_entry(self):
-        base = tomllib.loads((ARTIFACTS / 'base.tf.toml').read_text())
-        self.assertEqual(base['type'], 'tokenforth')
+        base = load_program(ARTIFACTS / 'base.tf.toml')
+        self.assertIsInstance(base, ProgramImage)
         for name, image in self.images.items():
             with self.subTest(program=name):
-                tokens = tomllib.loads((ARTIFACTS / f'{name}.tok.toml').read_text())
-                compiled = tomllib.loads((ARTIFACTS / f'{name}.tf.toml').read_text())
-                self.assertEqual(tokens['type'], 'tokenizer')
-                self.assertEqual(tokens['memory'], base['memory'])
-                self.assertTrue(tokens['tokens'])
-                self.assertEqual(compiled['type'], 'tokenforth')
-                self.assertEqual(image, bytes(compiled['memory']))
+                tokens = load_tokens(ARTIFACTS / f'{name}.tok.toml')
+                compiled = load_program(ARTIFACTS / f'{name}.tf.toml')
+                self.assertIsInstance(tokens, TokenDocument)
+                self.assertEqual(tokens.memory, base.memory)
+                self.assertTrue(tokens.tokens)
+                self.assertIsInstance(compiled, ProgramImage)
+                self.assertEqual(image, compiled.memory)
                 self.assertEqual(len(image), 65536)
                 self.assertEqual((image[0], image[3], image[4]), (Op.PUSH, Op.CALL, Op.BREAK))
                 entry = image[1] | image[2] << 8
-                index = compiled['symbols'].index('main')
+                index = compiled.symbols.index('main')
                 cell = Consts.DICT - 2 * index
                 self.assertEqual(entry, image[cell] | image[cell+1] << 8)
 
     def test_python_toolchain_regressions(self):
-        for script in ('test_toolchain.py', 'test.py', 'test_package.py'):
+        for script in ('test_toolchain.py', 'test.py', 'test_package.py', 'test_artifacts.py'):
             with self.subTest(script=script):
                 self.pipeline.run_regression(script)
 

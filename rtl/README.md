@@ -426,3 +426,43 @@ python -m unittest discover -s rtl -p 'test_*.py'
 
 These helpers belong to the repository's tests and are not included in the
 installed runtime package.
+
+## Shared artifact models
+
+`prim.artifacts` is the common boundary for tokenizer/compiler documents,
+binary export, annotated disassembly and debugger image loading:
+
+- `TokenDocument`: token bytes, symbols, optional imported 64-KiB memory and
+  literal metadata (`type = "tokenizer"`).
+- `ProgramImage`: compiled 64-KiB memory, symbols and literal metadata
+  (`type = "tokenforth"`).
+
+Both dataclasses own their data: byte buffers become `bytes`, symbol/address
+lists become tuples, and metadata is copied. Constructors and `from_mapping`
+validate the schema; `to_mapping` returns independent lists/dictionaries for
+compatibility. Token instruction/payload semantics remain the compiler's job,
+including its token-offset diagnostics.
+
+```python
+from prim.tokenizer import tokenize_document
+from prim.compiler import compile_tokens
+from prim.artifacts import load_program, load_tokens, save, export_section
+
+tokens = tokenize_document(':answer 42 ;', filename='answer.cf')
+save(tokens, 'answer.tok.toml')
+image = compile_tokens(load_tokens('answer.tok.toml'))
+save(image, 'answer.tf.toml')
+export_section(load_program('answer.tf.toml'), 'memory', 'answer.bin')
+```
+
+`load(path)` detects the document kind; `load_tokens` and `load_program` enforce
+it. `save`, `section_bytes` and `export_section` centralize serialization and
+byte-section export. Paths appear in parse, schema and I/O errors. Unknown
+non-reserved metadata fields survive a load/save roundtrip. The existing field
+names and TOML document kinds remain unchanged, and the current TOML reader's
+comma-symbol workaround is confined to this I/O boundary.
+
+Existing `compile_document`, `snapshot` and `load_library` mapping APIs and
+command-line flags remain available. For new code, `tokenize_document` and
+`compile_tokens` provide typed input/output. Run the artifact regressions with
+`python src/test_artifacts.py`; the TokenForth CTest entry includes them too.

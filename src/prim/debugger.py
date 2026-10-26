@@ -7,8 +7,7 @@ from .assembler import *
 from .isa import *
 import signal
 import sys
-import toml
-from . import tomlfix
+from .artifacts import load_program
 
 # TODO
 # - step back
@@ -594,8 +593,7 @@ class PrimDebug:
 
 
 def debug(fn, uartfn):
-    tomldata = toml.load(fn)
-    tomldata["symbols"] = tomlfix.workaround(tomldata["symbols"])
+    image = load_program(fn)
     term = Terminal()
 
     try:
@@ -604,8 +602,8 @@ def debug(fn, uartfn):
     except:
         uart_data = None
 
-    cpu = Prim(Mif(tomldata["memory"], uart_rx_init=uart_data))
-    debug = PrimDebug(cpu, term, tomldata["symbols"], tomldata["num-literals"], tomldata["string-literals"])
+    cpu = Prim(Mif(image.memory, uart_rx_init=uart_data))
+    debug = PrimDebug(cpu, term, image.symbols, image.number_literals, image.string_literals)
 
     def on_resize(sig, action):
         debug.redrawEverything()
@@ -621,7 +619,10 @@ def main(argv=None):
     parser.add_argument("-u", help="UART input file", action="store", metavar="<input file>", type=str, required=False, dest="uart_filename",default="src/test.tok")
     args = parser.parse_args(argv)
 
-    debug(args.input_filename, args.uart_filename)
+    try:
+        debug(args.input_filename, args.uart_filename)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":
