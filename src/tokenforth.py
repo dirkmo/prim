@@ -7,9 +7,11 @@ import sys
 from prim import Prim, MemoryIf
 from primasm import PrimAsm
 from primconsts import *
-from tokens import Token, BuildIn
+from tokens import Token, BuildIn, encode_counted_string
 import toml
 import tomlfix
+
+DEFAULT_MAX_IMMEDIATE_STEPS = 100_000
 
 class Mif(MemoryIf):
     def __init__(self, init=None):
@@ -118,30 +120,33 @@ def getPushOps(num, shrink=True):
     return ops
 
 
-def execute(cpu, opcodes):
-    opcodes.append(PrimOpcodes.BREAK)
-    l = len(opcodes)
-    assert l < 0xf0, f"too much immediate code"
-    cpu._mif._mem[Consts.AREA:Consts.AREA+l] = opcodes
+def execute(cpu, opcodes, max_steps=DEFAULT_MAX_IMMEDIATE_STEPS):
+    if max_steps < 1:
+        raise ValueError('Immediate step limit must be positive')
+    program = [*opcodes, PrimOpcodes.BREAK]
+    l = len(program)
+    if l >= 0xf0:
+        raise ValueError('Too much immediate code (maximum 238 code bytes)')
+    cpu._mif._mem[Consts.AREA:Consts.AREA+l] = program
     cpu._pc = Consts.AREA
-    while cpu.step() != PrimOpcodes.BREAK:
-        #cpu.status()
-        pass
+    for _ in range(max_steps):
+        if cpu.step() == PrimOpcodes.BREAK:
+            return
+    raise RuntimeError(f'Immediate execution exceeded {max_steps} steps at PC 0x{cpu._pc:04x}')
 
 
 def compile_string(mif, s):
     # this compiles: [push str-addr] [push behind_strdata] [jp] [count,chars...] behind_strdata:
     # so when this is executed, the string address is pushed on the stack and execution
     # continues "behind" the string data.
+    counted = encode_counted_string(s)
     here = HERE_FETCH(mif)
     Dictionary.addStringLiteral(here + 7)
-    strbytes = s.encode("utf-8")
     ops = []
     ops.extend(getPushOps(here + 7, shrink=False)) # 3 bytes
-    ops.extend(getPushOps(here + 7 + 1 + len(strbytes), shrink=False)) # 3 bytes
+    ops.extend(getPushOps(here + 7 + len(counted), shrink=False)) # 3 bytes
     ops.append(PrimOpcodes.JP) # 1 byte
-    ops.append(len(s)) #  1 byte
-    ops.extend(strbytes) # len(s) bytes
+    ops.extend(counted)
     comma(mif, ops)
 
 
@@ -149,7 +154,7 @@ def execute_string(cpu, s):
     print("execute_string not implemented")
 
 
-def interpret(tokens, cpu):
+def interpret(tokens, cpu, max_immediate_steps=DEFAULT_MAX_IMMEDIATE_STEPS):
     idx = 0
     mode = Token.MODE_COMPILE
     while idx < len(tokens):
@@ -168,7 +173,7 @@ def interpret(tokens, cpu):
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, ops)
             else:
-                execute(cpu, ops)
+                execute(cpu, ops, max_steps=max_immediate_steps)
         elif tag == Token.WORD_ADDRESS:
             di = tokens[idx] | (tokens[idx+1] << 8)
             idx += 2
@@ -178,7 +183,7 @@ def interpret(tokens, cpu):
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, ops)
             else:
-                execute(cpu, ops)
+                execute(cpu, ops, max_steps=max_immediate_steps)
         elif tag == Token.NUMBER:
             num = tokens[idx] | (tokens[idx+1] << 8)
             idx += 2
@@ -187,7 +192,7 @@ def interpret(tokens, cpu):
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, ops)
             else:
-                execute(cpu, ops)
+                execute(cpu, ops, max_steps=max_immediate_steps)
         elif tag == Token.STRING:
             l = tokens[idx]
             s = bytearray(tokens[idx+1:idx+1+l]).decode("utf-8")
@@ -202,7 +207,7 @@ def interpret(tokens, cpu):
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, [tokens[idx]])
             else:
-                execute(cpu, [tokens[idx]])
+                execute(cpu, [tokens[idx]], max_steps=max_immediate_steps)
             idx += 1
         elif tag == Token.BUILDIN:
             asm = BuildIn.lookupByIndex(tokens[idx])[1]
@@ -212,7 +217,7 @@ def interpret(tokens, cpu):
             if mode == Token.MODE_COMPILE:
                 comma(cpu._mif, ops)
             else:
-                execute(cpu, ops)
+                execute(cpu, ops, max_steps=max_immediate_steps)
         elif tag == Token.LIT_NUMBER:
             # print(f"Literal number: {tokens[idx] | (tokens[idx+1] << 8)}")
             Dictionary.addNumberLiteral(HERE_FETCH(cpu._mif))
@@ -220,11 +225,9 @@ def interpret(tokens, cpu):
             idx += 2
         elif tag == Token.LIT_STRING:
             l = tokens[idx]
-            name = bytearray(tokens[idx+1:idx+1+l]).decode("utf-8")
+            Dictionary.addStringLiteral(HERE_FETCH(cpu._mif))
+            comma(cpu._mif, tokens[idx:idx+1+l])
             idx += l + 1
-            # print(f"Literal string: {name}")
-            comma(cpu._mif, [l])
-            comma(cpu._mif, tokens[idx:idx+1])
         elif tag == Token.LIT_ADDRESS:
             # print(f"Literal address: {tokens[idx] | (tokens[idx+1] << 8)}")
             Dictionary.addNumberLiteral(HERE_FETCH(cpu._mif))
@@ -273,12 +276,19 @@ def saveData(infn, outfn, mif):
         f.write(toml.dumps(tomldata))
 
 def main():
-    parser = argparse.ArgumentParser(description='Prim ColorForth Tokenizer')
-    parser.add_argument("-i", help="Input TOML filename", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="")
-    parser.add_argument("-o", help="Output TOML filename", metavar="<output filename>", action="store", type=str, required=False, dest="output_filename",default="")
+    parser = argparse.ArgumentParser(description='Prim TokenForth compiler')
+    parser.add_argument("-i", help="Input TOML filename", metavar="<input file>", required=True, dest="input_filename")
+    parser.add_argument("-o", help="Output TOML filename", metavar="<output filename>", required=True, dest="output_filename")
+    parser.add_argument('--max-immediate-steps', type=int, default=DEFAULT_MAX_IMMEDIATE_STEPS,
+                        help='Maximum CPU steps per immediate execution, including BREAK (default: 100000)')
     args = parser.parse_args()
+    if args.max_immediate_steps < 1:
+        parser.error('--max-immediate-steps must be positive')
 
-    inTomlData = toml.load(args.input_filename)
+    try:
+        inTomlData = toml.load(args.input_filename)
+    except (OSError, ValueError) as exc:
+        parser.error(f'{args.input_filename}: {exc}')
     tokendata = inTomlData["tokens"]
     memory = inTomlData["memory"]
     symbols = tomlfix.workaround(inTomlData["symbols"])
@@ -302,11 +312,17 @@ def main():
 
     cpu = Prim(mif)
 
-    interpret(tokendata, cpu)
+    try:
+        interpret(tokendata, cpu, max_immediate_steps=args.max_immediate_steps)
+    except (ValueError, RuntimeError) as exc:
+        parser.error(f'{args.input_filename}: {exc}')
 
     cpu.status()
 
-    saveData(args.input_filename, args.output_filename, cpu._mif)
+    try:
+        saveData(args.input_filename, args.output_filename, cpu._mif)
+    except OSError as exc:
+        parser.error(f'{args.output_filename}: {exc}')
 
 
 if __name__ == "__main__":

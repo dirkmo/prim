@@ -289,20 +289,21 @@ python3 rtl/test_tokenforth.py --compiler-python .venv/bin/python
 Every invocation freshly tokenizes and compiles `src/base.cf`, then the examples
 in `src/examples`. It exports the **memory** section of the resulting `.tf.toml`
 using `binexport.py`; token bytes are never treated as CPU code. Existing TOML
-files in `src/` are not used or overwritten. The three examples cover:
+files in `src/` are not used or overwritten. The four examples cover:
 
 | Source | Features | Expected UART output |
 |--------|----------|----------------------|
 | hello.cf | Compiled string, calls, while/repeat | `Hello, World!\r\n` |
 | control.cf | if/else/then, do/loop, for/next, i | `BACCC012` |
 | data.cf | Raw numeric/address literals, variable writes, indirect CALL | `ABCZ` |
+| strings.cf | UTF-8 byte counts, raw strings with spaces, empty strings | `Grüße 🙂 Raw ä \r\n` |
 
 Each source uses an immediate block to install `PUSH16 main; CALL; BREAK` at
 address zero. The test verifies this entry against the compiled dictionary;
 it does not patch the binary. BREAK is the simulation stop marker, not a
 hardware halt instruction. The compiler must produce no UART output itself.
 
-All three 64-KiB binaries execute on CPU + physical SRAM controller + SRAM
+All four 64-KiB binaries execute on CPU + physical SRAM controller + SRAM
 model + UART at the three timing configurations. Each retired instruction,
 including stack values, carry and logical memory reads/writes, is compared
 with Python. The decoded serial output must match both Python and the explicit
@@ -313,3 +314,27 @@ compiler logs, and a `.jsonl` retirement trace and `.uart.bin` serial capture
 for each example/timing combination. CTest runs this as `tokenforth_end_to_end`.
 This tests the host compiler toolchain; `src/interpreter.cf` (the unfinished
 on-CPU token interpreter) is a separate component and is not required here.
+
+The same CTest entry runs the focused Python toolchain regressions and the
+original Python CPU tests. Run the focused checks separately with:
+
+```sh
+.venv/bin/python src/test_toolchain.py
+```
+
+TokenForth counted strings store a UTF-8 **byte** count, limited to 255 bytes.
+The tokenizer rejects oversized text rather than wrapping the length field;
+errors include source filename and line. Both ordinary strings and raw string
+literals, including empty strings, are covered by Python and RTL tests.
+
+An explicitly supplied tokenizer library (`-it`) must be a valid compiled
+TokenForth file. Missing files, malformed TOML, wrong types, and invalid
+library data are reported with the library filename, without silently starting
+a new dictionary. Omitting `-it` still creates the initial H/LATEST symbols.
+
+Each immediate execution has a default limit of 100000 CPU steps, including
+the terminating BREAK step. Change it with the compiler option
+`--max-immediate-steps N` (N must be positive). Exhausting the limit reports
+the input TOML filename, step limit and current PC instead of hanging.
+Python callers can pass `max_steps` to `execute` or `max_immediate_steps` to
+`interpret`. Opcode inputs are copied and remain reusable across executions.

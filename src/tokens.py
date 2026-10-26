@@ -2,6 +2,12 @@ from primasm import PrimAsm
 from primconsts import *
 import sys
 
+def encode_counted_string(s):
+    raw = s.encode('utf-8')
+    if len(raw) > 255:
+        raise ValueError(f'Text exceeds 255 UTF-8 bytes (got {len(raw)})')
+    return bytes([len(raw)]) + raw
+
 def lohi(v):
     return [v & 0xff, (v >> 8) & 0xff]
 
@@ -62,11 +68,7 @@ class Token:
         ...
 
     def generateStringData(tag, s):
-        raw = s.encode()
-        l = len(raw) & 0xff
-        data = [tag, l]
-        data.extend(raw)
-        return data
+        return [tag, *encode_counted_string(s)]
 
 
 class TokenDefinition(Token):

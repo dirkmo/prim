@@ -18,7 +18,8 @@ SRC = ROOT / 'src'
 ARTIFACTS = ROOT / 'build' / 'tokenforth'
 EXAMPLES = {'hello': b'Hello, World!\r\n',
             'control': b'BACCC012',
-            'data': b'ABCZ'}
+            'data': b'ABCZ',
+            'strings': 'Grüße 🙂 Raw ä \r\n'.encode('utf-8')}
 
 
 class TokenForthChecks(test_sram.SramHarness, unittest.TestCase):
@@ -87,6 +88,14 @@ class TokenForthChecks(test_sram.SramHarness, unittest.TestCase):
                 index = compiled['symbols'].index('main')
                 cell = Consts.DICT - 2 * index
                 self.assertEqual(entry, image[cell] | image[cell+1] << 8)
+
+    def test_python_toolchain_regressions(self):
+        for script in ('test_toolchain.py', 'test.py'):
+            with self.subTest(script=script):
+                result = subprocess.run([str(self.compiler_python), str(SRC / script)],
+                                        capture_output=True, text=True, timeout=30)
+                (ARTIFACTS / f'{script}.log').write_text(result.stdout + result.stderr)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_compiled_programs_on_cpu_sram_uart(self):
         for name, image in self.images.items():

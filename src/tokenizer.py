@@ -75,7 +75,8 @@ def merge_string_fragments(fragments):
     for i in range(len(fragments)):
         f = fragments[i]
         if (not stringfragment):
-            if (len(f) > 0) and (f[0] == '"') and (f[-1] != '"'):
+            opening = 2 if f.startswith('#"') else 1 if f.startswith('"') else 0
+            if opening and (len(f) == opening or not f.endswith('"')):
                 # start of string literal
                 stringfragment = True
                 merge = []
@@ -139,7 +140,7 @@ def tokenizeFragments(fragments):
                 newTokens = TokenBuildin(t, f)
             elif t[0] == "#":
                 assert not immediate, f"ERROR on line {f.linenum}: Literal {t} not possible in immediate mode."
-                if (len(t) > 3) and (t[1] == '"') and t[-1] == '"':
+                if (len(t) >= 3) and (t[1] == '"') and t[-1] == '"':
                     newTokens = TokenLiteralString(t[2:-1],f)
                 elif (len(t) > 1) and Token.definitionAvailable(t[1:]):
                    newTokens = TokenLiteralAddress(t[1:],f)
@@ -152,10 +153,10 @@ def tokenizeFragments(fragments):
             elif t[0] == "'" and len(t) > 2: # 'name
                 assert Token.definitionAvailable(t[1:]), f"ERROR on line {f.linenum}: Definition '{t[1:]}' not found."
                 newTokens = TokenWordAddress(t[1:], f)
-            elif t[0] == '"' and len(t) > 2 and t[-1] == '"': # '"str"'
+            elif t[0] == '"' and len(t) >= 2 and t[-1] == '"': # '"str"'
                 assert not immediate, f"ERROR on line {f.linenum}: String {t} not possible in immediate mode."
                 newTokens = TokenString(t[1:-1], f)
-            elif t[0:2] == "\ ": # "\ comment"
+            elif t[0:2] == "\\ ": # "\ comment"
                 newTokens = TokenCommentBackslash(t, f)
             elif t[0:2] == "( ": # "( comment )"
                 newTokens = TokenCommentBraces(t, f)
@@ -184,13 +185,8 @@ def convert(sourcefn, symbols):
     for sym in symbols:
         Token.addDefinition(sym)
 
-    # load colorforth source file
-    try:
-        with open(sourcefn,"r") as f:
-            lines = f.readlines()
-    except:
-        print(f"ERROR: Cannot open file {sourcefn}")
-        return None
+    with open(sourcefn, "r", encoding="utf-8") as f:
+        lines = f.readlines()
 
     fragments = []
     for num,line in enumerate(lines):
@@ -204,7 +200,10 @@ def convert(sourcefn, symbols):
     # print("\nTokens:")
     data = []
     for t in tokens:
-        tokendata = t.generate()
+        try:
+            tokendata = t.generate()
+        except ValueError as exc:
+            raise ValueError(f'{sourcefn}:{t.fragment.linenum}: {exc}') from exc
         # if t.tag == Token.WHITESPACE:
         #     print(f"WS tag:{t.tag}")
         # else:
@@ -212,6 +211,32 @@ def convert(sourcefn, symbols):
         data.extend(tokendata)
 
     return data
+
+
+def load_library(filename):
+    if filename is None:
+        return {'symbols': ['H', 'LATEST'], 'memory': [],
+                'string-literals': [], 'num-literals': []}
+    try:
+        with open(filename, encoding='utf-8') as source:
+            library = toml.load(source)
+        if library.get('type') != 'tokenforth':
+            raise ValueError('Expected a compiled tokenforth library')
+        symbols = library['symbols']
+        if not isinstance(symbols, list) or not all(isinstance(s, str) for s in symbols):
+            raise ValueError('symbols must be a list of names')
+        library['symbols'] = tomlfix.workaround(symbols)
+        if library['symbols'][:2] != ['H', 'LATEST']:
+            raise ValueError('symbols must start with H and LATEST')
+        for field, maximum in (('memory', 255), ('string-literals', 65535), ('num-literals', 65535)):
+            values = library[field]
+            if not isinstance(values, list) or not all(type(v) is int and 0 <= v <= maximum for v in values):
+                raise ValueError(f'{field} must be a list of integers in 0..{maximum}')
+        if len(library['memory']) != 65536:
+            raise ValueError('Library memory must contain exactly 65536 bytes')
+        return library
+    except (OSError, ValueError, KeyError) as exc:
+        raise ValueError(f'{filename}: {exc}') from exc
 
 
 def main():
@@ -222,38 +247,19 @@ def main():
     args = parser.parse_args()
 
     try:
-        inTomlData = toml.load(args.input_toml_filename)
-        symbols = tomlfix.workaround(inTomlData["symbols"])
-        tomlTypeIsCorrent = ("type" in inTomlData) and (inTomlData["type"] == "tokenforth")
-    except:
-        symbols = ["H", "LATEST"]
-        tomlTypeIsCorrent = True
-
-    if not tomlTypeIsCorrent:
-        raise Exception("Wrong TOML type (cannot use tokenizer TOML files)")
-
-    # create token data
-    tokendata = convert(args.input_filename, symbols)
+        inTomlData = load_library(args.input_toml_filename or None)
+        tokendata = convert(args.input_filename, inTomlData['symbols'])
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
 
     # make list from symbol dictionary
     symbols = [""] * len(Token.D)
     for key,value in Token.D.items():
         symbols[value] = key
 
-    # carry over data if exists
-    # memory
-    try:
-        memory = inTomlData["memory"]
-    except:
-        memory = []
-    try:
-        strlits = inTomlData["string-literals"]
-    except:
-        strlits = []
-    try:
-        numlits = inTomlData["num-literals"]
-    except:
-        numlits = []
+    memory = inTomlData['memory']
+    strlits = inTomlData['string-literals']
+    numlits = inTomlData['num-literals']
 
     # compile data to write toml file
     tomldata = { "title": f"Tokenized {args.input_filename}",

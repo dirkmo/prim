@@ -19,7 +19,6 @@ class Mif(MemoryIf):
 
     def write8(self, addr, value):
         self._mem[addr] = value & 0xff
-        self._mem[addr+1] = (value >> 8) & 0xff
 
     def write16(self, addr, value):
         self._mem[addr] = value & 0xff
