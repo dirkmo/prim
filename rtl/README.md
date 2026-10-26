@@ -1,7 +1,8 @@
 # RTL simulation
 
 Requirements: CMake, Verilator, Icarus Verilog (`iverilog` and `vvp`),
-a C++17 compiler, and Python 3. On macOS,
+a C++17 compiler, and Python 3.11 or newer. The TokenForth compiler also needs
+`toml==0.10.2` (declared in requirements.txt). On macOS,
 install the Xcode Command Line Tools. CMake falls back to the active SDK's
 libc++ headers if the compiler cannot find them automatically.
 
@@ -268,3 +269,47 @@ yosys -p 'read_verilog -Irtl rtl/prim.v rtl/memory.v rtl/uart_tx.v rtl/memory_io
 
 Board pin assignments, timing after place-and-route, and physical UART output
 still need verification on the board.
+
+## TokenForth end-to-end test
+
+Run the complete source-to-serial pipeline from the repository root:
+
+```sh
+python3 rtl/test_tokenforth.py
+```
+
+The runner uses a Python with `toml` installed, checking its own interpreter
+first, then `.venv/bin/python`. To select one explicitly:
+
+```sh
+.venv/bin/python -m pip install toml==0.10.2
+python3 rtl/test_tokenforth.py --compiler-python .venv/bin/python
+```
+
+Every invocation freshly tokenizes and compiles `src/base.cf`, then the examples
+in `src/examples`. It exports the **memory** section of the resulting `.tf.toml`
+using `binexport.py`; token bytes are never treated as CPU code. Existing TOML
+files in `src/` are not used or overwritten. The three examples cover:
+
+| Source | Features | Expected UART output |
+|--------|----------|----------------------|
+| hello.cf | Compiled string, calls, while/repeat | `Hello, World!\r\n` |
+| control.cf | if/else/then, do/loop, for/next, i | `BACCC012` |
+| data.cf | Raw numeric/address literals, variable writes, indirect CALL | `ABCZ` |
+
+Each source uses an immediate block to install `PUSH16 main; CALL; BREAK` at
+address zero. The test verifies this entry against the compiled dictionary;
+it does not patch the binary. BREAK is the simulation stop marker, not a
+hardware halt instruction. The compiler must produce no UART output itself.
+
+All three 64-KiB binaries execute on CPU + physical SRAM controller + SRAM
+model + UART at the three timing configurations. Each retired instruction,
+including stack values, carry and logical memory reads/writes, is compared
+with Python. The decoded serial output must match both Python and the explicit
+expected byte string. The final frame is drained after the simulation marker.
+
+`build/tokenforth/` keeps fresh base/example `.tok.toml`, `.tf.toml`, `.bin`,
+compiler logs, and a `.jsonl` retirement trace and `.uart.bin` serial capture
+for each example/timing combination. CTest runs this as `tokenforth_end_to_end`.
+This tests the host compiler toolchain; `src/interpreter.cf` (the unfinished
+on-CPU token interpreter) is a separate component and is not required here.

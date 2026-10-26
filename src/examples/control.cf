@@ -1,0 +1,9 @@
+\ The control words execute at compile time and patch runtime branch targets.
+:tx $ffff c! ;
+:choose [ if ] 65 [ else ] 66 [ then ] tx ;
+:main
+    0 choose 1 choose
+    3 [ do ] 67 tx [ loop ]
+    3 0 [ for ] 48 i + tx [ next ]
+;
+[ 0x21 0 c! 'main 1 ! 1 3 c! 0x22 4 c! ]

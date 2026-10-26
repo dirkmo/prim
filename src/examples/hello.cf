@@ -1,0 +1,9 @@
+\ Compiled string, runtime calls and a while/repeat loop.
+:tx $ffff c! ;
+:count dup 1+ swap c@ ;
+:type dup [ while ] 1- >r dup c@ tx 1+ r> dup [ repeat ] 2drop ;
+:message "Hello, World!" ;
+:main message count type 13 tx 10 tx ;
+
+\ Build the reset entry: PUSH16 main, CALL, BREAK (simulation stop marker).
+[ 0x21 0 c! 'main 1 ! 1 3 c! 0x22 4 c! ]

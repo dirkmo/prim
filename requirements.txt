@@ -1,3 +1,4 @@
 amaranth @ git+https://github.com/amaranth-lang/amaranth.git
 amaranth-boards @ git+https://github.com/amaranth-lang/amaranth-boards.git
 colorama
+toml==0.10.2

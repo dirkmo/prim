@@ -58,6 +58,9 @@ add_test(NAME sram_controller_checks
 add_test(NAME uart_io_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test_io.py
         --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
+add_test(NAME tokenforth_end_to_end
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test_tokenforth.py
+        --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
 
 
 # Add the Verilated circuit to the target
