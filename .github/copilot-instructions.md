@@ -1,212 +1,87 @@
-# Prim Stack Machine AI Coding Agent Instructions
+# Prim coding instructions
 
-## Project Overview
+Read [project knowledge](../docs/PROJECT_KNOWLEDGE.md) and
+[decisions](../docs/DECISIONS.md) for architecture, requirements and rationale.
+[RTL documentation](../rtl/README.md) describes signal and simulation details.
 
-**Prim** is a two-layer stack machine implementation:
-1. **Stack Machine CPU** (`prim/cpu.py`, `hdl/prim.py`): 8-bit opcodes, 16-bit ALU, dual stacks (data & return), Forth-based instruction set
-2. **TokenForth Language** (`prim/tokenizer.py`, `prim/compiler.py`): A ColorForth-like language with compile-time and immediate-mode execution
+Detailed code flow: [Code documentation](../docs/CODE.md). Test entry points
+and coverage: [Test documentation](../docs/TESTS.md).
 
-The project includes Python-based simulation, HDL implementation (Amaranth), and Verilog/C++ simulation infrastructure.
+## Scope and architecture
 
-## Architecture
+Active implementations are `rtl/` (Verilog) and `src/prim/` (Python).
+The alternative Amaranth implementation under `hdl/` is outside the current
+scope; its dependencies remain optional.
 
-### Core Components
+- `src/prim/cpu.py`: reference CPU and `MemoryIf` interface.
+- `src/prim/isa.py`: opcode constants and Verilog export.
+- `src/prim/assembler.py`: assembler and binary disassembly.
+- `src/prim/tokenizer.py`, `tokens.py`: source scanning and token encoding.
+- `src/prim/compiler.py`: compilation, per-compilation dictionary and immediate execution.
+- `src/prim/artifacts.py`: owned token/program models, validation and TOML/binary I/O.
+- `src/prim/debugger.py`: optional terminal debugger and UART RX extension.
+- `rtl/sim_support/`: shared simulation, reference and test helpers.
 
-- **`src/prim/cpu.py`** (Interpreter): Pure Python CPU simulator with data/return stack management, memory interface, instruction execution
-- **`hdl/prim.py`** (Hardware): Amaranth HDL describing the actual CPU state machine with opcode decoding
-- **`src/prim/tokenizer.py`**: Lexical analyzer converting TokenForth source → TOML token representation
-- **`src/prim/compiler.py`**: Compiler converting tokenized input → binary bytecode (with embedded interpreter calls)
-- **`src/prim/assembler.py`**: Assembler/disassembler for CPU opcodes (mnemonics ↔ 8-bit opcodes)
-- **`src/prim/tokens.py`**: Token type definitions (13 types: WORD_CALL, NUMBER, MNEMONIC, etc.)
+The CPU has 8-bit opcodes, a 16-bit ALU, 16-bit addresses and two stacks of
+16 entries. Opcode bit 7 is the return bit. Do not add RTL stack-array resets;
+unused stack cells are undefined. Carry semantics are specified in D02.
+Python and RTL CPU accesses wrap at 16 bits without memory-overflow traps.
+No compiler program/dictionary collision checks are introduced (D13).
 
-### Data Flow
+The dictionary grows downward from `0xfefe`; code/data grow upward from HERE.
+Token/program documents carry symbols between tool invocations. Compiler
+symbol and literal state belongs to each compilation, not a global dictionary.
+Immediate execution is bounded by `--max-immediate-steps` (default 100000).
+Strings use UTF-8 with a one-byte byte-count prefix (maximum 255).
 
-```
-TokenForth Source (.cf)
-  → Tokenizer (.py) → TOML tokens (.tok.toml)
-  → TokenForth Compiler (.py) → Binary (.tf.toml)
-  → BinExport (.py) → Binary file (.tok)
-  ↓
-Python Simulator (Prim class)
-  ↓
-Memory/Stacks Output
-```
+SRAM supports physical whole-word transfers only. Byte and unaligned writes
+require read-modify-write. Requests remain stable through ACK. RTL UART TX
+is at byte address `0xffff`; reads access SRAM. The debugger separately models
+RX status at `0xfffe` and RX data at `0xffff`. Its views and `r` command must
+use `peek8`/`peek16` so inspection never consumes input. `uart <text>` queues
+UTF-8 bytes. Reset restores initial memory/UART input and removes temporary
+step-over breakpoints, retaining user breakpoints.
 
-### Key Design Decisions
+## Setup and Python tools
 
-- **Dual Two-Stack Architecture**: Data stack (DSP) and return stack (RSP) both 8-entry, with top value in `T` register
-- **Immediate Mode in TokenForth**: Words between `[` and `]` execute at compile time, enabling meta-programming
-- **Opcode Format**: High byte is type flag (0=immediate/direct, 1=encoded). Low byte contains 4-bit ALU op + 2 bits each for stack pointers + 3 bits each for source/dest
-- **Memory Layout**: Dictionary grows downward from `0xFEFE`, code/data grow upward from `HERE` (`0x000A`)
-- **Build Dictionary**: `prim/isa.py` auto-generates Verilog opcodes from Python class
+From the repository root:
 
-## Developer Workflows
-
-### Setup
-
-```bash
-cd /Users/dirk/dev/prim
-bash setup.sh              # Creates .venv and installs amaranth + amaranth-boards
+```sh
+bash setup.sh
 source .venv/bin/activate
+pip install -e '.[debug]'  # optional terminal debugger
+make -C src
+prim debug -i build/src/interpreter.tf.toml -u build/src/test.tok
 ```
 
-### Compilation Workflow (src/)
+Python 3.11+ is required. Runtime dependencies are declared in `pyproject.toml`;
+`requirements.txt` installs the local package. HDL dependencies use `.[hdl]`.
+Use `prim` subcommands, `prim-*` commands or `python -m prim`; legacy script
+wrappers have been removed. Library imports use `prim.*`.
 
-```bash
-cd src
-make                       # Builds: base.tf.toml → test.tf.toml → test.tok
-make clean                 # Removes .toml artifacts
+The Makefile writes seven named outputs under `build/src/` (`OUT_DIR` override).
+Targets such as `make -C src base.tf.toml` remain available. Python module,
+project configuration and Makefile changes trigger rebuilds. Clean removes only
+named outputs; unrelated files and old artifacts under `src/` are preserved.
+IDE tool launch entries use `build/src/`; run make once to create that directory.
+
+## Verification
+
+```sh
+python -m unittest discover -s src -p 'test*.py'
+python src/test.py
+cmake -S rtl -B build/rtl
+cmake --build build/rtl
+ctest --test-dir build/rtl --output-on-failure
 ```
 
-**Targets**:
-- `base.tf.toml`: Core TokenForth library (from `base.cf`)
-- `test.tf.toml`: User code with library (from `test.cf`, depends on base)
-- `test.tok`: Binary export for simulation
+Debugger regressions require `.[debug]`, otherwise they skip. Makefile checks
+require `make`. RTL tests require CMake, Verilator, Icarus Verilog and C++17.
+CTest does not rebuild the simulator; build before running it. Compare Python
+and RTL state after instruction completion, ignoring unused stack cells.
+`rtl/test_tokenforth.py` freshly compiles examples, checks serial output and
+runs the Python regressions including debugger and Makefile checks.
 
-### Simulation Workflow (rtl/)
-
-```bash
-cd rtl/build
-make simulate             # Assemble + compile Verilog + run C++ simulator
-make wave                 # Open GTKWave with signal trace
-make yosys               # Syntax check via Yosys
-```
-
-**Key build targets**:
-- `genopcodes`: Exports `PrimOpcodes` class to `opcodes.v` (Verilog localparam)
-- `assemble`: Converts `test.asm` → `test.bin` via `prim/assembler.py`
-- `simulator`: Runs Verilated circuit with binary input
-- `wave`: Displays VCD trace in GTKWave
-
-## Code Patterns & Conventions
-
-### Memory Interface Pattern
-
-All CPU interactions use **abstract memory interface** (`MemoryIf` class):
-
-```python
-class MemoryIf:
-    def read8(self, addr): ...
-    def read16(self, addr): ...
-    def write8(self, addr, value): ...
-    def write16(self, addr, value): ...
-```
-
-Implementations: `Mif` (dict-backed), `PrimDebug` (with logging).
-
-### Token Generation Pattern
-
-Each token type inherits from `Token` base class and implements `generate()` method:
-
-```python
-class TokenWordCall(Token):
-    def __init__(self, name, fragment):
-        super().__init__(self.WORD_CALL, fragment)
-        self.name = name
-    def generate(self):
-        return [self.tag, Token.D[self.name]]  # Index into definition dictionary
-```
-
-### Opcode Constants
-
-Update `src/prim/isa.py` `PrimOpcodes` class → run `make genopcodes` to regenerate `opcodes.v`.
-
-```python
-class PrimOpcodes:
-    NOP = 0x00
-    CALL = 0x01
-    ADD = 0x0c
-    ...
-```
-
-### Compiler Dictionary Structure
-
-Definitions stored at `DICT` (0xFEFE) growing downward:
-- Index 0: `HERE` pointer (code allocation point, grows up)
-- Index 1: `LATEST` pointer (most recent definition)
-- Indices 2+: User word addresses
-
-## Critical Integration Points
-
-### Tokenizer → Compiler Handoff
-
-1. `prim/tokenizer.py` reads `.cf` (ColorForth), emits `.tok.toml` (TOML-serialized tokens)
-2. `prim/compiler.py` consumes `.tok.toml`, executes immediate words via `Prim` interpreter, emits binary
-3. **Key**: `Token.D` dictionary (Python dict) bridges both phases; must persist across invocations
-
-### Immediate Mode Execution
-
-During compilation:
-- `[` switches mode to immediate; `]` switches back to compile
-- Immediate words execute against active `Prim` instance (shares `Mif`)
-- Side effects (stack, memory) carried forward to compiled output
-
-**Example**: `:array [ 10 ]` → allocates 10 bytes at compile time by executing `10` on stack, then stores address in compiled word.
-
-### Verilog ↔ Python Synchronization
-
-- `prim/isa.py` Python class → auto-export to `opcodes.v` (localparam)
-- `hdl/prim.py` Amaranth design reads `PrimOpcodes.py` to decode instruction bits
-- Keep instruction set synchronized: adding opcodes requires updates to both files
-
-## Testing & Validation
-
-### Python Unit Tests
-
-```bash
-cd src
-python3 test.py          # Runs Prim interpreter against TokenForth code
-python3 -m prim debug     # Interactive CPU debugger with stack/memory trace
-```
-
-### Simulation Tests
-
-```bash
-cd rtl/build
-cmake ..
-make simulate            # Runs C++ Verilator simulation
-make wave                # View VCD trace
-```
-
-### VCD Waveforms
-
-- Generated by Verilator in `rtl/build/trace.vcd`
-- Signal definitions in `rtl/sim.gtkw` or custom `addsignals.tcl`
-- Compare Python simulator behavior against hardware via waveforms
-
-## Common Debugging Patterns
-
-1. **TokenForth compile failure**: Check `prim/tokenizer.py` output (TOML), verify token types match `prim/tokens.py` classes
-2. **Stack underflow/overflow**: Use `Prim.setLogLevel(Prim.LOG_LEVEL_DBG)` to trace execution
-3. **Opcode mismatch**: Regenerate `opcodes.v` after modifying `prim/isa.py`, verify `hdl/prim.py` decoding matches
-4. **Dictionary overflow**: Check `LATEST` pointer in memory dump; grows toward `HERE` → collision risk
-5. **Immediate mode side effects**: Trace `Prim` state after `[` blocks; inspect stack via `T()`, `N()` accessors
-
-## Repository Structure Map
-
-```
-src/
-  prim/cpu.py             # CPU interpreter (execute, stack, memory)
-  prim/assembler.py       # Assembler/disassembler mnemonics
-  prim/isa.py             # Opcode constants + Verilog export
-  prim/tokenizer.py       # TokenForth lexer
-  prim/compiler.py        # TokenForth compiler + executor
-  prim/tokens.py          # Token type classes
-  test.cf                 # TokenForth source for testing
-
-hdl/
-  prim.py                 # Amaranth HDL of CPU (state machine, ALU)
-  prim.vcd                # Simulation output
-
-rtl/
-  prim.v                  # Verilog (generated from Amaranth or hand-written)
-  sim.cpp                 # C++ Verilator testbench
-  CMakeLists.txt          # Verilator + simulation build
-
-.github/
-  copilot-instructions.md # This file
-```
-
-## Branch Context
-
-**Current branch**: `feature/amaranth` — Migrating HDL from Verilog to Amaranth (Python HDL) for easier hardware-software co-design. Main implementation in `hdl/prim.py`; legacy Verilog in `rtl/prim.v` for reference.
+For opcode changes, update `src/prim/isa.py` and the active RTL implementation;
+`cmake --build build/rtl --target genopcodes` exports `rtl/opcodes.v`.
+Keep helper modules free of argument parsing, builds and other import effects.

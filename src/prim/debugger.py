@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 import argparse
+from collections import deque
 from blessed import Terminal
 from .cpu import *
 from .assembler import *
@@ -16,26 +17,36 @@ from .artifacts import load_program
 class Mif(MemoryIf):
     def __init__(self, init=None, tx=None, uart_rx_init=None):
         self._mem = bytearray(0x10000)
-        self._resetmem = None
         self._tx = tx
-        self.uart_fifo_rx = []
+        self._reset_uart_rx = bytes(uart_rx_init or ())
+        self.uart_fifo_rx = deque(self._reset_uart_rx)
         if init is not None:
             l = len(init)
             self._mem[0:l] = init
-            self._resetmem = bytearray(self._mem)
-        if uart_rx_init:
-            self.uart_fifo_rx = list(uart_rx_init)
+        self._resetmem = bytes(self._mem)
 
     def reset(self):
-        if self._resetmem is not None:
-            self._mem = bytearray(self._resetmem)
+        self._mem = bytearray(self._resetmem)
+        self.uart_fifo_rx = deque(self._reset_uart_rx)
+
+    def peek8(self, addr):
+        """Inspect the CPU-visible value without consuming UART input."""
+        addr &= 0xffff
+        if addr == 0xfffe:
+            return int(bool(self.uart_fifo_rx))
+        if addr == 0xffff:
+            return self.uart_fifo_rx[0] if self.uart_fifo_rx else 0
+        return self._mem[addr]
+
+    def peek16(self, addr):
+        return self.peek8(addr) | (self.peek8(addr+1) << 8)
 
     def read8(self, addr):
         addr &= 0xffff
         if addr == 0xfffe:
-            return len(self.uart_fifo_rx) > 0
+            return int(bool(self.uart_fifo_rx))
         elif addr == 0xffff:
-            return self.uart_fifo_rx.pop(0) if len(self.uart_fifo_rx) else 0
+            return self.uart_fifo_rx.popleft() if len(self.uart_fifo_rx) else 0
         return self._mem[addr]
 
     def read16(self, addr):
@@ -55,6 +66,8 @@ class Mif(MemoryIf):
         self.write8(addr+1, (value >> 8) & 0xff)
 
     def uart_rx(self, dat):
+        if type(dat) is not int or not 0 <= dat <= 255:
+            raise ValueError("UART input must be a byte in 0..255")
         self.uart_fifo_rx.append(dat)
 
 
@@ -88,7 +101,7 @@ class PrimDebug:
         symbolMap = {}
         mif = self.cpu._mif
         for idx,sym in enumerate(symbols):
-            addr = mif.read16(Consts.DICT-idx*2)
+            addr = mif.peek16(Consts.DICT-idx*2)
             symbolMap[addr] = sym
         return symbolMap
 
@@ -130,7 +143,7 @@ class PrimDebug:
         print(self.term.move_xy(x1, y) + s, end='')
 
     def instructionLength(self, addr):
-        ir = self.cpu._mif.read8(addr) & 0x7f
+        ir = self.cpu._mif.peek8(addr) & 0x7f
         if ir == PrimOpcodes.PUSH:
             return 3
         elif ir == PrimOpcodes.PUSH8:
@@ -139,10 +152,10 @@ class PrimDebug:
 
     def addrPrevInstruction(self, addr):
         if addr > 2:
-            if self.cpu._mif.read8(addr-3) == PrimOpcodes.PUSH:
+            if self.cpu._mif.peek8(addr-3) == PrimOpcodes.PUSH:
                 return addr - 3
         if addr > 1:
-            if self.cpu._mif.read8(addr-2) == PrimOpcodes.PUSH8:
+            if self.cpu._mif.peek8(addr-2) == PrimOpcodes.PUSH8:
                 return addr - 2
         return addr - 1
 
@@ -155,27 +168,27 @@ class PrimDebug:
             if addr < sladdr:
                 continue
             # range of string literal (cnt + chars)
-            cnt = self.cpu._mif.read8(sladdr) # read string length
+            cnt = self.cpu._mif.peek8(sladdr) # read string length
             if addr < sladdr + cnt + 1:
                 return True
         return False
 
     def disassemble(self, addr, useSymbols=True):
         if addr in self.numlits:
-            return f"LIT #{self.cpu._mif.read16(addr):x}"
+            return f"LIT #{self.cpu._mif.peek16(addr):x}"
         if self.addrInStrLiterals(addr):
             return "STR-LIT"
-        opcode = self.cpu._mif.read8(addr)
+        opcode = self.cpu._mif.peek8(addr)
         (ir, retbit) = (opcode & 0x7f, opcode & 0x80)
         s = PrimAsm.LOOKUP[ir] + (".RET" if retbit else "")
         if ir == PrimOpcodes.PUSH8:
-            val = self.cpu._mif.read8(addr+1)
+            val = self.cpu._mif.peek8(addr+1)
         elif ir == PrimOpcodes.PUSH:
-            val = self.cpu._mif.read8(addr+1) | (self.cpu._mif.read8(addr+2) << 8)
+            val = self.cpu._mif.peek8(addr+1) | (self.cpu._mif.peek8(addr+2) << 8)
         else:
             return s
         if useSymbols:
-            nextIr = self.cpu._mif.read8(self.addrNextInstruction(addr)) & 0x7f
+            nextIr = self.cpu._mif.peek8(self.addrNextInstruction(addr)) & 0x7f
             if nextIr in [PrimOpcodes.JP, PrimOpcodes.JZ, PrimOpcodes.CALL, PrimOpcodes.BYTE_FETCH, PrimOpcodes.FETCH, PrimOpcodes.BYTE_STORE, PrimOpcodes.STORE] and val in self.symbolMap:
                 s += " " + self.term.magenta(f"'{self.symbolMap[val]}") + f" (${val:x})"
             else:
@@ -193,7 +206,7 @@ class PrimDebug:
         while addr >= 0 and linecount < h // 2:
             da = f"{addr:04x}:"
             for b in range(self.instructionLength(addr)):
-                da += f" {self.cpu._mif.read8(addr + b):02x}"
+                da += f" {self.cpu._mif.peek8(addr + b):02x}"
             da += " " * (16 - len(da))
             da += self.disassemble(addr)
             lines.insert(0, da)
@@ -209,7 +222,7 @@ class PrimDebug:
                 linecount += 1
             da = f"{addr:04x}:"
             for b in range(self.instructionLength(addr)):
-                da += f" {self.cpu._mif.read8(addr + b):02x}"
+                da += f" {self.cpu._mif.peek8(addr + b):02x}"
             da += " " * (16 - len(da))
             da += self.disassemble(addr)
             lines.append(da)
@@ -271,7 +284,7 @@ class PrimDebug:
             chars = ""
             for a in range(self.memViewNumBytes):
                 byteaddr = addr + a
-                val = self.cpu._mif.read8(byteaddr)
+                val = self.cpu._mif.peek8(byteaddr)
                 s += " "
                 if byteaddr in self.memViewHightlight:
                     s += self.term.black_on_cyan(f"{val:02x}")
@@ -365,14 +378,15 @@ class PrimDebug:
         self.appendMessage('Available commands:')
         self.appendMessage()
         self.appendMessage('"break [addr|symbol]"  Set/remove/list breakpoints')
-        self.appendMessage('"reset"                Reset CPU and memory')
+        self.appendMessage('"reset"                Reset CPU, memory and UART input')
         self.appendMessage('"run"                  Run program')
         self.appendMessage('"view <addr>"          Set memory view address')
         self.appendMessage('"hl [addr] [len]"      (Un-)highlight range in memory view')
         self.appendMessage('"r <addr> [len]"       Read from memory')
         self.appendMessage('"w <addr> <byte>..."   Write to memory')
+        self.appendMessage('"uart <text>"          Queue UTF-8 input bytes')
         self.appendMessage()
-        self.appendMessage('LEFT for single step')
+        self.appendMessage('RIGHT for single step')
         self.appendMessage('DOWN for step over')
         self.appendMessage('Prim mnemonics for direct execution (like "drop")')
         self.appendMessage('Enter number to push on data stack')
@@ -441,7 +455,7 @@ class PrimDebug:
         self.appendMessage(f"Reading {l} bytes from ${addr:x}:")
         s = ""
         for a in range(addr, addr+l):
-            val = self.cpu._mif.read8(a)
+            val = self.cpu._mif.peek8(a)
             s += f"{val:02x} "
         self.appendMessage(s)
         self.appendMessage()
@@ -494,10 +508,12 @@ class PrimDebug:
         return count > 0
 
     def uartSendCmd(self, s):
-        s = s.strip()
-        s = s[s.index(' ')+1:]
-        for c in s:
-            self.cpu._mif.uart_rx(c)
+        parts = s.split(maxsplit=1)
+        if len(parts) < 2:
+            self.appendMessage('Missing UART text')
+            return
+        for value in parts[1].encode('utf-8'):
+            self.cpu._mif.uart_rx(value)
 
     def userCommand(self):
         cmd = self.input.strip().split(' ')
@@ -512,9 +528,10 @@ class PrimDebug:
         elif cmd[0] == "run":
             self.run = True
         elif cmd[0] == "reset":
-            self.appendMessage("Reset CPU and memory.")
+            self.appendMessage("Reset CPU, memory and UART input.")
             self.cpu.reset()
             self.cpu._mif.reset()
+            self.silentBreakpoints.clear()
             self.redrawEverything()
         elif cmd[0] == "view":
             self.setupMemoryView(cmd)
@@ -580,7 +597,7 @@ class PrimDebug:
                     self.redraw.add(PrimDebug.SHOW_STACKS)
                     self.redraw.add(PrimDebug.SHOW_MEMORY)
                 elif key.code == self.term.KEY_DOWN:
-                    if self.cpu._mif.read8(self.cpu._pc) == PrimOpcodes.CALL:
+                    if self.cpu._mif.peek8(self.cpu._pc) == PrimOpcodes.CALL:
                         self.silentBreakpoints.add(self.addrNextInstruction(self.cpu._pc))
                         self.run = True
                     else:
@@ -596,11 +613,10 @@ def debug(fn, uartfn):
     image = load_program(fn)
     term = Terminal()
 
-    try:
-        with open(uartfn,"rb") as f:
+    uart_data = None
+    if uartfn is not None:
+        with open(uartfn, "rb") as f:
             uart_data = f.read()
-    except:
-        uart_data = None
 
     cpu = Prim(Mif(image.memory, uart_rx_init=uart_data))
     debug = PrimDebug(cpu, term, image.symbols, image.number_literals, image.string_literals)
@@ -615,8 +631,8 @@ def debug(fn, uartfn):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Prim Debugger')
-    parser.add_argument("-i", help="Input TOML file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="src/interpreter.tf.toml")
-    parser.add_argument("-u", help="UART input file", action="store", metavar="<input file>", type=str, required=False, dest="uart_filename",default="src/test.tok")
+    parser.add_argument("-i", help="Input TOML file", action="store", metavar="<input file>", type=str, required=False, dest="input_filename",default="build/src/interpreter.tf.toml")
+    parser.add_argument("-u", help="UART input file", action="store", metavar="<input file>", type=str, required=False, dest="uart_filename",default=None)
     args = parser.parse_args(argv)
 
     try:

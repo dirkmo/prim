@@ -46,7 +46,8 @@ class TokenForthChecks(SramHarness, unittest.TestCase):
                 self.assertEqual(entry, image[cell] | image[cell+1] << 8)
 
     def test_python_toolchain_regressions(self):
-        for script in ('test_toolchain.py', 'test.py', 'test_package.py', 'test_artifacts.py'):
+        for script in ('test_toolchain.py', 'test.py', 'test_package.py', 'test_artifacts.py',
+                       'test_debugger.py', 'test_build.py'):
             with self.subTest(script=script):
                 self.pipeline.run_regression(script)
 

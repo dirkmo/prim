@@ -42,6 +42,15 @@ additional cycles. Neighboring bytes must be preserved.
 The user excluded `hdl/` from the current scope. Active implementation and
 comparisons are in `rtl/` and `src/prim/`. Amaranth dependencies remain optional.
 
+### D13 – Preserve CPU memory behavior across Python and RTL
+
+The user requires Python and hardware CPU memory accesses to behave alike.
+Addresses wrap at 16 bits; there are no CPU traps for program/dictionary
+collisions or memory overflow. No compiler collision checks are introduced
+in this change. A host-compiler diagnostic would be a separate tool policy,
+not a change to the emulated CPU, and would require a separate decision.
+The debugger's existing UART RX extension is distinct from the TX-only RTL.
+
 ## Implemented technical choices
 
 ### D05 – Compare behavior after instruction completion
@@ -118,3 +127,22 @@ CLI tests and IDE launch configurations. Installed console commands remain
 available. External callers of old script paths or top-level modules must
 switch to the package CLI or `prim.*` imports. This supersedes the wrapper
 retention in D08.
+
+### D14 – Debugger inspection and reset are deterministic
+
+Debugger memory/code views, disassembly and the `r` command use side-effect-free
+`peek8`/`peek16` accesses. These show CPU-visible MMIO values, including the next
+queued RX byte, without consuming it. CPU reads retain their UART effects.
+Interactive UART text is encoded as UTF-8 bytes. Reset restores the initial
+memory and UART file contents, discards interactive RX additions and temporary
+step-over breakpoints, and preserves user breakpoints. Without `-u`, RX starts
+empty; explicitly requested UART files must be readable.
+
+### D15 – Keep Makefile outputs under build/src
+
+The source Makefile writes its seven generated outputs under `build/src/`
+(`OUT_DIR` can override this). Python modules, project configuration and the
+Makefile itself are build dependencies. Convenience targets retain their names.
+`all`, `clean` and convenience aliases are phony; failed recipes delete their
+target. Clean removes only named outputs, preserving unrelated files. Legacy
+outputs already under `src/` are not deleted automatically.

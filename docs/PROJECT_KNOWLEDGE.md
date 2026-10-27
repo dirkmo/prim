@@ -4,6 +4,9 @@ As of October 27, 2026. This document summarizes the architecture and developmen
 workflows. [DECISIONS.md](DECISIONS.md) records the reasons behind the choices.
 See [rtl/README.md](../rtl/README.md) for signal details, edge cases and simulations.
 
+Detailed walkthroughs are in [Code and architecture](CODE.md) and
+[Tests and verification](TESTS.md).
+
 ## Goal and components
 
 Prim is a stack CPU designed to be as minimal as possible, with a 16-bit data
@@ -60,6 +63,9 @@ pins cannot be controlled by the FPGA. Physical transfers always access entire
 16-bit accesses touch two SRAM words. The controller preserves neighboring
 bytes and supports address wraparound within 64 KiB.
 
+Python and RTL CPU memory accesses wrap at 16 bits without overflow traps.
+No program/dictionary collision checks are added to the compiler (D13).
+
 The CPU bus is byte-addressed and little-endian. A request with `o_bs != 0`
 remains stable until the acknowledging clock edge with `i_ack = 1`.
 `READ_CYCLES` and `WRITE_CYCLES` configure SRAM controller latency; their
@@ -84,6 +90,23 @@ prim --help
 `pyproject.toml` defines the package and dependencies. `tomllib` reads TOML;
 `tomli-w` writes it. The terminal debugger (`.[debug]`) and Amaranth (`.[hdl]`)
 are optional extras.
+
+`make -C src` writes artifacts under `build/src/` and rebuilds them when tool
+modules change. `make -C src base.tf.toml` builds only the base library;
+`make -C src clean` removes named outputs only. Override `OUT_DIR` or `PYTHON`
+as needed. Legacy artifacts under `src/` are not cleaned automatically.
+
+With the debug extra installed, run
+`prim debug -i build/src/interpreter.tf.toml -u build/src/test.tok`.
+Debugger inspection is side-effect-free; `uart <text>` queues UTF-8 bytes.
+Reset replays the initial UART file, discards interactive additions and
+temporary breakpoints, and retains user breakpoints. Without `-u`, RX starts
+empty. Its RX status/data at `0xfffe`/`0xffff` extend the TX-only RTL model.
+See the root README for a standalone example and debugger keys.
+
+Run Python checks with `python -m unittest discover -s src -p 'test*.py'`.
+Debugger tests run when `.[debug]` is installed and otherwise skip; Makefile
+checks require `make`. Both are also included in the CTest Python regressions.
 
 The complete RTL checks require CMake, Verilator, Icarus Verilog and a C++17
 compiler:
