@@ -188,3 +188,28 @@ class LiveTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[-1]['instruction'], 'CALL')
         self.assertTrue(all(source[row['source']['start']:row['source']['end']] == 'double' for row in rows))
+
+    def test_memory_snapshot_and_changes(self):
+        import base64
+        source = '$1234 $100 !'
+        result = preview(source)
+        memory = base64.b64decode(result['memory'])
+        self.assertEqual(len(memory), 65536)
+        self.assertEqual(memory[0x100:0x102], bytes([0x34, 0x12]))
+        self.assertIn(0x100, result['memory_changed'])
+        self.assertIn(0x101, result['memory_changed'])
+        before = preview(source, steps=0)
+        self.assertEqual(base64.b64decode(before['memory'])[0x100:0x102], b'\0\0')
+        self.assertNotIn(0x100, before['memory_changed'])
+        self.assertEqual(base64.b64decode(preview('')['memory'])[0x100], 0)
+
+    def test_memory_includes_immediate_writes_and_runtime_error(self):
+        import base64
+        result = preview('[ 65 $200 c! ] +')
+        self.assertIn('error', result)
+        self.assertEqual(base64.b64decode(result['memory'])[0x200], 65)
+        self.assertIn(0x200, result['memory_changed'])
+
+    def test_library_memory_baseline(self):
+        result = preview('', library=default_library())
+        self.assertEqual(result['memory_changed'], [])

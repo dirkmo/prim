@@ -358,9 +358,13 @@ data can appear as instructions.
 
 Each preview starts from fresh memory with separate compilation/runtime step
 budgets and stack bounds checks. Runtime errors retain the generated code and
-initialized dictionary entries. Incomplete source reports an error. There is
-no memory editor, instruction trace, UART display, or source highlighting.
-Source is not saved.
+initialized dictionary entries. Incomplete source reports an error. The read-only memory view shows 256 bytes with hex and ASCII, navigation
+by hexadecimal address, and shortcuts to HERE or the selected dictionary word.
+Green bytes changed since the previous snapshot; underlined bytes differ from
+the initial library memory. Inspection does not read UART or other MMIO.
+Source, Live/base settings, dictionary order and memory address are remembered
+in browser local storage. “Beispiel laden” restores the initial loop example
+and enables base words. There is no memory editor or UART display.
 
 The “Basiswörter” checkbox enables the base words by default. Disable it to
 start with only H and LATEST (CPU mnemonics remain available). With a custom

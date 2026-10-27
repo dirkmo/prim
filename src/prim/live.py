@@ -1,5 +1,6 @@
 """Small, local TokenForth playground; no optional dependencies."""
 import argparse
+import base64
 import contextlib
 import io
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -129,6 +130,7 @@ def _preview(source, stack, library, steps, tokens):
                                             document.number_literals)
     if not document.memory:
         compiler.init(memory)
+    initial_memory = bytes(memory._mem)
     def seed(cpu):
         for value in stack.split():
             number = stringToNumber(value)
@@ -266,6 +268,9 @@ def _preview(source, stack, library, steps, tokens):
         'return_stack': [runtime_cpu._rs[(runtime_cpu._rsp - runtime_cpu.rdepth + 1 + i) % runtime_cpu.RS_SIZE]
                          for i in range(runtime_cpu.rdepth)],
         'compiler_stack': compile_cpu.values(), 'stack': runtime_cpu.values(),
+        'memory': base64.b64encode(memory._mem).decode('ascii'),
+        'memory_changed': [address for address, value in enumerate(memory._mem)
+                           if value != initial_memory[address]],
         'here': finish, 'disassembly': [row for row in disassembly if row['address'] >= start],
         'all_disassembly': disassembly,
         'dictionary': entries,

@@ -27,8 +27,8 @@ button { border: 0; border-radius: 5px; padding: 6px 10px; background: #93e8bc; 
 .controls { position:sticky; top:0; z-index:20; padding:10px 0; margin:0 0 12px; background:#10161c; border-bottom:1px solid #405362; box-shadow:0 5px 10px #10161c; }
 .panel { padding: 12px; background: #18232d; border-radius: 6px; }
 #result { font: 17px/1.4 monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-#status, #compiler-state { color: #9eb0be; font-size:12px; margin:5px 0 0; }
-#compiler-state:empty { display:none; }
+#status { color: #9eb0be; font-size:12px; margin:5px 0 0; }
+#compiler-state { font:13px/1.4 monospace; }
 .word-link { background:none; color:inherit; font:inherit; padding:0; text-decoration:underline; text-underline-offset:3px; }
 tr.selected { background:#304757; } .code-label { color:#93e8bc; }
 #compiled { box-sizing:border-box; position:relative; height:180px; overflow:auto; margin-top:8px; padding:6px; background:#10161c; border-radius:4px; font:12px/1.6 monospace; }
@@ -67,6 +67,7 @@ small { color: #9eb0be; font-size:12px; }
 <div class="control-group" role="group" aria-label="Ausführung"><span>Ausführung</span><button id="run" title="Bis zum Ende ausführen und Live-Vorschau fortsetzen">Alles ausführen</button><button id="step" title="Eine CPU-Instruktion im freien Code oder aufgerufenen Wort ausführen">Nächste Instruktion</button><button id="restart" title="Vor der ersten Laufzeitinstruktion anhalten">Ausführung zurücksetzen</button></div>
 <div class="control-group" role="group" aria-label="Übersetzung"><span>Übersetzung</span><button id="token-step" title="Ein Token übersetzen oder ausführen; Immediate-Wörter laufen vollständig durch">Nächstes Token</button><button id="compile-restart" title="Vor dem ersten Quelltext-Token anhalten">Übersetzung zurücksetzen</button></div>
 <label><input id="base-words" type="checkbox" checked style="width:auto;margin:0"> Basiswörter</label>
+<button id="load-example" type="button">Beispiel laden</button>
 <label><input id="auto" type="checkbox" checked style="width:auto;margin:0"> Live</label></div>
 <main>
 <section>
@@ -86,7 +87,8 @@ zaehlen</textarea></div>
 <label id="result-label">Laufzeitstack · Stackspitze rechts</label>
 <div id="result">…</div><div style="font:13px/1.4 monospace;margin-top:5px">R: <span id="return-stack">[ ]</span></div>
 <div id="cpu-position" hidden style="margin-top:8px;padding:8px;border-left:4px solid #ffd166;background:#302b1c;font:13px/1.5 monospace"><div>Ausgeführt: <strong id="last-instruction"></strong></div><div>Als Nächstes: <strong id="next-instruction" style="color:#ffd166"></strong></div></div>
-<p id="status"></p><details><summary style="font-size:12px">Compilerstack</summary><p id="compiler-state"></p></details>
+<div style="font:13px/1.4 monospace;margin-top:5px">Compilerstack: <span id="compiler-state">[ ]</span></div>
+<p id="status"></p>
 
 </section>
 <section class="panel dictionary-panel">
@@ -95,11 +97,21 @@ zaehlen</textarea></div>
 <div class="dictionary-scroll"><table class="dictionary-table"><thead><tr><th>Index</th><th>Name</th><th>Adresse</th></tr></thead><tbody id="dictionary"></tbody></table></div>
 <small>Grün: neue Definition · Stackspitze rechts · Live: 350 ms</small>
 </section>
+<section class="panel" style="margin-top:10px">
+<div class="toolbar"><h2 style="font-size:15px;margin:0">Speicher</h2>
+<label for="memory-address">Hexadresse</label><input id="memory-address" value="0000" spellcheck="false" style="width:75px;margin:0;padding:4px">
+<button id="memory-prev" type="button" aria-label="256 Bytes zurück">←</button><button id="memory-next" type="button" aria-label="256 Bytes weiter">→</button>
+<button id="memory-here" type="button">HERE</button><button id="memory-word" type="button">Gewähltes Wort</button></div>
+<pre id="memory-view" style="font:12px/1.6 monospace;max-height:250px;overflow:auto;margin:0"></pre>
+<small>256 Bytes · Grün: seit letztem Schritt geändert · Unterstrichen: gegenüber Ausgangsspeicher geändert</small>
+<p id="memory-error" class="error" style="font-size:12px" role="status"></p>
+</section>
 </aside>
 </main>
 
 <script>
 const source = document.querySelector('#source');
+const exampleSource = source.value;
 const lineNumbers = document.querySelector('#line-numbers');
 function updateLineNumbers() {
   const count = source.value.split('\n').length;
@@ -123,6 +135,66 @@ let previousStack = [], previousReturn = [];
 let processedTokens = 0, previousCompiler = [], priorCode = new Map(), changedCode = new Set();
 let newCode = [], allCode = [], selectedIndex = null;
 let dictionaryReversed = true;
+let memory = null, previousMemory = null, memoryChanged = new Set(), memoryStart = 0, memoryHere = 0;
+const memoryAddress = document.querySelector('#memory-address');
+const storageKey = 'prim-live-workspace-v1';
+function saveWorkspace() {
+  try { localStorage.setItem(storageKey, JSON.stringify({source:source.value, base:baseWords.checked,
+    live:auto.checked, descending:dictionaryReversed, memoryStart})); } catch (_) {}
+}
+try {
+  const saved = JSON.parse(localStorage.getItem(storageKey));
+  if (saved && typeof saved.source === 'string') source.value = saved.source;
+  if (saved && typeof saved.base === 'boolean') baseWords.checked = saved.base;
+  if (saved && typeof saved.live === 'boolean') auto.checked = saved.live;
+  if (saved && typeof saved.descending === 'boolean') dictionaryReversed = saved.descending;
+  if (saved && Number.isInteger(saved.memoryStart) && saved.memoryStart >= 0 && saved.memoryStart <= 65280) memoryStart = saved.memoryStart;
+} catch (_) {}
+updateLineNumbers();
+const orderButton = document.querySelector('#dictionary-order');
+orderButton.textContent = dictionaryReversed ? 'Index ↓' : 'Index ↑';
+orderButton.setAttribute('aria-pressed', String(dictionaryReversed));
+function renderMemory() {
+  const view = document.querySelector('#memory-view'); view.replaceChildren();
+  memoryAddress.value = memoryStart.toString(16).padStart(4, '0');
+  if (!memory) { view.textContent = 'Kein Speicherabbild verfügbar'; return; }
+  for (let address = memoryStart; address < Math.min(memoryStart + 256, memory.length); address += 16) {
+    view.append(document.createTextNode(hex(address) + '  '));
+    let ascii = '';
+    for (let offset = 0; offset < 16; offset++) {
+      const index = address + offset, value = memory[index], cell = document.createElement('span');
+      cell.textContent = value.toString(16).padStart(2, '0'); cell.title = hex(index) + ' · ' + value;
+      if (memoryChanged.has(index)) cell.classList.add('instruction-changed');
+      if (previousMemory && previousMemory[index] !== value) cell.classList.add('changed-value');
+      view.append(cell, document.createTextNode(offset === 7 ? '  ' : ' '));
+      ascii += value >= 32 && value <= 126 ? String.fromCharCode(value) : '.';
+    }
+    view.append(document.createTextNode(' ' + ascii + '\n'));
+  }
+}
+function goToMemory(address) {
+  memoryStart = Math.max(0, Math.min(65280, Math.floor(address / 16) * 16));
+  document.querySelector('#memory-error').textContent = ''; renderMemory(); saveWorkspace();
+}
+memoryAddress.addEventListener('change', () => {
+  const value = memoryAddress.value.trim().replace(/^(\$|0x)/i, '');
+  if (!/^[0-9a-f]{1,4}$/i.test(value)) {
+    document.querySelector('#memory-error').textContent = 'Hexadresse von 0000 bis FFFF eingeben'; return;
+  }
+  goToMemory(parseInt(value, 16));
+});
+document.querySelector('#memory-prev').addEventListener('click', () => goToMemory(memoryStart - 256));
+document.querySelector('#memory-next').addEventListener('click', () => goToMemory(memoryStart + 256));
+document.querySelector('#memory-here').addEventListener('click', () => goToMemory(memoryHere));
+document.querySelector('#memory-word').addEventListener('click', () => {
+  const entry = dictionary.find(e => e.index === selectedIndex);
+  if (entry) goToMemory(entry.address);
+  else document.querySelector('#memory-error').textContent = 'Zuerst ein Wort im Dictionary auswählen';
+});
+document.querySelector('#load-example').addEventListener('click', () => {
+  source.value = exampleSource; baseWords.checked = true; stepMode = false;
+  updateLineNumbers(); changed(); if (!auto.checked) run();
+});
 const hex = n => '$' + n.toString(16).padStart(4, '0');
 function renderDictionary() {
   const body = document.querySelector('#dictionary'); body.replaceChildren();
@@ -242,6 +314,9 @@ async function run(steps = null, tokens = null) {
     if (!response.ok) throw new Error('Serverfehler');
     const data = await response.json();
     if (current !== revision) return;
+    previousMemory = memory;
+    memory = data.memory ? Uint8Array.from(atob(data.memory), c => c.charCodeAt(0)) : null;
+    memoryChanged = new Set(data.memory_changed || []); memoryHere = data.here || 0; renderMemory();
     processedTokens = data.tokens || 0;
     currentPC = data.pc ?? null; currentInstruction = data.current_instruction;
     executedSteps = data.steps || 0;
@@ -260,7 +335,6 @@ async function run(steps = null, tokens = null) {
     document.querySelector('#here').textContent = data.here === undefined ? '' : 'HERE: ' + hex(data.here);
     renderStack(document.querySelector('#compiler-state'), data.compiler_stack || [], previousCompiler);
     previousCompiler = data.compiler_stack || [];
-    if (tokens !== null) document.querySelector('#compiler-state').parentElement.open = true;
     const activeSource = tokens !== null ? data.next_token
       : steps !== null ? (data.last_instruction?.source || data.current_instruction?.source) : null;
     document.querySelector('#active-token').hidden = !activeSource;
@@ -290,6 +364,7 @@ async function run(steps = null, tokens = null) {
   }
 }
 function changed() {
+  saveWorkspace(); previousMemory = null; memory = null;
   ++revision; clearTimeout(timer);
   processedTokens = 0; previousCompiler = []; priorCode = new Map(); changedCode = new Set();
   executedSteps = 0; currentPC = null; currentInstruction = null; previousStack = []; previousReturn = [];
@@ -303,7 +378,7 @@ document.querySelector('#dictionary-order').addEventListener('click', event => {
   dictionaryReversed = !dictionaryReversed;
   event.currentTarget.textContent = dictionaryReversed ? 'Index ↓' : 'Index ↑';
   event.currentTarget.setAttribute('aria-pressed', String(dictionaryReversed));
-  renderDictionary();
+  renderDictionary(); saveWorkspace();
 });
 source.addEventListener('click', () => {
   if (renderedSource !== source.value) return;
@@ -343,6 +418,7 @@ document.querySelector('#compile-restart').addEventListener('click', () => {
 });
 document.querySelector('#step').addEventListener('click', () => { stepMode = true; run(executedSteps + 1); });
 baseWords.addEventListener('change', changed);
+renderMemory();
 run();
 </script>
 </html>
