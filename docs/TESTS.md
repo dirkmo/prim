@@ -83,6 +83,7 @@ ihren jeweiligen Tests aufgebaut.
 | [src/test_artifacts.py](../src/test_artifacts.py) | TOML-Roundtrips, Dokumentrollen, Feldvalidierung, Pufferbesitz, Metadaten und Binärexport |
 | [src/test_package.py](../src/test_package.py) | Installiertes Paket, Imports ohne Startnebenwirkungen, CLI-Einstiege, optionale Abhängigkeiten und Assemblerausgabe |
 | [src/test_debugger.py](../src/test_debugger.py) | Seiteneffektfreie Inspektion, UTF-8-UART, Bytevalidierung, Reset und gemeldete UART-Dateifehler |
+| [src/test_isa.py](../src/test_isa.py) | Alle generierten Opcodewörter, zusammengesetzte Emitter, `boot!` und Exportformate |
 | [src/test_build.py](../src/test_build.py) | Makefile-Ausgaben, inkrementelle Neubauten, Parallelbau, gezieltes Clean und Convenience-Targets |
 
 Einzelne Dateien oder Testmethoden lassen sich so ausführen:
@@ -161,7 +162,7 @@ vollständig geprüft; dafür bleibt ein manueller interaktiver Durchlauf sinnvo
 ### Makefile ohne Änderungen am Arbeitsverzeichnis
 
 `test_build.py` legt ein temporäres Projekt mit kopierten Quellen an und startet
-`make -j2`. Es erwartet die sieben generierten Dateien unter `build/src/` und
+`make -j2`. Es erwartet die zwölf generierten Dateien unter `build/src/` und
 keine TOML-Ausgaben neben den Quellen. Ein unveränderter zweiter Aufruf darf
 keine Toolkommandos ausführen.
 
@@ -170,6 +171,20 @@ der Projektkonfiguration erneuert. `make -n` muss Tokenisierung, Compilation
 und Export neu einplanen; danach wird tatsächlich gebaut. Der Clean-Test legt
 zusätzliche TOML-Dateien im Ausgabe- und Quellverzeichnis an. Diese müssen
 bleiben, während die benannten Ausgaben entfernt werden.
+
+### Generierte Opcodewörter und Bootstrap
+
+`test_isa.py` erzeugt die Opcodequelle in einem temporären Verzeichnis und
+kompiliert Bootstrap, Opcodebibliothek und Basisbibliothek. Jedes generierte
+Wort wird tatsächlich im Immediate-Modus ausgeführt: Es muss genau das
+zugehörige ISA-Byte schreiben und HERE um eins erhöhen. Die vollständige
+Abdeckung sowie bestehende Schreibweisen wie `+,`, `>r,` und `c!,` werden
+geprüft. Zusammengesetzte Emitter müssen ihre bisherigen Bytefolgen liefern.
+
+`boot!` wird sowohl auf Speicherwirkung als auch auf ausgeglichene Immediate-
+Stacks geprüft. Der erzeugte Einstieg muss ein kleines Programm aufrufen,
+das mit 42 auf dem Datenstack hält. CLI-Tests vergleichen TokenForth-Export,
+Standarddateinamen und den weiterhin voreingestellten Verilog-Export.
 
 ## 4. Die acht CTest-Suites
 
@@ -260,11 +275,16 @@ bei denen ein Byte an UART und das andere an SRAM geht.
 
 ## 7. End-to-End: von .cf bis zum seriellen Ausgang
 
-`TokenForthBuild.compile_examples()` baut zuerst `base.cf` und dann die
+`TokenForthBuild.compile_examples()` baut Bootstrap, generierte Opcodewörter
+und die Basisbibliothek, dann die
 Beispiele frisch in `build/tokenforth/`. Bereits vorhandene Dateien unter
 `src/` sind keine Grundlage dieses Tests.
 
 ```text
+bootstrap.cf → bootstrap.tf.toml
+                         ↓ Bibliotheksimport
+prim.isa → opcodes.cf → opcodes.tf.toml
+                         ↓ Bibliotheksimport
 base.cf → base.tok.toml → base.tf.toml
                               ↓ Bibliotheksimport
 example.cf → example.tok.toml → example.tf.toml → example.bin
@@ -289,7 +309,7 @@ wird zurückgewiesen: Die erwarteten Texte sollen erst im laufenden Programm
 entstehen.
 
 Die Suite startet zusätzlich `test_toolchain.py`, `test.py`, `test_package.py`,
-`test_artifacts.py`, `test_debugger.py` und `test_build.py` als eigene Prozesse.
+`test_artifacts.py`, `test_debugger.py`, `test_build.py` und `test_isa.py` als eigene Prozesse.
 Ein CTest-Lauf deckt damit auch diese Python-Prüfungen ab, sofern die jeweiligen
 optionalen Voraussetzungen vorhanden sind.
 

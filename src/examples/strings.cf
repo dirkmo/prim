@@ -12,4 +12,4 @@
     'empty count type "" count type syntax count type
     13 tx 10 tx
 ;
-[ 0x21 0 c! 'main 1 ! 1 3 c! 0x22 4 c! ]
+[ 'main boot! ]

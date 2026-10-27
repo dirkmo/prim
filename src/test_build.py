@@ -18,7 +18,7 @@ class BuildChecks(unittest.TestCase):
             root = Path(directory)
             source = root / 'src'
             source.mkdir()
-            for name in ('Makefile', 'base.cf', 'test.cf', 'interpreter.cf'):
+            for name in ('Makefile', 'bootstrap.cf', 'base.cf', 'test.cf', 'interpreter.cf'):
                 shutil.copy2(ROOT / 'src' / name, source / name)
             shutil.copytree(ROOT / 'src' / 'prim', source / 'prim',
                             ignore=shutil.ignore_patterns('__pycache__'))
@@ -33,12 +33,13 @@ class BuildChecks(unittest.TestCase):
             make('-j2')
             output = root / 'build' / 'src'
             generated = list(output.iterdir())
-            self.assertEqual(len(generated), 7)
+            self.assertEqual(len(generated), 12)
             self.assertFalse(list(source.glob('*.toml')))
             self.assertNotIn('-m prim', make())
             self.assertNotIn('-m prim', make('base.tf.toml'))
             for changed in (source / 'prim' / 'compiler.py',
-                            source / 'prim' / 'tokenizer.py', root / 'pyproject.toml'):
+                            source / 'prim' / 'tokenizer.py', source / 'prim' / 'isa.py',
+                            source / 'bootstrap.cf', root / 'pyproject.toml'):
                 # Change only this prerequisite; unrelated inputs stay untouched.
                 stamp = max(time.time_ns(), max(p.stat().st_mtime_ns for p in generated) + 1)
                 os.utime(changed, ns=(stamp, stamp))
@@ -47,6 +48,8 @@ class BuildChecks(unittest.TestCase):
                     self.assertIn('-m prim tokenize', commands)
                     self.assertIn('-m prim compile', commands)
                     self.assertIn('-m prim export', commands)
+                    if changed.name == 'isa.py':
+                        self.assertIn('-m prim opcodes --format tokenforth', commands)
                 make()
             unrelated = output / 'keep.toml'
             unrelated.write_text('keep = true\n')

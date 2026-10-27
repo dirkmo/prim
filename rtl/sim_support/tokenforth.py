@@ -29,8 +29,18 @@ class TokenForthBuild:
 
     def compile_examples(self, names):
         self.directory.mkdir(parents=True, exist_ok=True)
+        bootstrap_tokens = self.directory / 'bootstrap.tok.toml'
+        bootstrap_image = self.directory / 'bootstrap.tf.toml'
+        opcode_source = self.directory / 'opcodes.cf'
+        opcode_tokens = self.directory / 'opcodes.tok.toml'
+        opcode_image = self.directory / 'opcodes.tf.toml'
+        self.stage('bootstrap-tokenize', 'tokenizer', '-i', SRC / 'bootstrap.cf', '-o', bootstrap_tokens)
+        self.stage('bootstrap-compile', 'compiler', '-i', bootstrap_tokens, '-o', bootstrap_image)
+        self.stage('opcode-export', 'isa', '--format', 'tokenforth', opcode_source)
+        self.stage('opcode-tokenize', 'tokenizer', '-i', opcode_source, '-it', bootstrap_image, '-o', opcode_tokens)
+        self.stage('opcode-compile', 'compiler', '-i', opcode_tokens, '-o', opcode_image)
         base_tokens, base_image = self.directory / 'base.tok.toml', self.directory / 'base.tf.toml'
-        self.stage('base-tokenize', 'tokenizer', '-i', SRC / 'base.cf', '-o', base_tokens)
+        self.stage('base-tokenize', 'tokenizer', '-i', SRC / 'base.cf', '-it', opcode_image, '-o', base_tokens)
         self.stage('base-compile', 'compiler', '-i', base_tokens, '-o', base_image)
         images = {}
         for name in names:

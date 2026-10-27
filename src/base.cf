@@ -1,22 +1,9 @@
-:c, 'H @ c! 'H @ 1 + 'H ! ;
-:, 'H @ ! 'H @ 2 + 'H ! ;
-:push, 0x21 c, ;
-:push8, 0x20 c, ;
-:jp, 2 c, ;
-:jz, 3 c, ;
-:dup, 0x12 c, ;
-:>r, 0x19 c, ;
-:2>r, 0x10 c, 0x19 dup c, c, ;
-:r>, 0x1a c, ;
-:2r>, 0x1a dup c, c, 0x10 c, ;
-:-, 0xd c, ;
-:+, 0xc c, ;
-:drop, 0x16 c, ;
-:over, 0x11 c, ;
-:not, 7 c, ;
-:rdrop, 0x17 c, ;
-:=, 0xd c, not, ;
+\ Requires bootstrap and generated opcode words.
+:2>r, swap, >r, >r, ;
+:2r>, r>, r>, swap, ;
+:=, -, not, ;
 :2dup, over, over, ;
+:boot! 'H @ >r 0 'H ! push, , call, break, r> 'H ! ;
 :2drop drop drop ;
 :1+ 1 + ;
 :1+, push8, 1 c, +, ;

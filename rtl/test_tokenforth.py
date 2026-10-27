@@ -47,7 +47,7 @@ class TokenForthChecks(SramHarness, unittest.TestCase):
 
     def test_python_toolchain_regressions(self):
         for script in ('test_toolchain.py', 'test.py', 'test_package.py', 'test_artifacts.py',
-                       'test_debugger.py', 'test_build.py'):
+                       'test_debugger.py', 'test_build.py', 'test_isa.py'):
             with self.subTest(script=script):
                 self.pipeline.run_regression(script)
 

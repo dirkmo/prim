@@ -5,4 +5,4 @@
 :letter 90 tx ;
 :target #letter
 :main 3 [ do ] bump [ loop ] 'target @ call ;
-[ 0x21 0 c! 'main 1 ! 1 3 c! 0x22 4 c! ]
+[ 'main boot! ]

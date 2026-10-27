@@ -291,7 +291,8 @@ first, then `.venv/bin/python`. To select one explicitly:
 python3 rtl/test_tokenforth.py --compiler-python .venv/bin/python
 ```
 
-Every invocation freshly tokenizes and compiles `src/base.cf`, then the examples
+Every invocation freshly compiles `src/bootstrap.cf`, exports and compiles
+the opcode words from `prim.isa`, then compiles `src/base.cf` and the examples
 in `src/examples`. It exports the **memory** section of the resulting `.tf.toml`
 using `python -m prim export`; token bytes are never treated as CPU code. Existing TOML
 files in `src/` are not used or overwritten. The four examples cover:

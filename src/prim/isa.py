@@ -60,12 +60,33 @@ def export_opcodes(fn):
         f.writelines(content)
 
 
+def export_tokenforth_opcodes(fn):
+    """Generate one byte-emitting word per opcode; requires bootstrap's c,."""
+    # Import lazily: the assembler itself imports this module's constants.
+    from .assembler import PrimAsm
+
+    names = {value: mnemonic.lower() for mnemonic, value in PrimAsm.INSTRUCTIONS.items()}
+    content = ['\\ Generated from prim.isa; requires c, from bootstrap.cf.\n']
+    for name, value in vars(PrimOpcodes).items():
+        if name.startswith('_'):
+            continue
+        if name == 'SIMEND':
+            content.append('\\ SIMEND is a simulation marker.\n')
+        content.append(f':{names[value]}, ${value:02x} c, ;\n')
+    with open(fn, 'wt', encoding='utf-8') as output:
+        output.writelines(content)
+
+
 def main(argv=None):
     import argparse
-    parser = argparse.ArgumentParser(description='Export Prim opcode constants to Verilog')
-    parser.add_argument('output', nargs='?', default='opcodes.v')
+    parser = argparse.ArgumentParser(description='Export Prim opcode constants')
+    parser.add_argument('output', nargs='?')
+    parser.add_argument('--format', choices=('verilog', 'tokenforth'), default='verilog')
     args = parser.parse_args(argv)
-    export_opcodes(args.output)
+    if args.format == 'tokenforth':
+        export_tokenforth_opcodes(args.output or 'opcodes.cf')
+    else:
+        export_opcodes(args.output or 'opcodes.v')
 
 
 if __name__ == '__main__':

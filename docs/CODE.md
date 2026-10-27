@@ -42,13 +42,14 @@ ist daher kein direkt ausführbares CPU-Programm.
 | [src/prim/compiler.py](../src/prim/compiler.py) | Tokenstrom decodieren, Code/Daten erzeugen, Immediate-Code ausführen |
 | [src/prim/artifacts.py](../src/prim/artifacts.py) | Dokumentmodelle, Validierung, TOML und Binärexport |
 | [src/prim/errors.py](../src/prim/errors.py) | `CompileError` mit Quellposition oder Tokenoffset |
-| [src/prim/isa.py](../src/prim/isa.py) | Opcodes, Speicherlayout-Konstanten und Verilog-Export |
+| [src/prim/isa.py](../src/prim/isa.py) | Opcodes, Speicherlayout-Konstanten, Verilog- und TokenForth-Export |
 | [src/prim/cpu.py](../src/prim/cpu.py) | Ausführbare CPU-Referenz und `MemoryIf` |
 | [src/prim/assembler.py](../src/prim/assembler.py) | Assembler und einfache Binärdisassemblierung |
 | [src/prim/disassembler.py](../src/prim/disassembler.py) | Disassemblierung mit Symbolen und Literalinformationen |
 | [src/prim/debugger.py](../src/prim/debugger.py) | Terminaloberfläche, Breakpoints, Speicheransicht und UART RX |
 | [src/prim/cli.py](../src/prim/cli.py) | Unterbefehle an die jeweiligen Module weiterleiten |
 | [src/prim/exporter.py](../src/prim/exporter.py) | Gewählte Dokumentsektion als Bytes exportieren |
+| [src/bootstrap.cf](../src/bootstrap.cf) | Minimale Codeerzeugung: `c,` und `,` |
 | [src/base.cf](../src/base.cf) | In TokenForth geschriebene Basis- und Codeerzeugungswörter |
 | [src/interpreter.cf](../src/interpreter.cf) | Unvollständiger Token-Interpreter zur Ausführung auf der CPU |
 | [src/Makefile](../src/Makefile) | Basisbibliothek, Testprogramm und Interpreter bauen |
@@ -338,7 +339,7 @@ je Ausführung einschließlich BREAK; der temporäre Code darf höchstens 238
 Bytes vor dem abschließenden BREAK umfassen.
 
 So können Wörter der Basisbibliothek während der Übersetzung Code schreiben.
-Beispielsweise verändert `c,` in `base.cf` den Speicher an HERE und erhöht HERE.
+Beispielsweise verändert `c,` in `bootstrap.cf` den Speicher an HERE und erhöht HERE.
 `if`, `else`, `then`, `while` und `repeat` erzeugen Sprünge beziehungsweise
 korrigieren zuvor angelegte Adressplatzhalter. Sie sind normale TokenForth-Wörter,
 keine besonderen Python-Parserknoten. Deshalb stehen ihre Aufrufe bei der
@@ -352,9 +353,55 @@ Hier entsteht zur Laufzeit eine Verzweigung anhand eines Stackflags.
 Ein Ausdruck wie `[ 2 ]` führt dagegen während des Übersetzens einen PUSH aus;
 er schreibt allein noch keine Zahl in den späteren Programmcode.
 
+### Generierte Opcodewörter
+
+`isa.export_tokenforth_opcodes()` erzeugt für jeden Eintrag in `PrimOpcodes`
+ein TokenForth-Wort. Der Name folgt dem Assembler-Mnemonic in Kleinschreibung
+mit Komma: ADD wird `+,`, TO_R wird `>r,`, BYTE_FETCH wird `c@,`.
+Der Export verwendet dafür die vorhandene `PrimAsm.INSTRUCTIONS`-Tabelle;
+es gibt keine zweite manuell gepflegte Namensliste und keine Opcodewerte in
+`base.cf`, die parallel zur ISA aktualisiert werden müssten.
+
+```forth
+\ Ausschnitt aus der generierten opcodes.cf
+:call, $01 c, ;
+:+, $0c c, ;
+:push, $21 c, ;
+:break, $22 c, ;
+```
+
+Jedes dieser Wörter schreibt genau ein Byte an HERE und erhöht HERE um eins.
+`push,` schreibt insbesondere keinen Operanden; `[ 'main push, , call, ]`
+erzeugt PUSH16 mit Wortadresse plus CALL. SIMEND wird ebenfalls exportiert,
+bleibt aber ein Simulationsmarker. Das Returnbit ist kein eigenes Opcodewort.
+
+Der Build kompiliert zuerst `bootstrap.cf` mit `c,` und `,`, dann die daraus
+abhängigen generierten Opcodewörter und danach `base.cf`. Zusammengesetzte
+Wörter wie `2>r,`, `2r>,`, `=,` und `2dup,` verbleiben in `base.cf` und
+verwenden die generierten Einzelopcodewörter.
+
+`boot!` nimmt eine Einsprungadresse vom Datenstack. Es sichert HERE auf dem
+Return-Stack, setzt HERE auf null, schreibt `PUSH16 entry; CALL; BREAK` und
+stellt HERE wieder her. Die Basisbibliothek und ihre Dictionarydaten bleiben
+so an ihren bisherigen Positionen.
+
 ## 8. Ein kleines Programm durch alle Stufen
 
-Dieses Beispiel benötigt keine importierte Basisbibliothek:
+Mit importierter Basisbibliothek ist die übliche Schreibweise:
+
+```forth
+:inc 1 + ;
+:main 41 inc ;
+[ 'main boot! ]
+```
+
+Beim Tokenisieren dafür `-it build/src/base.tf.toml` angeben. Die Adressen
+hängen dann vom Bibliotheksumfang ab; nach dem Aufruf von `main` steht 42 auf
+dem Datenstack. Beispielprogramme verwenden diese Form.
+
+Für den folgenden bytegenauen Durchgang wird bewusst auf eine importierte
+Basisbibliothek verzichtet. Dadurch lassen sich die festen Anfangsadressen
+und die von `boot!` gekapselten Low-Level-Schreibzugriffe direkt erklären:
 
 ```forth
 :inc 1 + ;
@@ -510,6 +557,11 @@ definiert und rufen dieselben Module auf.
 
 ```mermaid
 flowchart LR
+    Bootstrap["bootstrap.cf"] --> BootstrapImage["bootstrap.tf.toml"]
+    ISA["prim.isa + Assemblernamen"] --> Opcodes["generierte opcodes.cf"]
+    Opcodes --> OpcodeImage["opcodes.tf.toml"]
+    BootstrapImage --> OpcodeImage
+    OpcodeImage --> BaseTok
     Base["base.cf"] --> BaseTok["base.tok.toml"] --> BaseImage["base.tf.toml"]
     Test["test.cf"] --> TestTok["test.tok.toml"] --> TestImage["test.tf.toml"]
     BaseImage --> TestTok
@@ -521,7 +573,10 @@ flowchart LR
 Die Ausgaben des Makefiles liegen unter `build/src/`. `OUT_DIR` kann den Pfad
 ändern; relative Pfade beziehen sich bei `make -C src` auf `src/`. Änderungen
 an Python-Modulen, `pyproject.toml` oder dem Makefile lösen Neubauten aus.
-`clean` entfernt nur die sieben benannten Ausgaben. Ältere generierte Dateien
+`prim opcodes --format tokenforth [datei]` erzeugt die Opcodewörter
+(Standarddatei `opcodes.cf`). Ohne Formatoption bleibt der Verilog-Export
+mit Standarddatei `opcodes.v` aktiv.
+`clean` entfernt nur die zwölf benannten Ausgaben. Ältere generierte Dateien
 unter `src/` bleiben liegen und werden vom aktuellen Build nicht verwendet.
 
 ## 14. Fehler und bestehende Grenzen

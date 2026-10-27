@@ -45,7 +45,11 @@ outside the scope of this work.
 5. The exporter writes the `memory` section as a binary image, which the Python
    CPU or RTL simulation can execute.
 
-`base.cf` is compiled first. Examples import its program image. The unfinished
+`bootstrap.cf` first defines `c,` and `,`. The ISA exporter generates
+`opcodes.cf` with one comma-suffixed word per opcode, compiled against the
+bootstrap image. `base.cf` imports this opcode library and adds composite
+emitters and control words. Examples import the resulting `base.tf.toml`.
+`boot!` installs `PUSH16 entry; CALL; BREAK` at zero while preserving HERE. The unfinished
 on-CPU token interpreter in `src/interpreter.cf` is a separate component;
 the host compiler and end-to-end test do not require it.
 
@@ -123,7 +127,8 @@ accesses. Unoccupied stack cells may remain undefined. Four-state SRAM tests
 also check bus release, read-modify-write and timing. UART output is decoded
 independently from the serial signal.
 
-The end-to-end TokenForth test freshly compiles `base.cf` and the `hello`,
+The end-to-end TokenForth test freshly builds bootstrap, opcode words and
+`base.cf`, then compiles the `hello`,
 `control`, `data` and `strings` examples, then runs each example with three SRAM
 timing configurations. Results are stored under `build/tokenforth/`.
 The Python regressions are included in this CTest suite.

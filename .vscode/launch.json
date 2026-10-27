@@ -7,7 +7,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "module": "prim",
-            "args": ["tokenize", "-i", "src/base.cf", "-o", "build/src/base.tok.toml"],
+            "args": ["tokenize", "-i", "src/base.cf", "-it", "build/src/opcodes.tf.toml", "-o", "build/src/base.tok.toml"],
             "console": "integratedTerminal",
             "justMyCode": true
         },

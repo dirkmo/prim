@@ -14,7 +14,7 @@ The alternative Amaranth implementation under `hdl/` is outside the current
 scope; its dependencies remain optional.
 
 - `src/prim/cpu.py`: reference CPU and `MemoryIf` interface.
-- `src/prim/isa.py`: opcode constants and Verilog export.
+- `src/prim/isa.py`: opcode constants, Verilog and TokenForth exports.
 - `src/prim/assembler.py`: assembler and binary disassembly.
 - `src/prim/tokenizer.py`, `tokens.py`: source scanning and token encoding.
 - `src/prim/compiler.py`: compilation, per-compilation dictionary and immediate execution.
@@ -59,8 +59,14 @@ Python 3.11+ is required. Runtime dependencies are declared in `pyproject.toml`;
 Use `prim` subcommands, `prim-*` commands or `python -m prim`; legacy script
 wrappers have been removed. Library imports use `prim.*`.
 
-The Makefile writes seven named outputs under `build/src/` (`OUT_DIR` override).
-Targets such as `make -C src base.tf.toml` remain available. Python module,
+The Makefile writes twelve named outputs under `build/src/` (`OUT_DIR` override).
+Targets such as `make -C src base.tf.toml` remain available.
+Build order: `bootstrap.cf` (`c,` and `,`) -> generated `opcodes.cf` -> `base.cf`.
+`prim opcodes --format tokenforth` exports one opcode emitter per assembler
+mnemonic, lowercased with a trailing comma and no prefix. Default export remains
+Verilog. Do not duplicate opcode-byte constants in `base.cf`; composite emitters
+use the generated words. PUSH emitters write only the opcode, not operands.
+Use `[ 'main boot! ]` for reset entries; it preserves HERE. Python module,
 project configuration and Makefile changes trigger rebuilds. Clean removes only
 named outputs; unrelated files and old artifacts under `src/` are preserved.
 IDE tool launch entries use `build/src/`; run make once to create that directory.
@@ -80,7 +86,7 @@ require `make`. RTL tests require CMake, Verilator, Icarus Verilog and C++17.
 CTest does not rebuild the simulator; build before running it. Compare Python
 and RTL state after instruction completion, ignoring unused stack cells.
 `rtl/test_tokenforth.py` freshly compiles examples, checks serial output and
-runs the Python regressions including debugger and Makefile checks.
+runs the Python regressions including debugger, Makefile and generated opcode-word checks.
 
 For opcode changes, update `src/prim/isa.py` and the active RTL implementation;
 `cmake --build build/rtl --target genopcodes` exports `rtl/opcodes.v`.
