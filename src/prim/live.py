@@ -30,6 +30,7 @@ class PreviewCPU(Prim):
         self.steps = steps
         self.executed = 0
         self.last_instruction = None
+        self.tail_sources = {}
 
     def dpush(self, value):
         if self.depth >= self.DS_SIZE:
@@ -57,10 +58,12 @@ class PreviewCPU(Prim):
             raise ValueError('Returnstack voll')
         super().rpush(value)
         self.rdepth += 1
+        self.tail_sources.pop(self.rdepth, None)
 
     def rpop(self):
         if not self.rdepth:
             raise ValueError('Returnstack leer')
+        self.tail_sources.pop(self.rdepth, None)
         self.rdepth -= 1
         return super().rpop()
 
@@ -73,6 +76,8 @@ class PreviewCPU(Prim):
         instruction = self.instruction_at_pc()
         result = super().step()
         self.last_instruction = instruction
+        if instruction['bytes'][0] & 0x7f == Op.JP and instruction['source']:
+            self.tail_sources[self.rdepth] = instruction['source']
         self.executed += 1
         return result
 
@@ -155,9 +160,14 @@ def _preview(source, stack, library, steps, tokens):
     def source_lookup(pc):
         if pc in source_map:
             return source_map[pc]
+        if runtime_cpu.rdepth in runtime_cpu.tail_sources:
+            return runtime_cpu.tail_sources[runtime_cpu.rdepth]
         # For library code, walk outward to the nearest call originating in the editor.
         for depth in range(runtime_cpu.rdepth):
             return_pc = runtime_cpu._rs[(runtime_cpu._rsp - depth) % runtime_cpu.RS_SIZE]
+            context = runtime_cpu.tail_sources.get(runtime_cpu.rdepth - depth)
+            if context:
+                return context
             if (return_pc - 1) & 0xffff in source_map:
                 return source_map[(return_pc - 1) & 0xffff]
         return current_source

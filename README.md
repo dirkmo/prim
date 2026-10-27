@@ -240,7 +240,10 @@ Semicolon (`;`) returns from a word. For simple straight-line definitions,
 the compiler sets the return bit on the last instruction (including generated
 PUSH instructions) instead of adding `NOP.RET`. Definitions containing Immediate
 code, raw data, address literals or control-flow instructions retain `NOP.RET`;
-a word ending in a call also retains it.
+a final compiled word call in a simple definition becomes a tail jump (`JP`)
+instead of `CALL NOP.RET`. Raw `call` mnemonics remain unoptimized. Tail calls
+reuse the caller’s return address; code must not depend on an extra return
+address for the eliminated call.
 
 ### COMMENTS
 ```

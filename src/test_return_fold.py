@@ -24,7 +24,7 @@ class ReturnFoldTests(unittest.TestCase):
 
     def test_unsafe_endings_fall_back(self):
         for source in (':w ;', ':w #42 ;', ':w "hi" ;', ':w [ 1 ] dup ;',
-                       ':a 1 ; :w a ;', ':w 0 jp ;', ':w 0 call ;',
+                       ':w 0 jp ;', ':w 0 call ;',
                        ':w 0 jz ;', ':w int ;', ':w dup.ret ;'):
             with self.subTest(source=source):
                 self.assertEqual(code(source)[-1], 128)
@@ -44,3 +44,30 @@ class ReturnFoldTests(unittest.TestCase):
         result = preview(':w [ if ] 10 [ else ] 20 [ then ] ; 0 w 1 w', library=library)
         self.assertEqual(result['stack'], [20, 10])
         self.assertEqual(result['disassembly'][-1]['instruction'], 'NOP.RET')
+
+
+    def test_tail_call_replaces_call_and_return(self):
+        self.assertEqual(code(':a 1 ; :w a ;'),
+                         bytes([Op.PUSH8 | 128, 1, Op.PUSH8, 14, Op.JP]))
+        for source in (':a 1 ; :w [ 0 drop ] a ;', ':a 1 ; :w #42 a ;'):
+            self.assertEqual(code(source)[-2:], bytes([Op.CALL, 128]))
+
+    def test_tail_call_chain_uses_one_return_slot(self):
+        definitions = ':w0 7 ; ' + ' '.join(f':w{i} w{i-1} ;' for i in range(1, 25))
+        result = preview(definitions + ' w24')
+        self.assertNotIn('error', result)
+        self.assertEqual(result['stack'], [7])
+        self.assertEqual(result['return_stack'], [])
+        self.assertEqual(sum(row['instruction'] == 'JP' for row in result['disassembly']), 24)
+
+    def test_base_emitter_tail_call(self):
+        library = default_library()
+        result = preview(':w [ nop, ] ; w', library=library)
+        self.assertNotIn('error', result)
+        self.assertEqual(result['stack'], [])
+        result = preview('', library=library)
+        entries = result['dictionary']
+        address = next(entry['address'] for entry in entries if entry['name'] == 'nop,')
+        end = min(entry['address'] for entry in entries if entry['address'] > address)
+        rows = [row for row in result['all_disassembly'] if address <= row['address'] < end]
+        self.assertEqual(rows[-1]['instruction'], 'JP')

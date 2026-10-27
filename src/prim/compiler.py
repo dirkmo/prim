@@ -230,7 +230,11 @@ def interpret(tokens, cpu, max_immediate_steps=DEFAULT_MAX_IMMEDIATE_STEPS, file
                     if (is_return and fold['active'] and fold['safe']
                             and fold['last'] is not None and fold['end'] == HERE_FETCH(mif)):
                         addr = fold['last']
-                        mif.write8(addr, mif.read8(addr) | 0x80)
+                        if mif.read8(addr) == PrimOpcodes.CALL:
+                            # Reuse our caller's return address for the final callee.
+                            mif.write8(addr, PrimOpcodes.JP)
+                        else:
+                            mif.write8(addr, mif.read8(addr) | 0x80)
                     else:
                         addr = HERE_FETCH(mif)
                         comma(mif, ops)
@@ -239,6 +243,8 @@ def interpret(tokens, cpu, max_immediate_steps=DEFAULT_MAX_IMMEDIATE_STEPS, file
                             fold['safe'] = False
                         fold['last'] = addr if tag == Token.NUMBER or (
                             tag == Token.MNEMONIC and value not in unsafe_ops) else None
+                        if tag == Token.WORD_CALL:
+                            fold['last'] = addr + len(ops) - 1
                         fold['end'] = HERE_FETCH(mif)
                     if is_return:
                         fold['active'] = False

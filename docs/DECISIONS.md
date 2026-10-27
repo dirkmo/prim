@@ -170,7 +170,7 @@ word endings fold the return bit into the last known instruction, including
 compiler-generated PUSH operands. Compilation state survives token-by-token
 interpretation in the live preview. Definitions involving Immediate mode, data,
 address literals, raw operand-bearing mnemonics or explicit control transfers
-retain NOP.RET. A final word call or an empty definition also retains NOP.RET.
+retain NOP.RET. An empty definition also retains NOP.RET; final word calls are covered by D18.
 Broader optimization of generated control flow remains future work.
 
 A source `;` should set the return bit (bit 7) on the preceding instruction
@@ -181,3 +181,14 @@ or operand bytes, and preserve control-flow targets and return-stack semantics.
 In particular, CALL and jump instructions cannot be assumed to honor the return
 bit. Apply the behavior consistently to the normal compiler and live preview;
 verify execution equivalence as well as reduced code size.
+
+
+### D18 – Optimize final word calls into tail jumps
+
+For simple definitions eligible for D17, a final compiled word call followed
+by `;` replaces CALL with JP and omits NOP.RET. The callee returns directly to
+the original caller and consumes no extra return-stack entry. Raw CALL
+mnemonics and definitions disqualified by Immediate mode, data or control flow
+retain their existing behavior. Code inspecting return addresses must account
+for the eliminated frame. Live stepping retains source attribution across tail
+jumps independently of the physical return stack.

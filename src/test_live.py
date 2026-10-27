@@ -186,7 +186,7 @@ class LiveTests(unittest.TestCase):
         rows = [row for row in result['disassembly'] if row['source'] and
                 row['source']['start'] == call_position]
         self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[-1]['instruction'], 'CALL')
+        self.assertEqual(rows[-1]['instruction'], 'JP')
         self.assertTrue(all(source[row['source']['start']:row['source']['end']] == 'double' for row in rows))
 
     def test_memory_snapshot_and_changes(self):

@@ -140,7 +140,8 @@ open. Default clock and timing parameters are not a verified board configuration
 
 Semicolon return folding is implemented for simple word endings, including
 generated PUSH instructions. Immediate/control-flow/data cases retain NOP.RET.
-See D17 in [DECISIONS.md](DECISIONS.md) for scope and planned extensions.
+Simple final word calls use JP instead of CALL NOP.RET. See D17/D18 in
+[DECISIONS.md](DECISIONS.md) for scope and planned extensions.
 
 ## Possible next improvements
 
