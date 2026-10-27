@@ -1,5 +1,12 @@
 # prim
 
+## Project knowledge and decisions
+
+Repository context is documented in
+[Project knowledge](docs/PROJECT_KNOWLEDGE.md) covers architecture, workflows and open
+work; [Decisions](docs/DECISIONS.md) records requirements and technical
+decisions with their rationale.
+
 ## Python development setup
 
 Python 3.11 or newer is required. Install the local package and activate its
