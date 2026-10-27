@@ -342,7 +342,9 @@ Disassembly shows word labels and symbolic addresses. Click a dictionary name
 to inspect its memory range, including base words; “Neu erzeugter Code”
 returns to the newly generated code. Known literals are displayed as DATA.
 Disable Live for manual execution. “Ausführung zurücksetzen” pauses before the first runtime
-instruction; “Nächste Instruktion” advances one CPU instruction and suspends automatic
+instruction; “Nächstes Quelltextwort” runs until the source location changes, stepping
+inside user definitions and grouping internal base-word instructions.
+“Nächste Instruktion” advances one CPU instruction and suspends automatic
 execution. “Alles ausführen” runs to completion and restores Live behavior. Editing
 source resets the step position; “Ausführung zurücksetzen” also clears both runtime stacks.
 The active instruction is highlighted, including calls into base words. The
@@ -365,6 +367,9 @@ initialized dictionary entries. Incomplete source reports an error. The read-onl
 by hexadecimal address, and shortcuts to HERE or the selected dictionary word.
 Green bytes changed since the previous snapshot; underlined bytes differ from
 the initial library memory. Inspection does not read UART or other MMIO.
+Compiler and runtime errors mark their source token and line number in red.
+Errors inside base words point to the call in the editor. Editing clears the
+previous error marker.
 Source, Live/base settings, dictionary order and memory address are remembered
 in browser local storage. “Beispiel laden” restores the initial loop example
 and enables base words. There is no memory editor or UART display.

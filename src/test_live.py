@@ -213,3 +213,64 @@ class LiveTests(unittest.TestCase):
     def test_library_memory_baseline(self):
         result = preview('', library=default_library())
         self.assertEqual(result['memory_changed'], [])
+
+    def test_error_locations(self):
+        for source, text, line in [('1\nunknown', 'unknown', 2),
+                                   (':bad\n + ;\nbad', '+', 2),
+                                   ('[ + ]', '+', 1),
+                                   (':unfinished 1', '1', 1)]:
+            with self.subTest(source=source):
+                result = preview(source)
+                self.assertIn('error', result)
+                span = result['error_source']
+                self.assertEqual(span['text'], text)
+                self.assertEqual(span['line'], line)
+                self.assertEqual(source[span['start']:span['end']], text)
+
+    def test_base_error_points_to_call(self):
+        result = preview('1+', library=default_library())
+        self.assertIn('error', result)
+        self.assertEqual(result['error_source']['text'], '1+')
+
+    def test_source_word_step(self):
+        source = '7 dup +'
+        first = preview(source, source_after=0)
+        self.assertTrue(first['paused'])
+        self.assertEqual(first['stack'], [7])
+        self.assertEqual(first['current_instruction']['source']['text'], 'dup')
+        second = preview(source, source_after=first['steps'])
+        self.assertEqual(second['stack'], [7, 7])
+        self.assertEqual(second['current_instruction']['source']['text'], '+')
+        done = preview(source, source_after=second['steps'])
+        self.assertFalse(done['paused'])
+        self.assertEqual(done['stack'], [14])
+
+    def test_source_word_step_enters_definitions_and_groups_base_words(self):
+        library = default_library()
+        source = ':w 1+ dup ; 7 w drop'
+        result = preview(source, library=library, source_after=0)
+        locations = []
+        for _ in range(10):
+            if not result['paused']:
+                break
+            locations.append(result['current_instruction']['source']['text'])
+            result = preview(source, library=library, source_after=result['steps'])
+        self.assertEqual(locations, ['w', '1+', 'dup', 'drop'])
+        self.assertEqual(result['stack'], [8])
+        self.assertFalse(result['paused'])
+
+    def test_loop_index_keeps_source_while_moving_return_address(self):
+        library = default_library()
+        source = ':zaehlen\n 3 0 [ for ]\n i\n [ next ]\n;\nzaehlen'
+        complete = preview(source, library=library)
+        index_address = next(e['address'] for e in complete['dictionary'] if e['name'] == 'i')
+        snapshots = [preview(source, library=library, steps=n)
+                     for n in range(complete['steps'] + 1)]
+        instructions = [state['last_instruction'] for state in snapshots if state.get('last_instruction')
+                        and index_address <= state['last_instruction']['address'] < index_address + 6]
+        self.assertTrue(instructions)
+        self.assertTrue(all(instruction['source']['text'] == 'i' for instruction in instructions))
+        self.assertTrue(all(instruction['source']['line'] == 3 for instruction in instructions))
+        next_instructions = [state['current_instruction'] for state in snapshots if state.get('current_instruction')
+                             and index_address <= state['current_instruction']['address'] < index_address + 6]
+        self.assertTrue(all(instruction['source']['text'] == 'i' for instruction in next_instructions))

@@ -47,6 +47,11 @@ textarea::selection { background:#ffd166; color:#10161c; }
 #token-location { color:#ffd166; font-size:12px; }
 #token-line { margin:5px 0 0; font:15px/1.5 monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
 #token-line mark { background:#ffd166; color:#10161c; font-weight:bold; padding:2px 3px; border-radius:3px; outline:1px solid #ffe6a3; }
+.source-editor.has-error { border-color:#ff8278; }
+#active-token.has-error { border-left-color:#ff8278; background:#392323; }
+#active-token.has-error #token-location { color:#ffb4a5; }
+#active-token.has-error mark { background:#ff8278; outline-color:#ffc4be; }
+.error-line-number { background:#7b302e; color:#fff; font-weight:bold; }
 .error { color: #ffb4a5; }
 td, th { padding:3px 8px; border-bottom:1px solid #405362; } tr.new { color:#93e8bc; }
 .dictionary-panel { margin-top:10px; }
@@ -64,7 +69,7 @@ small { color: #9eb0be; font-size:12px; }
 
 <div class="toolbar controls" role="toolbar" aria-label="Ausführung steuern">
 
-<div class="control-group" role="group" aria-label="Ausführung"><span>Ausführung</span><button id="run" title="Bis zum Ende ausführen und Live-Vorschau fortsetzen">Alles ausführen</button><button id="step" title="Eine CPU-Instruktion im freien Code oder aufgerufenen Wort ausführen">Nächste Instruktion</button><button id="restart" title="Vor der ersten Laufzeitinstruktion anhalten">Ausführung zurücksetzen</button></div>
+<div class="control-group" role="group" aria-label="Ausführung"><span>Ausführung</span><button id="run" title="Bis zum Ende ausführen und Live-Vorschau fortsetzen">Alles ausführen</button><button id="source-step" title="Bis zur nächsten Quelltextstelle ausführen; interne Schritte von Basiswörtern zusammenfassen">Nächstes Quelltextwort</button><button id="step" title="Eine CPU-Instruktion im freien Code oder aufgerufenen Wort ausführen">Nächste Instruktion</button><button id="restart" title="Vor der ersten Laufzeitinstruktion anhalten">Ausführung zurücksetzen</button></div>
 <div class="control-group" role="group" aria-label="Übersetzung"><span>Übersetzung</span><button id="token-step" title="Ein Token übersetzen oder ausführen; Immediate-Wörter laufen vollständig durch">Nächstes Token</button><button id="compile-restart" title="Vor dem ersten Quelltext-Token anhalten">Übersetzung zurücksetzen</button></div>
 <label><input id="base-words" type="checkbox" checked style="width:auto;margin:0"> Basiswörter</label>
 <button id="load-example" type="button">Beispiel laden</button>
@@ -112,11 +117,17 @@ zaehlen</textarea></div>
 <script>
 const source = document.querySelector('#source');
 const exampleSource = source.value;
+let errorSource = null;
 const lineNumbers = document.querySelector('#line-numbers');
 function updateLineNumbers() {
   const count = source.value.split('\n').length;
   source.parentElement.style.setProperty('--gutter', (String(count).length + 3) + 'ch');
-  lineNumbers.textContent = Array.from({length:count}, (_, index) => index + 1).join('\n');
+  lineNumbers.replaceChildren();
+  for (let number = 1; number <= count; number++) {
+    const line = document.createElement('span'); line.textContent = number + '\n';
+    if (errorSource?.line === number) line.className = 'error-line-number';
+    lineNumbers.append(line);
+  }
   lineNumbers.scrollTop = source.scrollTop;
 }
 source.addEventListener('input', updateLineNumbers);
@@ -304,13 +315,13 @@ function renderStack(element, values, previous) {
   });
   element.append(document.createTextNode(']'));
 }
-async function run(steps = null, tokens = null) {
+async function run(steps = null, tokens = null, sourceWord = false) {
   clearTimeout(timer);
   const current = ++revision;
   selectedInstruction = null; selectedIndex = null; sourceAddresses.clear();
   result.textContent = '…'; result.className = ''; status.textContent = 'Wird ausgeführt …';
   try {
-    const response = await fetch('/preview', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({source:source.value, base_words:baseWords.checked, steps, tokens})});
+    const response = await fetch('/preview', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({source:source.value, base_words:baseWords.checked, steps:sourceWord ? null : steps, tokens, source_after:sourceWord ? steps : null})});
     if (!response.ok) throw new Error('Serverfehler');
     const data = await response.json();
     if (current !== revision) return;
@@ -335,17 +346,28 @@ async function run(steps = null, tokens = null) {
     document.querySelector('#here').textContent = data.here === undefined ? '' : 'HERE: ' + hex(data.here);
     renderStack(document.querySelector('#compiler-state'), data.compiler_stack || [], previousCompiler);
     previousCompiler = data.compiler_stack || [];
-    const activeSource = tokens !== null ? data.next_token
-      : steps !== null ? (data.last_instruction?.source || data.current_instruction?.source) : null;
+    errorSource = data.error_source || null;
+    source.parentElement.classList.toggle('has-error', !!errorSource);
+    source.setAttribute('aria-invalid', String(!!data.error));
+    document.querySelector('#active-token').classList.toggle('has-error', !!errorSource);
+    updateLineNumbers();
+    const activeSource = errorSource || (tokens !== null ? data.next_token
+      : steps !== null ? (sourceWord ? data.current_instruction?.source || data.last_instruction?.source : data.last_instruction?.source || data.current_instruction?.source) : null);
     document.querySelector('#active-token').hidden = !activeSource;
     if (activeSource) {
-        source.setSelectionRange(activeSource.start, activeSource.end);
+        // Live diagnostics must preserve the caret and the user's selection.
+        if (!errorSource && (steps !== null || tokens !== null)) {
+          // Explicit stepping needs focus for the native selection to be visible.
+          // preventScroll keeps the page at the toolbar's current position.
+          source.focus({preventScroll:true});
+          source.setSelectionRange(activeSource.start, activeSource.end);
+        }
         const token = activeSource;
         const lineStart = source.value.lastIndexOf('\n', token.start - 1) + 1;
         const nextNewline = source.value.indexOf('\n', token.end);
         const lineEnd = nextNewline < 0 ? source.value.length : nextNewline;
         document.querySelector('#active-token').hidden = false;
-        document.querySelector('#token-location').textContent = (tokens !== null ? 'Nächstes Token: ' : data.last_instruction ? 'Ausgeführter Quelltext: ' : 'Als Nächstes: ') + token.text + ' · Zeile ' + token.line + ', Spalte ' + token.column;
+        document.querySelector('#token-location').textContent = (errorSource ? 'Fehlerstelle: ' : sourceWord && data.paused ? 'Als Nächstes: ' : tokens !== null ? 'Nächstes Token: ' : data.last_instruction ? 'Ausgeführter Quelltext: ' : 'Als Nächstes: ') + token.text + ' · Zeile ' + token.line + ', Spalte ' + token.column;
         const mark = document.createElement('mark'); mark.textContent = source.value.slice(token.start, token.end);
         document.querySelector('#token-line').replaceChildren(
           document.createTextNode(source.value.slice(lineStart, token.start)), mark,
@@ -364,6 +386,9 @@ async function run(steps = null, tokens = null) {
   }
 }
 function changed() {
+  errorSource = null; source.parentElement.classList.remove('has-error');
+  source.removeAttribute('aria-invalid'); document.querySelector('#active-token').hidden = true;
+  updateLineNumbers();
   saveWorkspace(); previousMemory = null; memory = null;
   ++revision; clearTimeout(timer);
   processedTokens = 0; previousCompiler = []; priorCode = new Map(); changedCode = new Set();
@@ -415,6 +440,10 @@ document.querySelector('#token-step').addEventListener('click', () => {
 });
 document.querySelector('#compile-restart').addEventListener('click', () => {
   stepMode = true; previousCompiler = []; priorCode = new Map(); run(null, 0);
+});
+document.querySelector('#source-step').addEventListener('click', () => {
+  if (!stepMode) executedSteps = 0;
+  stepMode = true; run(executedSteps, null, true);
 });
 document.querySelector('#step').addEventListener('click', () => { stepMode = true; run(executedSteps + 1); });
 baseWords.addEventListener('change', changed);

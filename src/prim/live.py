@@ -10,6 +10,7 @@ import tempfile
 
 from . import compiler
 from .artifacts import load_program
+from .errors import CompileError
 from .cpu import Prim
 from .assembler import PrimAsm
 from .tokens import Token
@@ -23,14 +24,17 @@ class PreviewPaused(Exception):
 
 class PreviewCPU(Prim):
     """Track logical depths without changing the hardware CPU's circular stacks."""
-    def __init__(self, memory, limit=20000, steps=None):
+    def __init__(self, memory, limit=20000, steps=None, source_after=None):
         super().__init__(memory)
         self.depth = self.rdepth = 0
         self.remaining = limit
         self.steps = steps
+        self.source_after = source_after
+        self.word_origin = None
         self.executed = 0
         self.last_instruction = None
-        self.tail_sources = {}
+        self.failed_instruction = None
+        self.source_frames = []
 
     def dpush(self, value):
         if self.depth >= self.DS_SIZE:
@@ -58,26 +62,47 @@ class PreviewCPU(Prim):
             raise ValueError('Returnstack voll')
         super().rpush(value)
         self.rdepth += 1
-        self.tail_sources.pop(self.rdepth, None)
 
     def rpop(self):
         if not self.rdepth:
             raise ValueError('Returnstack leer')
-        self.tail_sources.pop(self.rdepth, None)
         self.rdepth -= 1
         return super().rpop()
 
     def step(self):
+        synthetic_stop = self._pc >= compiler.Consts.AREA and self.read8(self._pc) == Op.BREAK
+        if self.source_after is not None and self.executed >= self.source_after and not synthetic_stop:
+            location = self.source_lookup(self._pc)
+            if location:
+                key = (location['start'], location['end'])
+                if self.word_origin is None:
+                    self.word_origin = key
+                elif key != self.word_origin:
+                    raise PreviewPaused()
         if self.steps is not None and self.executed >= self.steps:
             raise PreviewPaused()
         if self.remaining <= 0:
             raise RuntimeError('Schrittlimit erreicht (20000 Schritte)')
         self.remaining -= 1
         instruction = self.instruction_at_pc()
-        result = super().step()
+        try:
+            result = super().step()
+        except (ValueError, RuntimeError):
+            self.failed_instruction = instruction
+            raise
         self.last_instruction = instruction
-        if instruction['bytes'][0] & 0x7f == Op.JP and instruction['source']:
-            self.tail_sources[self.rdepth] = instruction['source']
+        opcode = instruction['bytes'][0] & 0x7f
+        if opcode == Op.CALL:
+            self.source_frames.append({'return': (instruction['address'] + 1) & 0xffff,
+                                       'source': instruction['source']})
+        else:
+            # Debug source frames are independent of >r/r>, loop counters and i.
+            for index in range(len(self.source_frames) - 1, -1, -1):
+                if self._pc == self.source_frames[index]['return']:
+                    del self.source_frames[index:]
+                    break
+            if opcode == Op.JP and self.source_frames and instruction['source']:
+                self.source_frames[-1]['source'] = instruction['source']
         self.executed += 1
         return result
 
@@ -110,16 +135,30 @@ class PreviewMemory(compiler.Mif):
             super().write8(address, value)
 
 
-def preview(source, stack='', library=None, steps=None, tokens=None):
+def preview(source, stack='', library=None, steps=None, tokens=None, source_after=None):
     # The existing compiler prints dictionary diagnostics; keep HTTP use quiet.
     with contextlib.redirect_stdout(io.StringIO()):
         try:
-            return _preview(source, stack, library, steps, tokens)
+            return _preview(source, stack, library, steps, tokens, source_after)
         except (ValueError, RuntimeError) as exc:
-            return {'error': str(exc)}
+            result = {'error': str(exc)}
+            if isinstance(exc, CompileError) and exc.line is not None and isinstance(source, str):
+                lines = source.splitlines(keepends=True)
+                start = sum(len(line) for line in lines[:exc.line - 1]) + (exc.column or 1) - 1
+                start = min(len(source), max(0, start))
+                end = start
+                while end < len(source) and not source[end].isspace():
+                    end += 1
+                result['error_source'] = {'start': start, 'end': end, 'text': source[start:end],
+                                          'line': exc.line, 'column': exc.column or 1}
+            return result
 
 
-def _preview(source, stack, library, steps, tokens):
+def _preview(source, stack, library, steps, tokens, source_after):
+    if source_after is not None and (type(source_after) is not int or not 0 <= source_after <= 20000):
+        raise ValueError('Ungültige Schrittzahl für Quelltextschritt')
+    if source_after is not None and (steps is not None or tokens is not None):
+        raise ValueError('Quelltext-, Token- und CPU-Schritte bitte getrennt wählen')
     if tokens is not None and (type(tokens) is not int or not 0 <= tokens <= 65536):
         raise ValueError('Ungültige Tokenanzahl (0..65536)')
     if tokens is not None and steps is not None:
@@ -144,12 +183,13 @@ def _preview(source, stack, library, steps, tokens):
             cpu.dpush(number)
 
     compile_cpu = PreviewCPU(memory)
-    runtime_cpu = PreviewCPU(memory, steps=steps)
+    runtime_cpu = PreviewCPU(memory, steps=steps, source_after=source_after)
     seed(runtime_cpu)
     start = compiler.HERE_FETCH(memory)
     in_definition = immediate = definition_code = False
     decoded = compiler.decode_tokens(document.tokens)
     error = None
+    error_source = None
     paused = False
     token_paused = False
     processed_tokens = 0
@@ -160,16 +200,8 @@ def _preview(source, stack, library, steps, tokens):
     def source_lookup(pc):
         if pc in source_map:
             return source_map[pc]
-        if runtime_cpu.rdepth in runtime_cpu.tail_sources:
-            return runtime_cpu.tail_sources[runtime_cpu.rdepth]
-        # For library code, walk outward to the nearest call originating in the editor.
-        for depth in range(runtime_cpu.rdepth):
-            return_pc = runtime_cpu._rs[(runtime_cpu._rsp - depth) % runtime_cpu.RS_SIZE]
-            context = runtime_cpu.tail_sources.get(runtime_cpu.rdepth - depth)
-            if context:
-                return context
-            if (return_pc - 1) & 0xffff in source_map:
-                return source_map[(return_pc - 1) & 0xffff]
+        if runtime_cpu.source_frames:
+            return runtime_cpu.source_frames[-1]['source'] or current_source
         return current_source
     runtime_cpu.source_lookup = source_lookup
     line_offsets = [0]
@@ -225,6 +257,8 @@ def _preview(source, stack, library, steps, tokens):
             break
         except (ValueError, RuntimeError) as exc:
             error = str(exc)
+            failed = runtime_cpu.failed_instruction
+            error_source = (failed.get('source') if failed else None) or current_source
             break
     if not paused and not token_paused and error is None and ((in_definition and definition_code) or immediate):
         error = 'Eingabe unvollständig: ' + ('schließendes ] fehlt' if immediate else '; fehlt')
@@ -287,6 +321,7 @@ def _preview(source, stack, library, steps, tokens):
     }
     if error:
         result['error'] = error
+        result['error_source'] = error_source or current_source
     return result
 
 
@@ -329,7 +364,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(use_library, bool):
                 raise ValueError('Basiswörter muss ein boolescher Wert sein')
             result = preview(data.get('source'), data.get('stack', ''),
-                             self.library if use_library else None, steps=data.get('steps'), tokens=data.get('tokens'))
+                             self.library if use_library else None, steps=data.get('steps'), tokens=data.get('tokens'), source_after=data.get('source_after'))
         except (ValueError, RuntimeError) as exc:
             result = {'error': str(exc)}
         self.reply(200, json.dumps(result).encode(), 'application/json')
