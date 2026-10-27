@@ -331,6 +331,9 @@ modify definitions. The runtime stack starts empty; supply initial values direct
 
 The compact runtime stack, expandable compiler stack, searchable dictionary,
 and disassembly of newly generated memory update after a 350 ms typing pause.
+Disassembly shows word labels and symbolic addresses. Click a dictionary name
+to inspect its memory range, including base words; “Neu erzeugter Code”
+returns to the newly generated code. Known literals are displayed as DATA.
 Disable Live for manual execution. Dictionary order starts descending and can be reversed. Stack
 tops are on the right; results are unsigned 16-bit values. Inputs accept
 decimal or `$`/`0x` hexadecimal. The disassembly is a raw code view; embedded

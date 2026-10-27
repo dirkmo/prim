@@ -146,29 +146,46 @@ def _preview(source, stack, library):
     if error is None and ((in_definition and definition_code) or immediate):
         error = 'Eingabe unvollständig: ' + ('schließendes ] fehlt' if immediate else '; fehlt')
     finish = compiler.HERE_FETCH(memory)
+    # Only entries encountered before an error have initialized addresses.
+    count = (compiler.Consts.DICT - memory.read16(compiler.Consts.LATEST)) // 2
+    entries = [
+        {'index': index, 'name': name,
+         'address': compiler.fetchFromIndex(memory, index), 'new': index >= old_count}
+        for index, name in enumerate(document.symbols[:count])
+    ]
+    labels = {}
+    for entry in entries:
+        labels.setdefault(entry['address'], []).append(entry['name'])
+    boundaries = sorted({*labels, start, finish})
     disassembly = []
-    address = start
+    address = min([start, *labels])
     while address < finish:
         opcode = memory.read8(address) & 0x7f
         size = 3 if opcode == Op.PUSH else 2 if opcode == Op.PUSH8 else 1
-        size = min(size, finish - address)
+        boundary = next((end for end in boundaries if end > address), finish)
+        size = min(size, boundary - address)
+        is_data = address in memory.dictionary.N or address in memory.dictionary.S
+        if address in memory.dictionary.N:
+            size = min(2, boundary - address)
+        elif address in memory.dictionary.S:
+            size = min(1 + memory.read8(address), boundary - address)
         data = list(memory._mem[address:address + size])
         try:
-            instruction = PrimAsm.disassemble(data, address)[0][2]
+            instruction = 'DATA' if is_data else PrimAsm.disassemble(data, address)[0][2]
         except (KeyError, IndexError):
             instruction = 'DATA'
-        disassembly.append({'address': address, 'bytes': data, 'instruction': instruction})
+        if not is_data and opcode in (Op.PUSH, Op.PUSH8) and len(data) == (3 if opcode == Op.PUSH else 2):
+            target = data[1] + (data[2] * 256 if len(data) == 3 else 0)
+            if target in labels:
+                instruction += '  (' + ', '.join(labels[target]) + ')'
+        disassembly.append({'address': address, 'bytes': data, 'instruction': instruction,
+                            'labels': labels.get(address, [])})
         address += size
-    # Only entries actually encountered before an error have initialized addresses.
-    count = (compiler.Consts.DICT - memory.read16(compiler.Consts.LATEST)) // 2
     result = {
         'compiler_stack': compile_cpu.values(), 'stack': runtime_cpu.values(),
-        'here': finish, 'disassembly': disassembly,
-        'dictionary': [
-            {'index': index, 'name': name,
-             'address': compiler.fetchFromIndex(memory, index), 'new': index >= old_count}
-            for index, name in enumerate(document.symbols[:count])
-        ],
+        'here': finish, 'disassembly': [row for row in disassembly if row['address'] >= start],
+        'all_disassembly': disassembly,
+        'dictionary': entries,
     }
     if error:
         result['error'] = error

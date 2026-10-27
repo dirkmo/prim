@@ -55,3 +55,24 @@ class LiveTests(unittest.TestCase):
     def test_fresh_state(self):
         self.assertEqual(preview('1')['stack'], [1])
         self.assertEqual(preview('')['stack'], [])
+
+    def test_symbolic_calls_and_base_disassembly(self):
+        library = default_library()
+        result = preview(':double dup + ; :main double ; main', '3', library)
+        self.assertNotIn('error', result)
+        self.assertEqual(result['stack'], [6])
+        rows = result['disassembly']
+        self.assertTrue(any(row['labels'] == ['double'] for row in rows))
+        self.assertTrue(any('(double)' in row['instruction'] for row in rows))
+        base = next(entry for entry in result['dictionary'] if entry['name'] == '1+')
+        base_row = next(row for row in result['all_disassembly'] if row['address'] == base['address'])
+        self.assertEqual(base_row['labels'], ['1+'])
+        self.assertNotIn(base_row, rows)
+
+    def test_data_word_does_not_swallow_next_label(self):
+        result = preview(':value #42 :get \'value @ ; get')
+        rows = result['disassembly']
+        self.assertEqual(rows[0]['labels'], ['value'])
+        self.assertEqual(rows[0]['instruction'], 'DATA')
+        self.assertEqual(len(rows[0]['bytes']), 2)
+        self.assertEqual(rows[1]['labels'], ['get'])

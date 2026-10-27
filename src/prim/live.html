@@ -21,6 +21,8 @@ button { border: 0; border-radius: 5px; padding: 6px 10px; background: #93e8bc; 
 #result { font: 17px/1.4 monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 #status, #compiler-state { color: #9eb0be; font-size:12px; margin:5px 0 0; }
 #compiler-state:empty { display:none; }
+.word-link { background:none; color:inherit; font:inherit; padding:0; text-decoration:underline; text-underline-offset:3px; }
+tr.selected { background:#304757; } .code-label { color:#93e8bc; }
 .error { color: #ffb4a5; }
 td, th { padding:3px 8px; border-bottom:1px solid #405362; } tr.new { color:#93e8bc; }
 .dictionary-panel { margin-top:10px; }
@@ -50,7 +52,7 @@ small { color: #9eb0be; font-size:12px; }
 ;
 zaehlen</textarea>
 <p><small>Definitionen werden kompiliert, freier Code wird ausgeführt. <code>[ … ]</code> wirkt beim Kompilieren.</small></p>
-<section class="panel" style="margin-top:10px"><h2 style="font-size:15px;margin:0 0 8px">Kompilat</h2><small>Neu erzeugter Speicher als Disassemblierung; eingebettete Daten können als Instruktionen erscheinen.</small><pre id="compiled" style="font:12px/1.4 monospace;max-height:250px;overflow:auto;margin:8px 0 0"></pre></section>
+<section class="panel" style="margin-top:10px"><div class="toolbar"><h2 id="compiled-title" style="font-size:15px;margin:0">Kompilat</h2><button id="show-new" type="button">Neu erzeugter Code</button></div><small>Dictionary-Wort anklicken, um seinen Speicherbereich zu sehen. Datenwörter enthalten keine Instruktionen.</small><pre id="compiled" style="font:12px/1.4 monospace;max-height:250px;overflow:auto;margin:8px 0 0"></pre></section>
 
 </section>
 <aside>
@@ -76,6 +78,7 @@ const auto = document.querySelector('#auto');
 const baseWords = document.querySelector('#base-words');
 const compiled = document.querySelector('#compiled');
 let dictionary = [];
+let newCode = [], allCode = [], selectedIndex = null;
 let dictionaryReversed = true;
 const hex = n => '$' + n.toString(16).padStart(4, '0');
 function renderDictionary() {
@@ -85,13 +88,46 @@ function renderDictionary() {
   if (dictionaryReversed) entries.reverse();
   for (const entry of entries) {
     const row = document.createElement('tr'); row.className = entry.new ? 'new' : '';
+    row.classList.toggle('selected', entry.index === selectedIndex);
     for (const value of [entry.index, entry.name, hex(entry.address)]) {
-      const cell = document.createElement('td'); cell.textContent = value; row.append(cell);
+      const cell = document.createElement('td');
+      if (value === entry.name) {
+        const button = document.createElement('button'); button.type = 'button';
+        button.className = 'word-link'; button.textContent = entry.name;
+        button.title = 'Kompilat von ' + entry.name + ' anzeigen';
+        button.addEventListener('click', () => { selectedIndex = entry.index; renderCode(); renderDictionary(); });
+        cell.append(button);
+      } else cell.textContent = value;
+      row.append(cell);
     }
     body.append(row);
   }
 }
+function renderCode() {
+  const selected = dictionary.find(entry => entry.index === selectedIndex);
+  let rows = newCode;
+  if (selected) {
+    const end = Math.min(...dictionary.filter(e => e.address > selected.address).map(e => e.address),
+      allCode.length ? allCode[allCode.length - 1].address + allCode[allCode.length - 1].bytes.length : selected.address);
+    rows = allCode.filter(row => row.address >= selected.address && row.address < end);
+  }
+  document.querySelector('#compiled-title').textContent = selected ? 'Kompilat · ' + selected.name : 'Kompilat';
+  compiled.replaceChildren();
+  for (const row of rows) {
+    if (row.labels.length) {
+      const label = document.createElement('span'); label.className = 'code-label';
+      label.textContent = row.labels.map(name => name + ':').join(' ') + '\n'; compiled.append(label);
+    }
+    compiled.append(document.createTextNode(hex(row.address) + '  ' + row.bytes.map(b => b.toString(16).padStart(2, '0')).join(' ').padEnd(9) + '  ' + row.instruction + '\n'));
+  }
+  compiled.scrollTop = 0;
+}
+document.querySelector('#show-new').addEventListener('click', () => {
+  selectedIndex = null; renderCode(); renderDictionary();
+});
 function clearState() {
+  newCode = []; allCode = []; selectedIndex = null;
+  document.querySelector('#compiled-title').textContent = 'Kompilat';
   dictionary = []; renderDictionary();
   document.querySelector('#here').textContent = '';
   document.querySelector('#compiler-state').textContent = '';
@@ -114,7 +150,7 @@ async function run() {
     dictionary = data.dictionary || []; renderDictionary();
     document.querySelector('#here').textContent = data.here === undefined ? '' : 'HERE: ' + hex(data.here);
     document.querySelector('#compiler-state').textContent = '[ ' + (data.compiler_stack || []).join('  ') + ' ]';
-    compiled.textContent = (data.disassembly || []).map(row => hex(row.address) + '  ' + row.bytes.map(b => b.toString(16).padStart(2, '0')).join(' ').padEnd(9) + '  ' + row.instruction).join('\n');
+    newCode = data.disassembly || []; allCode = data.all_disassembly || []; renderCode();
   } catch (error) {
     if (current !== revision) return;
     result.textContent = 'Verbindung zum lokalen Server fehlgeschlagen.';
