@@ -13,15 +13,21 @@ from .cpu import Prim
 from .assembler import PrimAsm
 from .tokens import Token
 from .isa import PrimOpcodes as Op, export_tokenforth_opcodes
-from .tokenizer import tokenize_document, stringToNumber
+from .tokenizer import tokenize_document, stringToNumber, scan
+
+
+class PreviewPaused(Exception):
+    """The requested runtime instruction boundary has been reached."""
 
 
 class PreviewCPU(Prim):
     """Track logical depths without changing the hardware CPU's circular stacks."""
-    def __init__(self, memory, limit=20000):
+    def __init__(self, memory, limit=20000, steps=None):
         super().__init__(memory)
         self.depth = self.rdepth = 0
         self.remaining = limit
+        self.steps = steps
+        self.executed = 0
 
     def dpush(self, value):
         if self.depth >= self.DS_SIZE:
@@ -57,10 +63,14 @@ class PreviewCPU(Prim):
         return super().rpop()
 
     def step(self):
+        if self.steps is not None and self.executed >= self.steps:
+            raise PreviewPaused()
         if self.remaining <= 0:
             raise RuntimeError('Schrittlimit erreicht (20000 Schritte)')
         self.remaining -= 1
-        return super().step()
+        result = super().step()
+        self.executed += 1
+        return result
 
     def values(self):
         return [self._ds[(self._dsp - self.depth + 1 + i) % self.DS_SIZE]
@@ -79,16 +89,22 @@ class PreviewMemory(compiler.Mif):
             super().write8(address, value)
 
 
-def preview(source, stack='', library=None):
+def preview(source, stack='', library=None, steps=None, tokens=None):
     # The existing compiler prints dictionary diagnostics; keep HTTP use quiet.
     with contextlib.redirect_stdout(io.StringIO()):
         try:
-            return _preview(source, stack, library)
+            return _preview(source, stack, library, steps, tokens)
         except (ValueError, RuntimeError) as exc:
             return {'error': str(exc)}
 
 
-def _preview(source, stack, library):
+def _preview(source, stack, library, steps, tokens):
+    if tokens is not None and (type(tokens) is not int or not 0 <= tokens <= 65536):
+        raise ValueError('Ungültige Tokenanzahl (0..65536)')
+    if tokens is not None and steps is not None:
+        raise ValueError('Token- und CPU-Schritte bitte getrennt wählen')
+    if steps is not None and (type(steps) is not int or not 0 <= steps <= 20000):
+        raise ValueError("Ungültige Schrittzahl (0..20000)")
     if not isinstance(source, str) or not isinstance(stack, str):
         raise ValueError('Definition und Startstack müssen Text sein')
     document = tokenize_document(source, library, filename='<Editor>')
@@ -106,13 +122,28 @@ def _preview(source, stack, library):
             cpu.dpush(number)
 
     compile_cpu = PreviewCPU(memory)
-    runtime_cpu = PreviewCPU(memory)
+    runtime_cpu = PreviewCPU(memory, steps=steps)
     seed(runtime_cpu)
     start = compiler.HERE_FETCH(memory)
     in_definition = immediate = definition_code = False
     decoded = compiler.decode_tokens(document.tokens)
     error = None
+    paused = False
+    token_paused = False
+    processed_tokens = 0
+    next_token = None
+    fragments = [f for f in scan(source) if f.kind not in ('whitespace', 'comment', 'line_comment') and f.s.strip()]
+    ignored = (Token.WHITESPACE, Token.COMMENT_BRACES, Token.COMMENT_BACKSLASH)
     for index, (offset, tag, value) in enumerate(decoded):
+        if tag not in ignored:
+            if tokens is not None and processed_tokens >= tokens:
+                fragment = fragments[processed_tokens]
+                position = sum(len(line) for line in source.splitlines(keepends=True)[:fragment.linenum - 1]) + fragment.column - 1
+                token_paused = True
+                next_token = {'text': fragment.s, 'start': position, 'end': position + len(fragment.s),
+                              'line': fragment.linenum, 'column': fragment.column}
+                break
+            processed_tokens += 1
         end = decoded[index + 1][0] if index + 1 < len(decoded) else len(document.tokens)
         token = document.tokens[offset:end]
         try:
@@ -135,15 +166,18 @@ def _preview(source, stack, library):
                 compiler.interpret(token, compile_cpu)
             elif tag == Token.STRING:
                 compiler.interpret(token, compile_cpu)
-                runtime_cpu.dpush(memory.dictionary.S[-1])
+                compiler.execute(runtime_cpu, compiler.getPushOps(memory.dictionary.S[-1]))
             else:
                 compiler.interpret([Token.MODE, Token.MODE_IMMEDIATE, *token], runtime_cpu)
             if tag == Token.BUILDIN and not immediate:
                 in_definition = False
+        except PreviewPaused:
+            paused = True
+            break
         except (ValueError, RuntimeError) as exc:
             error = str(exc)
             break
-    if error is None and ((in_definition and definition_code) or immediate):
+    if not paused and not token_paused and error is None and ((in_definition and definition_code) or immediate):
         error = 'Eingabe unvollständig: ' + ('schließendes ] fehlt' if immediate else '; fehlt')
     finish = compiler.HERE_FETCH(memory)
     # Only entries encountered before an error have initialized addresses.
@@ -181,7 +215,23 @@ def _preview(source, stack, library):
         disassembly.append({'address': address, 'bytes': data, 'instruction': instruction,
                             'labels': labels.get(address, [])})
         address += size
+    current_instruction = None
+    if paused:
+        pc = runtime_cpu._pc
+        opcode = memory.read8(pc) & 0x7f
+        size = 3 if opcode == Op.PUSH else 2 if opcode == Op.PUSH8 else 1
+        data = [memory.read8(pc + i) for i in range(size)]
+        try:
+            instruction = PrimAsm.disassemble(data, pc)[0][2]
+        except (KeyError, IndexError):
+            instruction = 'DATA'
+        current_instruction = {'address': pc, 'bytes': data, 'instruction': instruction, 'labels': labels.get(pc, [])}
     result = {
+        'token_paused': token_paused, 'tokens': processed_tokens, 'next_token': next_token,
+        'paused': paused, 'steps': runtime_cpu.executed,
+        'pc': runtime_cpu._pc if paused else None, 'current_instruction': current_instruction,
+        'return_stack': [runtime_cpu._rs[(runtime_cpu._rsp - runtime_cpu.rdepth + 1 + i) % runtime_cpu.RS_SIZE]
+                         for i in range(runtime_cpu.rdepth)],
         'compiler_stack': compile_cpu.values(), 'stack': runtime_cpu.values(),
         'here': finish, 'disassembly': [row for row in disassembly if row['address'] >= start],
         'all_disassembly': disassembly,
@@ -231,7 +281,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(use_library, bool):
                 raise ValueError('Basiswörter muss ein boolescher Wert sein')
             result = preview(data.get('source'), data.get('stack', ''),
-                             self.library if use_library else None)
+                             self.library if use_library else None, steps=data.get('steps'), tokens=data.get('tokens'))
         except (ValueError, RuntimeError) as exc:
             result = {'error': str(exc)}
         self.reply(200, json.dumps(result).encode(), 'application/json')

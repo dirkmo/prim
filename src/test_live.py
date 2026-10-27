@@ -76,3 +76,76 @@ class LiveTests(unittest.TestCase):
         self.assertEqual(rows[0]['instruction'], 'DATA')
         self.assertEqual(len(rows[0]['bytes']), 2)
         self.assertEqual(rows[1]['labels'], ['get'])
+
+    def test_step_restart_and_return_stack(self):
+        source = ':double dup + ; 7 double'
+        first = preview(source, steps=0)
+        self.assertTrue(first['paused'])
+        self.assertEqual(first['stack'], [])
+        self.assertEqual(first['steps'], 0)
+        one = preview(source, steps=1)
+        self.assertEqual(one['stack'], [7])
+        self.assertEqual(one['steps'], 1)
+        states = [preview(source, steps=n) for n in range(15)]
+        self.assertTrue(any(state['return_stack'] for state in states))
+        self.assertTrue(any(state['pc'] == first['dictionary'][-1]['address'] for state in states))
+        done = states[-1]
+        self.assertFalse(done['paused'])
+        self.assertEqual(done['stack'], [14])
+        self.assertEqual(done['return_stack'], [])
+        self.assertEqual(preview(source, steps=0), first)
+
+    def test_stepping_loop_matches_full_run(self):
+        library = default_library()
+        source = ':count 3 0 [ for ] i [ next ] ; count'
+        full = preview(source, library=library)
+        middle = preview(source, library=library, steps=20)
+        self.assertTrue(middle['paused'])
+        self.assertIsNotNone(middle['current_instruction'])
+        stepped = preview(source, library=library, steps=full['steps'])
+        self.assertFalse(stepped['paused'])
+        self.assertEqual(stepped['stack'], [0, 1, 2])
+        self.assertEqual(stepped['stack'], full['stack'])
+
+    def test_invalid_step_counts(self):
+        for steps in (-1, 20001, True, '1'):
+            self.assertIn('error', preview('1', steps=steps))
+
+    def test_token_step_compiles_incrementally(self):
+        source = ':double dup + ; 7 double'
+        first = preview(source, tokens=0)
+        self.assertTrue(first['token_paused'])
+        self.assertEqual(first['next_token']['text'], ':double')
+        definition = preview(source, tokens=1)
+        self.assertEqual(definition['dictionary'][-1]['name'], 'double')
+        self.assertEqual(definition['disassembly'], [])
+        body = preview(source, tokens=2)
+        self.assertEqual(body['disassembly'][0]['instruction'], 'DUP')
+        self.assertEqual(body['next_token']['text'], '+')
+        completed = preview(source, tokens=6)
+        self.assertFalse(completed['token_paused'])
+        self.assertEqual(completed['stack'], [14])
+
+    def test_token_step_immediate_and_source_positions(self):
+        source = '\\ comment\n[ 7 ( skip ) dup + ] 3'
+        result = preview(source, tokens=4)
+        self.assertTrue(result['token_paused'])
+        self.assertEqual(result['compiler_stack'], [14])
+        self.assertEqual(result['stack'], [])
+        token = result['next_token']
+        self.assertEqual(source[token['start']:token['end']], ']')
+        self.assertEqual(token['line'], 2)
+        self.assertEqual(preview(source, tokens=6)['stack'], [3])
+
+    def test_token_steps_for_immediate_loop_emitters(self):
+        library = default_library()
+        source = ':count 3 0 [ for ] i [ next ] ; count'
+        snapshots = [preview(source, library=library, tokens=n) for n in range(13)]
+        self.assertTrue(all('error' not in state for state in snapshots))
+        self.assertTrue(any(state['compiler_stack'] for state in snapshots))
+        self.assertEqual(snapshots[-1]['stack'], [0, 1, 2])
+
+    def test_invalid_token_budget(self):
+        for tokens in (-1, True, '1', 65537):
+            self.assertIn('error', preview('1', tokens=tokens))
+        self.assertIn('error', preview('1', steps=1, tokens=1))

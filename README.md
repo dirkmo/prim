@@ -334,7 +334,20 @@ and disassembly of newly generated memory update after a 350 ms typing pause.
 Disassembly shows word labels and symbolic addresses. Click a dictionary name
 to inspect its memory range, including base words; “Neu erzeugter Code”
 returns to the newly generated code. Known literals are displayed as DATA.
-Disable Live for manual execution. Dictionary order starts descending and can be reversed. Stack
+Disable Live for manual execution. “Ausführung zurücksetzen” pauses before the first runtime
+instruction; “Nächste Instruktion” advances one CPU instruction and suspends automatic
+execution. “Alles ausführen” runs to completion and restores Live behavior. Editing
+source resets the step position; “Ausführung zurücksetzen” also clears both runtime stacks.
+The active instruction is highlighted, including calls into base words. The
+return stack is shown below the data stack; changed values are highlighted.
+Stepping replays from fresh state up to the requested instruction budget;
+compiler Immediate execution runs normally. “Übersetzung zurücksetzen” stops before
+the first relevant token. “Nächstes Token” processes one token, skipping whitespace
+and comments, and selects the next source token. Compiler stack changes and
+new or modified code bytes are highlighted. Immediate words execute fully
+within a token step. Token stepping uses a complete initial tokenization, so
+lexically invalid or unresolved source must be corrected before stepping. Free code uses a temporary CPU
+execution area, whose current instruction is displayed while paused there. Dictionary order starts descending and can be reversed. Stack
 tops are on the right; results are unsigned 16-bit values. Inputs accept
 decimal or `$`/`0x` hexadecimal. The disassembly is a raw code view; embedded
 data can appear as instructions.

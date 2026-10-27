@@ -23,6 +23,12 @@ button { border: 0; border-radius: 5px; padding: 6px 10px; background: #93e8bc; 
 #compiler-state:empty { display:none; }
 .word-link { background:none; color:inherit; font:inherit; padding:0; text-decoration:underline; text-underline-offset:3px; }
 tr.selected { background:#304757; } .code-label { color:#93e8bc; }
+.current-instruction { background:#304757; display:block; } .changed-value { color:#93e8bc; background:#29463b; }
+textarea::selection { background:#ffd166; color:#10161c; }
+#active-token { margin-top:6px; padding:8px 10px; border-left:4px solid #ffd166; background:#302b1c; border-radius:4px; }
+#token-location { color:#ffd166; font-size:12px; }
+#token-line { margin:5px 0 0; font:15px/1.5 monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+#token-line mark { background:#ffd166; color:#10161c; font-weight:bold; padding:2px 3px; border-radius:3px; outline:1px solid #ffe6a3; }
 .error { color: #ffb4a5; }
 td, th { padding:3px 8px; border-bottom:1px solid #405362; } tr.new { color:#93e8bc; }
 .dictionary-panel { margin-top:10px; }
@@ -42,7 +48,7 @@ small { color: #9eb0be; font-size:12px; }
 <section>
 <div class="toolbar"><label for="source">Quelltext</label>
 
-<button id="run">Ausführen</button>
+<button id="run" title="Bis zum Ende ausführen und Live-Vorschau fortsetzen">Alles ausführen</button><button id="token-step" title="Ein Token übersetzen oder ausführen; Immediate-Wörter laufen vollständig durch">Nächstes Token</button><button id="step" title="Eine CPU-Instruktion im freien Code oder aufgerufenen Wort ausführen">Nächste Instruktion</button><button id="compile-restart" title="Vor dem ersten Quelltext-Token anhalten">Übersetzung zurücksetzen</button><button id="restart" title="Vor der ersten Laufzeitinstruktion anhalten">Ausführung zurücksetzen</button>
 <label><input id="base-words" type="checkbox" checked style="width:auto;margin:0"> Basiswörter</label>
 <label><input id="auto" type="checkbox" checked style="width:auto;margin:0"> Live</label></div>
 <textarea id="source" spellcheck="false">:zaehlen
@@ -51,6 +57,7 @@ small { color: #9eb0be; font-size:12px; }
     [ next ]
 ;
 zaehlen</textarea>
+<div id="active-token" hidden aria-live="polite"><strong id="token-location"></strong><pre id="token-line"></pre></div>
 <p><small>Definitionen werden kompiliert, freier Code wird ausgeführt. <code>[ … ]</code> wirkt beim Kompilieren.</small></p>
 <section class="panel" style="margin-top:10px"><div class="toolbar"><h2 id="compiled-title" style="font-size:15px;margin:0">Kompilat</h2><button id="show-new" type="button">Neu erzeugter Code</button></div><small>Dictionary-Wort anklicken, um seinen Speicherbereich zu sehen. Datenwörter enthalten keine Instruktionen.</small><pre id="compiled" style="font:12px/1.4 monospace;max-height:250px;overflow:auto;margin:8px 0 0"></pre></section>
 
@@ -58,7 +65,7 @@ zaehlen</textarea>
 <aside>
 <section class="panel" aria-live="polite" aria-atomic="true">
 <label id="result-label">Laufzeitstack · Stackspitze rechts</label>
-<div id="result">…</div>
+<div id="result">…</div><div style="font:13px/1.4 monospace;margin-top:5px">R: <span id="return-stack">[ ]</span></div>
 <p id="status"></p><details><summary style="font-size:12px">Compilerstack</summary><p id="compiler-state"></p></details>
 
 </section>
@@ -78,6 +85,9 @@ const auto = document.querySelector('#auto');
 const baseWords = document.querySelector('#base-words');
 const compiled = document.querySelector('#compiled');
 let dictionary = [];
+let stepMode = false, executedSteps = 0, currentPC = null, currentInstruction = null;
+let previousStack = [], previousReturn = [];
+let processedTokens = 0, previousCompiler = [], priorCode = new Map(), changedCode = new Set();
 let newCode = [], allCode = [], selectedIndex = null;
 let dictionaryReversed = true;
 const hex = n => '$' + n.toString(16).padStart(4, '0');
@@ -111,6 +121,9 @@ function renderCode() {
       allCode.length ? allCode[allCode.length - 1].address + allCode[allCode.length - 1].bytes.length : selected.address);
     rows = allCode.filter(row => row.address >= selected.address && row.address < end);
   }
+  if (currentPC !== null && !selected) {
+    rows = allCode.some(row => row.address === currentPC) ? allCode : [currentInstruction];
+  }
   document.querySelector('#compiled-title').textContent = selected ? 'Kompilat · ' + selected.name : 'Kompilat';
   compiled.replaceChildren();
   for (const row of rows) {
@@ -118,14 +131,21 @@ function renderCode() {
       const label = document.createElement('span'); label.className = 'code-label';
       label.textContent = row.labels.map(name => name + ':').join(' ') + '\n'; compiled.append(label);
     }
-    compiled.append(document.createTextNode(hex(row.address) + '  ' + row.bytes.map(b => b.toString(16).padStart(2, '0')).join(' ').padEnd(9) + '  ' + row.instruction + '\n'));
+    const line = document.createElement('span');
+    line.textContent = hex(row.address) + '  ' + row.bytes.map(b => b.toString(16).padStart(2, '0')).join(' ').padEnd(9) + '  ' + row.instruction + '\n';
+    if (changedCode.has(row.address)) line.classList.add('changed-value');
+    if (row.address === currentPC) line.classList.add('current-instruction');
+    compiled.append(line);
   }
   compiled.scrollTop = 0;
+  const active = compiled.querySelector('.current-instruction');
+  if (active) compiled.scrollTop = active.offsetTop - compiled.offsetTop;
 }
 document.querySelector('#show-new').addEventListener('click', () => {
   selectedIndex = null; renderCode(); renderDictionary();
 });
 function clearState() {
+  document.querySelector('#active-token').hidden = true;
   newCode = []; allCode = []; selectedIndex = null;
   document.querySelector('#compiled-title').textContent = 'Kompilat';
   dictionary = []; renderDictionary();
@@ -134,23 +154,59 @@ function clearState() {
   compiled.textContent = '';
 }
 let timer, revision = 0;
-async function run() {
+function renderStack(element, values, previous) {
+  element.replaceChildren(document.createTextNode('[ '));
+  values.forEach((value, index) => {
+    const cell = document.createElement('span'); cell.textContent = value + ' ';
+    if (value !== previous[index]) cell.className = 'changed-value';
+    element.append(cell);
+  });
+  element.append(document.createTextNode(']'));
+}
+async function run(steps = null, tokens = null) {
   clearTimeout(timer);
   const current = ++revision;
   clearState();
   result.textContent = '…'; result.className = ''; status.textContent = 'Wird ausgeführt …';
   try {
-    const response = await fetch('/preview', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({source:source.value, base_words:baseWords.checked})});
+    const response = await fetch('/preview', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({source:source.value, base_words:baseWords.checked, steps, tokens})});
     if (!response.ok) throw new Error('Serverfehler');
     const data = await response.json();
     if (current !== revision) return;
-    result.textContent = data.error || '[ ' + data.stack.join('  ') + ' ]';
+    processedTokens = data.tokens || 0;
+    currentPC = data.pc ?? null; currentInstruction = data.current_instruction;
+    executedSteps = data.steps || 0;
+    renderStack(result, data.stack || [], previousStack);
+    renderStack(document.querySelector('#return-stack'), data.return_stack || [], previousReturn);
+    previousStack = data.stack || []; previousReturn = data.return_stack || [];
     result.className = data.error ? 'error' : '';
-    status.textContent = data.error ? 'Eingabe prüfen' : 'Übersetzt · freier Code ausgeführt';
+    status.textContent = data.error || (data.token_paused ? 'Token ' + processedTokens + ' · als Nächstes: ' + data.next_token.text + ' (Zeile ' + data.next_token.line + ')' : data.paused ? 'Pausiert · ' + executedSteps + ' Schritte · PC ' + hex(currentPC) : 'Ausführung beendet · ' + executedSteps + ' Schritte');
     dictionary = data.dictionary || []; renderDictionary();
     document.querySelector('#here').textContent = data.here === undefined ? '' : 'HERE: ' + hex(data.here);
-    document.querySelector('#compiler-state').textContent = '[ ' + (data.compiler_stack || []).join('  ') + ' ]';
-    newCode = data.disassembly || []; allCode = data.all_disassembly || []; renderCode();
+    renderStack(document.querySelector('#compiler-state'), data.compiler_stack || [], previousCompiler);
+    previousCompiler = data.compiler_stack || [];
+    if (tokens !== null) {
+      document.querySelector('#compiler-state').parentElement.open = true;
+      if (data.next_token) {
+        source.focus({preventScroll:true});
+        source.setSelectionRange(data.next_token.start, data.next_token.end);
+        const token = data.next_token;
+        const lineStart = source.value.lastIndexOf('\n', token.start - 1) + 1;
+        const nextNewline = source.value.indexOf('\n', token.end);
+        const lineEnd = nextNewline < 0 ? source.value.length : nextNewline;
+        document.querySelector('#active-token').hidden = false;
+        document.querySelector('#token-location').textContent = 'Nächstes Token: ' + token.text + ' · Zeile ' + token.line + ', Spalte ' + token.column;
+        const mark = document.createElement('mark'); mark.textContent = source.value.slice(token.start, token.end);
+        document.querySelector('#token-line').replaceChildren(
+          document.createTextNode(source.value.slice(lineStart, token.start)), mark,
+          document.createTextNode(source.value.slice(token.end, lineEnd)));
+
+      }
+    }
+    newCode = data.disassembly || []; allCode = data.all_disassembly || [];
+    changedCode = new Set(allCode.filter(row => priorCode.get(row.address) !== row.bytes.join(',')).map(row => row.address));
+    priorCode = new Map(allCode.map(row => [row.address, row.bytes.join(',')]));
+    renderCode();
   } catch (error) {
     if (current !== revision) return;
     result.textContent = 'Verbindung zum lokalen Server fehlgeschlagen.';
@@ -159,9 +215,12 @@ async function run() {
 }
 function changed() {
   ++revision; clearTimeout(timer);
+  processedTokens = 0; previousCompiler = []; priorCode = new Map(); changedCode = new Set();
+  executedSteps = 0; currentPC = null; currentInstruction = null; previousStack = []; previousReturn = [];
+  document.querySelector('#return-stack').textContent = '[ ]';
   clearState();
   result.textContent = '…'; result.className = ''; status.textContent = 'Eingabe geändert';
-  if (auto.checked) timer = setTimeout(run, 350);
+  if (auto.checked && !stepMode) timer = setTimeout(() => run(), 350);
 }
 document.querySelector('#filter').addEventListener('input', renderDictionary);
 document.querySelector('#dictionary-order').addEventListener('click', event => {
@@ -171,7 +230,17 @@ document.querySelector('#dictionary-order').addEventListener('click', event => {
   renderDictionary();
 });
 source.addEventListener('input', changed);
-auto.addEventListener('change', changed); document.querySelector('#run').addEventListener('click', run);
+auto.addEventListener('change', changed);
+document.querySelector('#run').addEventListener('click', () => { stepMode = false; currentPC = null; run(); });
+document.querySelector('#restart').addEventListener('click', () => { stepMode = true; previousStack = []; previousReturn = []; run(0); });
+document.querySelector('#token-step').addEventListener('click', () => {
+  if (!stepMode) { processedTokens = 0; priorCode = new Map(); }
+  stepMode = true; run(null, processedTokens + 1);
+});
+document.querySelector('#compile-restart').addEventListener('click', () => {
+  stepMode = true; previousCompiler = []; priorCode = new Map(); run(null, 0);
+});
+document.querySelector('#step').addEventListener('click', () => { stepMode = true; run(executedSteps + 1); });
 baseWords.addEventListener('change', changed);
 run();
 </script>
