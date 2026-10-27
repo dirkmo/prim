@@ -138,6 +138,10 @@ under `python -O`. This establishes simulation behavior. Board pin assignments,
 a program loader, timing after place-and-route and physical UART output remain
 open. Default clock and timing parameters are not a verified board configuration.
 
+Semicolon return folding is implemented for simple word endings, including
+generated PUSH instructions. Immediate/control-flow/data cases retain NOP.RET.
+See D17 in [DECISIONS.md](DECISIONS.md) for scope and planned extensions.
+
 ## Possible next improvements
 
 The following items have been proposed and are not yet implemented:

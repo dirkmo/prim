@@ -12,7 +12,7 @@ class LiveTests(unittest.TestCase):
         result = preview(':double dup + ;', '7')
         self.assertEqual(result['stack'], [7])
         self.assertTrue(result['disassembly'])
-        self.assertEqual(result['disassembly'][-1]['instruction'], 'NOP.RET')
+        self.assertEqual(result['disassembly'][-1]['instruction'], '+.RET')
 
     def test_definition_and_call(self):
         self.assertEqual(preview(':double dup + ; 7 double')['stack'], [14])
@@ -149,3 +149,42 @@ class LiveTests(unittest.TestCase):
         for tokens in (-1, True, '1', 65537):
             self.assertIn('error', preview('1', tokens=tokens))
         self.assertIn('error', preview('1', steps=1, tokens=1))
+
+    def test_step_reports_executed_and_next_instruction(self):
+        result = preview('7 dup +', steps=1)
+        self.assertEqual(result['last_instruction']['instruction'], 'PUSH8 0x7')
+        self.assertEqual(result['last_instruction']['bytes'], [32, 7])
+        self.assertEqual(result['current_instruction']['instruction'], 'BREAK')
+        self.assertIsNone(preview('7', steps=0)['last_instruction'])
+        result = preview(':w dup + ; 7 w', steps=5)
+        self.assertEqual(result['last_instruction']['instruction'], 'DUP')
+        self.assertEqual(result['current_instruction']['instruction'], '+.RET')
+
+    def test_cpu_instruction_maps_to_definition_source(self):
+        source = ':w dup + ; 7 w'
+        result = preview(source, steps=5)
+        self.assertEqual(result['last_instruction']['source']['text'], 'dup')
+        self.assertEqual(result['current_instruction']['source']['text'], '+')
+        span = result['last_instruction']['source']
+        self.assertEqual(source[span['start']:span['end']], 'dup')
+        result = preview(source, steps=1)
+        self.assertEqual(result['last_instruction']['source']['text'], '7')
+
+    def test_library_execution_maps_to_editor_call(self):
+        library = default_library()
+        source = ':w 1+ ; 7 w'
+        states = [preview(source, library=library, steps=n) for n in range(1, 12)]
+        inside = [s['last_instruction'] for s in states
+                  if s.get('last_instruction', {}).get('word') == '1+']
+        self.assertTrue(inside)
+        self.assertTrue(all(instruction['source']['text'] == '1+' for instruction in inside))
+
+    def test_disassembly_maps_call_instructions_to_source(self):
+        source = ':double dup + ; :w double ;'
+        result = preview(source)
+        call_position = source.rindex('double')
+        rows = [row for row in result['disassembly'] if row['source'] and
+                row['source']['start'] == call_position]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[-1]['instruction'], 'CALL')
+        self.assertTrue(all(source[row['source']['start']:row['source']['end']] == 'double' for row in rows))

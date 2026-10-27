@@ -28,6 +28,7 @@ class PreviewCPU(Prim):
         self.remaining = limit
         self.steps = steps
         self.executed = 0
+        self.last_instruction = None
 
     def dpush(self, value):
         if self.depth >= self.DS_SIZE:
@@ -68,9 +69,23 @@ class PreviewCPU(Prim):
         if self.remaining <= 0:
             raise RuntimeError('Schrittlimit erreicht (20000 Schritte)')
         self.remaining -= 1
+        instruction = self.instruction_at_pc()
         result = super().step()
+        self.last_instruction = instruction
         self.executed += 1
         return result
+
+    def instruction_at_pc(self):
+        pc = self._pc
+        opcode = self.read8(pc) & 0x7f
+        size = 3 if opcode == Op.PUSH else 2 if opcode == Op.PUSH8 else 1
+        data = [self.read8((pc + i) & 0xffff) for i in range(size)]
+        try:
+            instruction = PrimAsm.disassemble(data, pc)[0][2]
+        except (KeyError, IndexError):
+            instruction = 'DATA'
+        return {'address': pc, 'bytes': data, 'instruction': instruction, 'labels': [],
+                'source': self.source_lookup(pc) if hasattr(self, 'source_lookup') else None}
 
     def values(self):
         return [self._ds[(self._dsp - self.depth + 1 + i) % self.DS_SIZE]
@@ -133,9 +148,28 @@ def _preview(source, stack, library, steps, tokens):
     processed_tokens = 0
     next_token = None
     fragments = [f for f in scan(source) if f.kind not in ('whitespace', 'comment', 'line_comment') and f.s.strip()]
+    source_map = {}
+    current_source = None
+    def source_lookup(pc):
+        if pc in source_map:
+            return source_map[pc]
+        # For library code, walk outward to the nearest call originating in the editor.
+        for depth in range(runtime_cpu.rdepth):
+            return_pc = runtime_cpu._rs[(runtime_cpu._rsp - depth) % runtime_cpu.RS_SIZE]
+            if (return_pc - 1) & 0xffff in source_map:
+                return source_map[(return_pc - 1) & 0xffff]
+        return current_source
+    runtime_cpu.source_lookup = source_lookup
+    line_offsets = [0]
+    for line in source.splitlines(keepends=True):
+        line_offsets.append(line_offsets[-1] + len(line))
     ignored = (Token.WHITESPACE, Token.COMMENT_BRACES, Token.COMMENT_BACKSLASH)
     for index, (offset, tag, value) in enumerate(decoded):
         if tag not in ignored:
+            fragment = fragments[processed_tokens]
+            position = line_offsets[fragment.linenum - 1] + fragment.column - 1
+            current_source = {'text': fragment.s, 'start': position, 'end': position + len(fragment.s),
+                              'line': fragment.linenum, 'column': fragment.column}
             if tokens is not None and processed_tokens >= tokens:
                 fragment = fragments[processed_tokens]
                 position = sum(len(line) for line in source.splitlines(keepends=True)[:fragment.linenum - 1]) + fragment.column - 1
@@ -146,6 +180,7 @@ def _preview(source, stack, library, steps, tokens):
             processed_tokens += 1
         end = decoded[index + 1][0] if index + 1 < len(decoded) else len(document.tokens)
         token = document.tokens[offset:end]
+        before_here = compiler.HERE_FETCH(memory)
         try:
             if tag == Token.MODE:
                 immediate = value == Token.MODE_IMMEDIATE
@@ -169,6 +204,8 @@ def _preview(source, stack, library, steps, tokens):
                 compiler.execute(runtime_cpu, compiler.getPushOps(memory.dictionary.S[-1]))
             else:
                 compiler.interpret([Token.MODE, Token.MODE_IMMEDIATE, *token], runtime_cpu)
+            for address in range(before_here, compiler.HERE_FETCH(memory)):
+                source_map[address] = current_source
             if tag == Token.BUILDIN and not immediate:
                 in_definition = False
         except PreviewPaused:
@@ -213,23 +250,19 @@ def _preview(source, stack, library, steps, tokens):
             if target in labels:
                 instruction += '  (' + ', '.join(labels[target]) + ')'
         disassembly.append({'address': address, 'bytes': data, 'instruction': instruction,
-                            'labels': labels.get(address, [])})
+                            'labels': labels.get(address, []), 'source': source_map.get(address)})
         address += size
-    current_instruction = None
-    if paused:
-        pc = runtime_cpu._pc
-        opcode = memory.read8(pc) & 0x7f
-        size = 3 if opcode == Op.PUSH else 2 if opcode == Op.PUSH8 else 1
-        data = [memory.read8(pc + i) for i in range(size)]
-        try:
-            instruction = PrimAsm.disassemble(data, pc)[0][2]
-        except (KeyError, IndexError):
-            instruction = 'DATA'
-        current_instruction = {'address': pc, 'bytes': data, 'instruction': instruction, 'labels': labels.get(pc, [])}
+    current_instruction = runtime_cpu.instruction_at_pc() if paused else None
+    for instruction in (current_instruction, runtime_cpu.last_instruction):
+        if instruction is not None:
+            instruction['labels'] = labels.get(instruction['address'], [])
+            owners = [entry for entry in entries if entry['address'] <= instruction['address'] < finish]
+            instruction['word'] = max(owners, key=lambda entry: entry['address'])['name'] if owners else None
     result = {
         'token_paused': token_paused, 'tokens': processed_tokens, 'next_token': next_token,
         'paused': paused, 'steps': runtime_cpu.executed,
         'pc': runtime_cpu._pc if paused else None, 'current_instruction': current_instruction,
+        'last_instruction': runtime_cpu.last_instruction,
         'return_stack': [runtime_cpu._rs[(runtime_cpu._rsp - runtime_cpu.rdepth + 1 + i) % runtime_cpu.RS_SIZE]
                          for i in range(runtime_cpu.rdepth)],
         'compiler_stack': compile_cpu.values(), 'stack': runtime_cpu.values(),

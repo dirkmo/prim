@@ -12,17 +12,35 @@ main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap:
 section, aside { min-width: 0; }
 label { display: block; margin-bottom: 5px; font-size: 13px; }
 textarea, input { box-sizing: border-box; width: 100%; background: #18232d; color: #d7f6e8; border: 1px solid #405362; border-radius: 5px; padding: 7px 9px; font: 14px/1.4 monospace; }
-textarea { height: 48vh; min-height: 180px; resize: vertical; font-size: 15px; }
+.source-editor { --gutter:4ch; position:relative; padding-left:var(--gutter); font:12px/1.6 monospace; display:flex; overflow:hidden; border:1px solid #405362; border-radius:5px; background:#18232d; }
+#line-numbers { position:absolute; top:0; bottom:0; left:0; width:var(--gutter); box-sizing:border-box; margin:0; padding:7px 8px; color:#728492; background:#141e27; border-right:1px solid #2c3b47; text-align:right; font:12px/1.6 monospace; overflow:hidden; user-select:none; }
+textarea { height:180px; min-height:180px; resize:vertical; font:12px/1.6 monospace; }
+.source-editor textarea { flex:1; min-width:0; border:0; border-radius:0; white-space:pre; overflow:auto; }
+.source-editor:focus-within { outline:1px solid #93e8bc; }
+.source-editor textarea:focus { outline:none; }
 input { margin-bottom: 8px; }
 button { border: 0; border-radius: 5px; padding: 6px 10px; background: #93e8bc; color: #132b20; cursor: pointer; font-size: 13px; }
 .toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:8px; }
 .toolbar label { margin:0; }
+.control-group { display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding-right:12px; border-right:1px solid #405362; }
+.control-group > span { font-size:11px; color:#9eb0be; margin-right:2px; }
+.controls { position:sticky; top:0; z-index:20; padding:10px 0; margin:0 0 12px; background:#10161c; border-bottom:1px solid #405362; box-shadow:0 5px 10px #10161c; }
 .panel { padding: 12px; background: #18232d; border-radius: 6px; }
 #result { font: 17px/1.4 monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 #status, #compiler-state { color: #9eb0be; font-size:12px; margin:5px 0 0; }
 #compiler-state:empty { display:none; }
 .word-link { background:none; color:inherit; font:inherit; padding:0; text-decoration:underline; text-underline-offset:3px; }
 tr.selected { background:#304757; } .code-label { color:#93e8bc; }
+#compiled { box-sizing:border-box; position:relative; height:180px; overflow:auto; margin-top:8px; padding:6px; background:#10161c; border-radius:4px; font:12px/1.6 monospace; }
+.code-row { display:grid; grid-template-columns:6ch 25ch minmax(max-content,1fr); gap:10px; min-width:max-content; }
+.code-address { color:#8094a4; } .assembly-group { white-space:pre; }
+.instruction-0 { color:#9edaff; } .instruction-1 { color:#f5c88c; } .instruction-2 { color:#c7b0ff; } .instruction-3 { color:#a5e5b0; }
+.instruction-changed { text-decoration:underline; text-decoration-color:#93e8bc; text-underline-offset:3px; }
+[data-instruction] { cursor:pointer; border-radius:2px; }
+[data-instruction]:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+.instruction-selected { outline:2px solid #7ddfff; outline-offset:1px; background:#264555; }
+.instruction-active { background:#ffd166; color:#10161c; font-weight:bold; border-radius:2px; }
+.active-byte { background:#ffd166; color:#10161c; font-weight:bold; }
 .current-instruction { background:#304757; display:block; } .changed-value { color:#93e8bc; background:#29463b; }
 textarea::selection { background:#ffd166; color:#10161c; }
 #active-token { margin-top:6px; padding:8px 10px; border-left:4px solid #ffd166; background:#302b1c; border-radius:4px; }
@@ -40,32 +58,34 @@ td, th { padding:3px 8px; border-bottom:1px solid #405362; } tr.new { color:#93e
 .dictionary-scroll { max-height:calc(100vh - 245px); overflow:auto; }
 .dictionary-table th { position:sticky; top:0; background:#18232d; }
 small { color: #9eb0be; font-size:12px; }
-@media(max-width: 700px) { main { grid-template-columns: 1fr; } textarea { height:30vh; } .dictionary-scroll { max-height:300px; } }
+@media(max-width: 700px) { main { grid-template-columns: 1fr; } .dictionary-scroll { max-height:300px; } }
 </style>
 <h1>TokenForth <span style="color:#93e8bc">Live</span></h1>
 
-<main>
-<section>
-<div class="toolbar"><label for="source">Quelltext</label>
+<div class="toolbar controls" role="toolbar" aria-label="Ausführung steuern">
 
-<button id="run" title="Bis zum Ende ausführen und Live-Vorschau fortsetzen">Alles ausführen</button><button id="token-step" title="Ein Token übersetzen oder ausführen; Immediate-Wörter laufen vollständig durch">Nächstes Token</button><button id="step" title="Eine CPU-Instruktion im freien Code oder aufgerufenen Wort ausführen">Nächste Instruktion</button><button id="compile-restart" title="Vor dem ersten Quelltext-Token anhalten">Übersetzung zurücksetzen</button><button id="restart" title="Vor der ersten Laufzeitinstruktion anhalten">Ausführung zurücksetzen</button>
+<div class="control-group" role="group" aria-label="Ausführung"><span>Ausführung</span><button id="run" title="Bis zum Ende ausführen und Live-Vorschau fortsetzen">Alles ausführen</button><button id="step" title="Eine CPU-Instruktion im freien Code oder aufgerufenen Wort ausführen">Nächste Instruktion</button><button id="restart" title="Vor der ersten Laufzeitinstruktion anhalten">Ausführung zurücksetzen</button></div>
+<div class="control-group" role="group" aria-label="Übersetzung"><span>Übersetzung</span><button id="token-step" title="Ein Token übersetzen oder ausführen; Immediate-Wörter laufen vollständig durch">Nächstes Token</button><button id="compile-restart" title="Vor dem ersten Quelltext-Token anhalten">Übersetzung zurücksetzen</button></div>
 <label><input id="base-words" type="checkbox" checked style="width:auto;margin:0"> Basiswörter</label>
 <label><input id="auto" type="checkbox" checked style="width:auto;margin:0"> Live</label></div>
-<textarea id="source" spellcheck="false">:zaehlen
+<main>
+<section>
+<label for="source">Quelltext</label>
+<div class="source-editor"><pre id="line-numbers" aria-hidden="true">1</pre><textarea id="source" spellcheck="false" wrap="off">:zaehlen
     3 0 [ for ]
         i
     [ next ]
 ;
-zaehlen</textarea>
+zaehlen</textarea></div>
 <div id="active-token" hidden aria-live="polite"><strong id="token-location"></strong><pre id="token-line"></pre></div>
-<p><small>Definitionen werden kompiliert, freier Code wird ausgeführt. <code>[ … ]</code> wirkt beim Kompilieren.</small></p>
-<section class="panel" style="margin-top:10px"><div class="toolbar"><h2 id="compiled-title" style="font-size:15px;margin:0">Kompilat</h2><button id="show-new" type="button">Neu erzeugter Code</button></div><small>Dictionary-Wort anklicken, um seinen Speicherbereich zu sehen. Datenwörter enthalten keine Instruktionen.</small><pre id="compiled" style="font:12px/1.4 monospace;max-height:250px;overflow:auto;margin:8px 0 0"></pre></section>
+<section class="panel" style="margin-top:10px"><div class="toolbar"><h2 id="compiled-title" style="font-size:15px;margin:0">Kompilat</h2><button id="show-new" type="button">Neu erzeugter Code</button></div><small>Dictionary-Wort anklicken, um seinen Speicherbereich zu sehen. Datenwörter enthalten keine Instruktionen.</small><div id="compiled"></div></section>
 
 </section>
 <aside>
 <section class="panel" aria-live="polite" aria-atomic="true">
 <label id="result-label">Laufzeitstack · Stackspitze rechts</label>
 <div id="result">…</div><div style="font:13px/1.4 monospace;margin-top:5px">R: <span id="return-stack">[ ]</span></div>
+<div id="cpu-position" hidden style="margin-top:8px;padding:8px;border-left:4px solid #ffd166;background:#302b1c;font:13px/1.5 monospace"><div>Ausgeführt: <strong id="last-instruction"></strong></div><div>Als Nächstes: <strong id="next-instruction" style="color:#ffd166"></strong></div></div>
 <p id="status"></p><details><summary style="font-size:12px">Compilerstack</summary><p id="compiler-state"></p></details>
 
 </section>
@@ -80,11 +100,24 @@ zaehlen</textarea>
 
 <script>
 const source = document.querySelector('#source');
+const lineNumbers = document.querySelector('#line-numbers');
+function updateLineNumbers() {
+  const count = source.value.split('\n').length;
+  source.parentElement.style.setProperty('--gutter', (String(count).length + 3) + 'ch');
+  lineNumbers.textContent = Array.from({length:count}, (_, index) => index + 1).join('\n');
+  lineNumbers.scrollTop = source.scrollTop;
+}
+source.addEventListener('input', updateLineNumbers);
+source.addEventListener('scroll', () => { lineNumbers.scrollTop = source.scrollTop; });
+updateLineNumbers();
 const result = document.querySelector('#result'), status = document.querySelector('#status');
 const auto = document.querySelector('#auto');
 const baseWords = document.querySelector('#base-words');
 const compiled = document.querySelector('#compiled');
 let dictionary = [];
+let selectedInstruction = null;
+let sourceAddresses = new Set();
+let renderedSource = null;
 let stepMode = false, executedSteps = 0, currentPC = null, currentInstruction = null;
 let previousStack = [], previousReturn = [];
 let processedTokens = 0, previousCompiler = [], priorCode = new Map(), changedCode = new Set();
@@ -113,6 +146,15 @@ function renderDictionary() {
     body.append(row);
   }
 }
+function selectInstruction(address) {
+  sourceAddresses.clear();
+  selectedInstruction = selectedInstruction === address ? null : address;
+  for (const element of compiled.querySelectorAll('[data-instruction]')) {
+    const selected = Number(element.dataset.instruction) === selectedInstruction;
+    element.classList.toggle('instruction-selected', selected);
+    element.setAttribute('aria-pressed', String(selected));
+  }
+}
 function renderCode() {
   const selected = dictionary.find(entry => entry.index === selectedIndex);
   let rows = newCode;
@@ -126,33 +168,60 @@ function renderCode() {
   }
   document.querySelector('#compiled-title').textContent = selected ? 'Kompilat · ' + selected.name : 'Kompilat';
   compiled.replaceChildren();
+  let group = [], byteCount = 0, instructionIndex = 0;
+  function flush() {
+    if (!group.length) return;
+    const line = document.createElement('div'); line.className = 'code-row';
+    if (byteCount > 8) line.style.gridTemplateColumns = '6ch ' + (byteCount * 3 + 1) + 'ch minmax(max-content,1fr)';
+    const address = document.createElement('span'); address.className = 'code-address';
+    address.textContent = hex(group[0].row.address);
+    const raw = document.createElement('span'), assembly = document.createElement('span');
+    assembly.className = 'assembly-group';
+    for (const {row, color} of group) {
+      const bytes = document.createElement('span'), instruction = document.createElement('span');
+      bytes.textContent = row.bytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
+      instruction.textContent = row.instruction;
+      for (const element of [bytes, instruction]) {
+        element.className = 'instruction-' + color;
+        element.title = hex(row.address) + ' · ' + row.instruction + ' · Zuordnung hervorheben';
+        element.dataset.instruction = String(row.address);
+        element.tabIndex = 0;
+        element.setAttribute('role', 'button');
+        element.setAttribute('aria-label', hex(row.address) + ' ' + row.instruction + ' hervorheben');
+        element.setAttribute('aria-pressed', String(row.address === selectedInstruction || sourceAddresses.has(row.address)));
+        element.classList.toggle('instruction-selected', row.address === selectedInstruction || sourceAddresses.has(row.address));
+        element.addEventListener('click', () => selectInstruction(row.address));
+        element.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault(); selectInstruction(row.address);
+          }
+        });
+        if (changedCode.has(row.address)) element.classList.add('instruction-changed');
+        if (row.address === currentPC) element.classList.add('instruction-active');
+      }
+      raw.append(bytes, document.createTextNode(' '));
+      assembly.append(instruction, document.createTextNode('  '));
+    }
+    line.append(address, raw, assembly); compiled.append(line);
+    group = []; byteCount = 0;
+  }
   for (const row of rows) {
     if (row.labels.length) {
-      const label = document.createElement('span'); label.className = 'code-label';
-      label.textContent = row.labels.map(name => name + ':').join(' ') + '\n'; compiled.append(label);
+      flush();
+      const label = document.createElement('div'); label.className = 'code-label';
+      label.textContent = row.labels.map(name => name + ':').join(' '); compiled.append(label);
     }
-    const line = document.createElement('span');
-    line.textContent = hex(row.address) + '  ' + row.bytes.map(b => b.toString(16).padStart(2, '0')).join(' ').padEnd(9) + '  ' + row.instruction + '\n';
-    if (changedCode.has(row.address)) line.classList.add('changed-value');
-    if (row.address === currentPC) line.classList.add('current-instruction');
-    compiled.append(line);
+    if (byteCount + row.bytes.length > 8) flush();
+    group.push({row, color:instructionIndex++ % 4}); byteCount += row.bytes.length;
+    if (byteCount >= 8) flush();
   }
-  compiled.scrollTop = 0;
-  const active = compiled.querySelector('.current-instruction');
-  if (active) compiled.scrollTop = active.offsetTop - compiled.offsetTop;
+  flush();
+  const active = compiled.querySelector('.instruction-active');
+  if (active) compiled.scrollTop = active.offsetTop - 30;
 }
 document.querySelector('#show-new').addEventListener('click', () => {
   selectedIndex = null; renderCode(); renderDictionary();
 });
-function clearState() {
-  document.querySelector('#active-token').hidden = true;
-  newCode = []; allCode = []; selectedIndex = null;
-  document.querySelector('#compiled-title').textContent = 'Kompilat';
-  dictionary = []; renderDictionary();
-  document.querySelector('#here').textContent = '';
-  document.querySelector('#compiler-state').textContent = '';
-  compiled.textContent = '';
-}
 let timer, revision = 0;
 function renderStack(element, values, previous) {
   element.replaceChildren(document.createTextNode('[ '));
@@ -166,7 +235,7 @@ function renderStack(element, values, previous) {
 async function run(steps = null, tokens = null) {
   clearTimeout(timer);
   const current = ++revision;
-  clearState();
+  selectedInstruction = null; selectedIndex = null; sourceAddresses.clear();
   result.textContent = '…'; result.className = ''; status.textContent = 'Wird ausgeführt …';
   try {
     const response = await fetch('/preview', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({source:source.value, base_words:baseWords.checked, steps, tokens})});
@@ -176,6 +245,12 @@ async function run(steps = null, tokens = null) {
     processedTokens = data.tokens || 0;
     currentPC = data.pc ?? null; currentInstruction = data.current_instruction;
     executedSteps = data.steps || 0;
+    const describeInstruction = instruction => instruction
+      ? hex(instruction.address) + ' · ' + instruction.instruction + (instruction.word ? ' · ' + instruction.word : '') + (instruction.labels.length ? ' · ' + instruction.labels.join(', ') : '')
+      : '—';
+    document.querySelector('#cpu-position').hidden = steps === null;
+    document.querySelector('#last-instruction').textContent = describeInstruction(data.last_instruction);
+    document.querySelector('#next-instruction').textContent = data.paused ? describeInstruction(data.current_instruction) : 'Ausführung beendet';
     renderStack(result, data.stack || [], previousStack);
     renderStack(document.querySelector('#return-stack'), data.return_stack || [], previousReturn);
     previousStack = data.stack || []; previousReturn = data.return_stack || [];
@@ -185,24 +260,25 @@ async function run(steps = null, tokens = null) {
     document.querySelector('#here').textContent = data.here === undefined ? '' : 'HERE: ' + hex(data.here);
     renderStack(document.querySelector('#compiler-state'), data.compiler_stack || [], previousCompiler);
     previousCompiler = data.compiler_stack || [];
-    if (tokens !== null) {
-      document.querySelector('#compiler-state').parentElement.open = true;
-      if (data.next_token) {
-        source.focus({preventScroll:true});
-        source.setSelectionRange(data.next_token.start, data.next_token.end);
-        const token = data.next_token;
+    if (tokens !== null) document.querySelector('#compiler-state').parentElement.open = true;
+    const activeSource = tokens !== null ? data.next_token
+      : steps !== null ? (data.last_instruction?.source || data.current_instruction?.source) : null;
+    document.querySelector('#active-token').hidden = !activeSource;
+    if (activeSource) {
+        source.setSelectionRange(activeSource.start, activeSource.end);
+        const token = activeSource;
         const lineStart = source.value.lastIndexOf('\n', token.start - 1) + 1;
         const nextNewline = source.value.indexOf('\n', token.end);
         const lineEnd = nextNewline < 0 ? source.value.length : nextNewline;
         document.querySelector('#active-token').hidden = false;
-        document.querySelector('#token-location').textContent = 'Nächstes Token: ' + token.text + ' · Zeile ' + token.line + ', Spalte ' + token.column;
+        document.querySelector('#token-location').textContent = (tokens !== null ? 'Nächstes Token: ' : data.last_instruction ? 'Ausgeführter Quelltext: ' : 'Als Nächstes: ') + token.text + ' · Zeile ' + token.line + ', Spalte ' + token.column;
         const mark = document.createElement('mark'); mark.textContent = source.value.slice(token.start, token.end);
         document.querySelector('#token-line').replaceChildren(
           document.createTextNode(source.value.slice(lineStart, token.start)), mark,
           document.createTextNode(source.value.slice(token.end, lineEnd)));
 
-      }
     }
+    renderedSource = source.value;
     newCode = data.disassembly || []; allCode = data.all_disassembly || [];
     changedCode = new Set(allCode.filter(row => priorCode.get(row.address) !== row.bytes.join(',')).map(row => row.address));
     priorCode = new Map(allCode.map(row => [row.address, row.bytes.join(',')]));
@@ -218,7 +294,7 @@ function changed() {
   processedTokens = 0; previousCompiler = []; priorCode = new Map(); changedCode = new Set();
   executedSteps = 0; currentPC = null; currentInstruction = null; previousStack = []; previousReturn = [];
   document.querySelector('#return-stack').textContent = '[ ]';
-  clearState();
+  selectedInstruction = null; selectedIndex = null; sourceAddresses.clear();
   result.textContent = '…'; result.className = ''; status.textContent = 'Eingabe geändert';
   if (auto.checked && !stepMode) timer = setTimeout(() => run(), 350);
 }
@@ -228,6 +304,31 @@ document.querySelector('#dictionary-order').addEventListener('click', event => {
   event.currentTarget.textContent = dictionaryReversed ? 'Index ↓' : 'Index ↑';
   event.currentTarget.setAttribute('aria-pressed', String(dictionaryReversed));
   renderDictionary();
+});
+source.addEventListener('click', () => {
+  if (renderedSource !== source.value) return;
+  let position = source.selectionStart;
+  // A caret immediately after a word still refers to that word.
+  if (position > 0 && /\S/.test(source.value[position - 1]) &&
+      (position === source.value.length || /\s/.test(source.value[position]))) {
+    position -= 1;
+  }
+  selectedInstruction = null; currentPC = null; selectedIndex = null;
+  sourceAddresses = new Set(allCode.filter(row => row.source &&
+    position >= row.source.start && position < row.source.end).map(row => row.address));
+  if (!sourceAddresses.size) {
+    const start = source.value.slice(0, position).search(/\S*$/);
+    const remainder = source.value.slice(position).match(/^\S*/)[0];
+    const name = source.value.slice(start, position) + remainder;
+    const entry = dictionary.find(e => e.name === name.replace(/^[:']/, ''));
+    if (!entry) return;
+    selectedIndex = entry.index;
+    const end = Math.min(...dictionary.filter(e => e.address > entry.address).map(e => e.address), Infinity);
+    sourceAddresses = new Set(allCode.filter(row => row.address >= entry.address && row.address < end).map(row => row.address));
+  }
+  renderCode(); renderDictionary();
+  const target = compiled.querySelector('.instruction-selected');
+  if (target) compiled.scrollTop = target.offsetTop - 20;
 });
 source.addEventListener('input', changed);
 auto.addEventListener('change', changed);

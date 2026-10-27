@@ -162,3 +162,22 @@ only the opcode byte, leaving operand emission explicit. SIMEND is exported
 as a simulation marker. `boot!` uses these emitters to install the reset entry
 while preserving HERE. Examples and the on-CPU interpreter use this helper.
 The Makefile now owns twelve outputs, extending the seven described in D15.
+
+### D17 – Fold simple semicolon returns into the preceding instruction
+
+Requested on 2026-10-27. The conservative first stage is implemented: simple
+word endings fold the return bit into the last known instruction, including
+compiler-generated PUSH operands. Compilation state survives token-by-token
+interpretation in the live preview. Definitions involving Immediate mode, data,
+address literals, raw operand-bearing mnemonics or explicit control transfers
+retain NOP.RET. A final word call or an empty definition also retains NOP.RET.
+Broader optimization of generated control flow remains future work.
+
+A source `;` should set the return bit (bit 7) on the preceding instruction
+when that preserves behavior, instead of always emitting a separate NOP.RET.
+Retain NOP.RET when folding is unsafe or there is no suitable instruction.
+The optimization must identify instruction boundaries, avoid modifying literal
+or operand bytes, and preserve control-flow targets and return-stack semantics.
+In particular, CALL and jump instructions cannot be assumed to honor the return
+bit. Apply the behavior consistently to the normal compiler and live preview;
+verify execution equivalence as well as reduced code size.

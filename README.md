@@ -236,7 +236,11 @@ Buildins are tokens that are understood by the tokenizer, and will be translated
 |-------|-----------|
 |`;`    |Return|
 
-Semicolon (`;`) is used to return from a call to a word and, for the time being, compiles to `NOP.RET`.
+Semicolon (`;`) returns from a word. For simple straight-line definitions,
+the compiler sets the return bit on the last instruction (including generated
+PUSH instructions) instead of adding `NOP.RET`. Definitions containing Immediate
+code, raw data, address literals or control-flow instructions retain `NOP.RET`;
+a word ending in a call also retains it.
 
 ### COMMENTS
 ```

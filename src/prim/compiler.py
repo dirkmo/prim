@@ -196,8 +196,22 @@ def decode_tokens(tokens, filename=None):
 def interpret(tokens, cpu, max_immediate_steps=DEFAULT_MAX_IMMEDIATE_STEPS, filename=None):
     mode = Token.MODE_COMPILE
     mif = cpu._mif
+    # Keep state on the compilation CPU: live preview feeds one token at a time.
+    if not hasattr(cpu, '_return_fold'):
+        cpu._return_fold = {'active': False, 'safe': False, 'last': None, 'end': None}
+    fold = cpu._return_fold
+    unsafe_ops = {PrimOpcodes.CALL, PrimOpcodes.JP, PrimOpcodes.JZ,
+                  PrimOpcodes.INT, PrimOpcodes.PUSH, PrimOpcodes.PUSH8,
+                  PrimOpcodes.BREAK, PrimOpcodes.SIMEND}
     for offset, tag, value in decode_tokens(tokens, filename):
         try:
+            if tag == Token.DEFINITION:
+                fold.update(active=True, safe=True, last=None, end=None)
+            elif tag == Token.MODE and value == Token.MODE_IMMEDIATE:
+                fold['safe'] = False
+            elif tag in (Token.STRING, Token.LIT_NUMBER, Token.LIT_STRING,
+                         Token.LIT_ADDRESS, Token.WORD_ADDRESS):
+                fold['safe'] = False
             if mode == Token.MODE_IMMEDIATE and tag in (Token.DEFINITION, Token.LIT_NUMBER, Token.LIT_STRING, Token.LIT_ADDRESS, Token.STRING):
                 raise CompileError('Definitions, literals and strings are not allowed in immediate mode')
             if tag in (Token.WORD_CALL, Token.WORD_ADDRESS, Token.NUMBER, Token.MNEMONIC, Token.BUILDIN):
@@ -212,7 +226,22 @@ def interpret(tokens, cpu, max_immediate_steps=DEFAULT_MAX_IMMEDIATE_STEPS, file
                 else:
                     ops = PrimAsm.assemble(BuildIn.lookupByIndex(value)[1])
                 if mode == Token.MODE_COMPILE:
-                    comma(mif, ops)
+                    is_return = tag == Token.BUILDIN and BuildIn.lookupByIndex(value)[0] == ';'
+                    if (is_return and fold['active'] and fold['safe']
+                            and fold['last'] is not None and fold['end'] == HERE_FETCH(mif)):
+                        addr = fold['last']
+                        mif.write8(addr, mif.read8(addr) | 0x80)
+                    else:
+                        addr = HERE_FETCH(mif)
+                        comma(mif, ops)
+                        if tag == Token.MNEMONIC and (value in unsafe_ops or value & 0x80
+                                or value not in vars(PrimOpcodes).values()):
+                            fold['safe'] = False
+                        fold['last'] = addr if tag == Token.NUMBER or (
+                            tag == Token.MNEMONIC and value not in unsafe_ops) else None
+                        fold['end'] = HERE_FETCH(mif)
+                    if is_return:
+                        fold['active'] = False
                 else:
                     execute(cpu, ops, max_steps=max_immediate_steps)
             elif tag == Token.STRING:

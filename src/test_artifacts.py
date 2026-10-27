@@ -142,7 +142,7 @@ label = 'a,b'
         self.assertIsInstance(image, ProgramImage)
         self.assertEqual(image.to_mapping(), mapping)
         self.assertEqual(image.metadata['custom'], 'retained')
-        self.assertEqual(image.memory[14:20], bytes([Op.PUSH8, 1, Op.PUSH8, 2, Op.ADD, 0x80]))
+        self.assertEqual(image.memory[14:19], bytes([Op.PUSH8, 1, Op.PUSH8, 2, Op.ADD | 0x80]))
         before = image.to_mapping()
         extension = tokenize_document(':second main ;', library=image)
         with contextlib.redirect_stdout(io.StringIO()):
