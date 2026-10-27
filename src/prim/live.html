@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TokenForth · Live</title>
+<style>
+:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #10161c; color: #e4edf3; }
+body { max-width: 1400px; margin: 18px auto; padding: 0 18px; }
+h1 { font-size: 22px; margin: 0 0 12px; }
+p { color: #9eb0be; line-height: 1.4; margin: 8px 0; }
+main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+section, aside { min-width: 0; }
+label { display: block; margin-bottom: 5px; font-size: 13px; }
+textarea, input { box-sizing: border-box; width: 100%; background: #18232d; color: #d7f6e8; border: 1px solid #405362; border-radius: 5px; padding: 7px 9px; font: 14px/1.4 monospace; }
+textarea { height: 48vh; min-height: 180px; resize: vertical; font-size: 15px; }
+input { margin-bottom: 8px; }
+button { border: 0; border-radius: 5px; padding: 6px 10px; background: #93e8bc; color: #132b20; cursor: pointer; font-size: 13px; }
+.toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:8px; }
+.toolbar label { margin:0; }
+.panel { padding: 12px; background: #18232d; border-radius: 6px; }
+#result { font: 17px/1.4 monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+#status, #compiler-state { color: #9eb0be; font-size:12px; margin:5px 0 0; }
+#compiler-state:empty { display:none; }
+.error { color: #ffb4a5; }
+td, th { padding:3px 8px; border-bottom:1px solid #405362; } tr.new { color:#93e8bc; }
+.dictionary-panel { margin-top:10px; }
+.dictionary-panel h2 { font-size:15px; margin:0; }
+.dictionary-head { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+.dictionary-head p { margin:0; font:12px monospace; }
+#filter { width:140px; padding:4px 7px; font-size:12px; margin:0 0 0 auto; }
+.dictionary-table { font:12px/1.25 monospace; border-collapse:collapse; width:100%; text-align:left; }
+.dictionary-scroll { max-height:calc(100vh - 245px); overflow:auto; }
+.dictionary-table th { position:sticky; top:0; background:#18232d; }
+small { color: #9eb0be; font-size:12px; }
+@media(max-width: 700px) { main { grid-template-columns: 1fr; } textarea { height:30vh; } .dictionary-scroll { max-height:300px; } }
+</style>
+<h1>TokenForth <span style="color:#93e8bc">Live</span></h1>
+
+<main>
+<section>
+<div class="toolbar"><label for="source">Quelltext</label>
+
+<button id="run">Ausführen</button>
+<label><input id="base-words" type="checkbox" checked style="width:auto;margin:0"> Basiswörter</label>
+<label><input id="auto" type="checkbox" checked style="width:auto;margin:0"> Live</label></div>
+<textarea id="source" spellcheck="false">:zaehlen
+    3 0 [ for ]
+        i
+    [ next ]
+;
+zaehlen</textarea>
+<p><small>Definitionen werden kompiliert, freier Code wird ausgeführt. <code>[ … ]</code> wirkt beim Kompilieren.</small></p>
+<section class="panel" style="margin-top:10px"><h2 style="font-size:15px;margin:0 0 8px">Kompilat</h2><small>Neu erzeugter Speicher als Disassemblierung; eingebettete Daten können als Instruktionen erscheinen.</small><pre id="compiled" style="font:12px/1.4 monospace;max-height:250px;overflow:auto;margin:8px 0 0"></pre></section>
+
+</section>
+<aside>
+<section class="panel" aria-live="polite" aria-atomic="true">
+<label id="result-label">Laufzeitstack · Stackspitze rechts</label>
+<div id="result">…</div>
+<p id="status"></p><details><summary style="font-size:12px">Compilerstack</summary><p id="compiler-state"></p></details>
+
+</section>
+<section class="panel dictionary-panel">
+<div class="dictionary-head"><h2>Dictionary</h2><button id="dictionary-order" type="button" aria-pressed="true" title="Dictionary-Reihenfolge umkehren">Index ↓</button><p id="here"></p>
+<input id="filter" aria-label="Wörter filtern" placeholder="Name suchen"></div>
+<div class="dictionary-scroll"><table class="dictionary-table"><thead><tr><th>Index</th><th>Name</th><th>Adresse</th></tr></thead><tbody id="dictionary"></tbody></table></div>
+<small>Grün: neue Definition · Stackspitze rechts · Live: 350 ms</small>
+</section>
+</aside>
+</main>
+
+<script>
+const source = document.querySelector('#source');
+const result = document.querySelector('#result'), status = document.querySelector('#status');
+const auto = document.querySelector('#auto');
+const baseWords = document.querySelector('#base-words');
+const compiled = document.querySelector('#compiled');
+let dictionary = [];
+let dictionaryReversed = true;
+const hex = n => '$' + n.toString(16).padStart(4, '0');
+function renderDictionary() {
+  const body = document.querySelector('#dictionary'); body.replaceChildren();
+  const filter = document.querySelector('#filter').value.toLowerCase();
+  const entries = dictionary.filter(e => e.name.toLowerCase().includes(filter));
+  if (dictionaryReversed) entries.reverse();
+  for (const entry of entries) {
+    const row = document.createElement('tr'); row.className = entry.new ? 'new' : '';
+    for (const value of [entry.index, entry.name, hex(entry.address)]) {
+      const cell = document.createElement('td'); cell.textContent = value; row.append(cell);
+    }
+    body.append(row);
+  }
+}
+function clearState() {
+  dictionary = []; renderDictionary();
+  document.querySelector('#here').textContent = '';
+  document.querySelector('#compiler-state').textContent = '';
+  compiled.textContent = '';
+}
+let timer, revision = 0;
+async function run() {
+  clearTimeout(timer);
+  const current = ++revision;
+  clearState();
+  result.textContent = '…'; result.className = ''; status.textContent = 'Wird ausgeführt …';
+  try {
+    const response = await fetch('/preview', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({source:source.value, base_words:baseWords.checked})});
+    if (!response.ok) throw new Error('Serverfehler');
+    const data = await response.json();
+    if (current !== revision) return;
+    result.textContent = data.error || '[ ' + data.stack.join('  ') + ' ]';
+    result.className = data.error ? 'error' : '';
+    status.textContent = data.error ? 'Eingabe prüfen' : 'Übersetzt · freier Code ausgeführt';
+    dictionary = data.dictionary || []; renderDictionary();
+    document.querySelector('#here').textContent = data.here === undefined ? '' : 'HERE: ' + hex(data.here);
+    document.querySelector('#compiler-state').textContent = '[ ' + (data.compiler_stack || []).join('  ') + ' ]';
+    compiled.textContent = (data.disassembly || []).map(row => hex(row.address) + '  ' + row.bytes.map(b => b.toString(16).padStart(2, '0')).join(' ').padEnd(9) + '  ' + row.instruction).join('\n');
+  } catch (error) {
+    if (current !== revision) return;
+    result.textContent = 'Verbindung zum lokalen Server fehlgeschlagen.';
+    result.className = 'error'; status.textContent = '';
+  }
+}
+function changed() {
+  ++revision; clearTimeout(timer);
+  clearState();
+  result.textContent = '…'; result.className = ''; status.textContent = 'Eingabe geändert';
+  if (auto.checked) timer = setTimeout(run, 350);
+}
+document.querySelector('#filter').addEventListener('input', renderDictionary);
+document.querySelector('#dictionary-order').addEventListener('click', event => {
+  dictionaryReversed = !dictionaryReversed;
+  event.currentTarget.textContent = dictionaryReversed ? 'Index ↓' : 'Index ↑';
+  event.currentTarget.setAttribute('aria-pressed', String(dictionaryReversed));
+  renderDictionary();
+});
+source.addEventListener('input', changed);
+auto.addEventListener('change', changed); document.querySelector('#run').addEventListener('click', run);
+baseWords.addEventListener('change', changed);
+run();
+</script>
+</html>

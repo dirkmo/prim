@@ -31,3 +31,6 @@ prim-opcodes = "prim.isa:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["prim", "prim.*"]
+
+[tool.setuptools.package-data]
+prim = ["live.html"]

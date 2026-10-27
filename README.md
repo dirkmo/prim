@@ -314,3 +314,39 @@ Hello World, for the time being implemented with "while repeat".
 :type dup [ while ] 1- >r dup c@ tx 1+ r> dup [ repeat ] 2drop ;
 [ msg count type ]
 ```
+
+## TokenForth Live (prototype)
+
+Start the local word playground with no extra dependencies:
+
+```sh
+prim live
+```
+
+Open http://127.0.0.1:8765 in a browser. Definitions compile; free code executes
+in source order. For example, `:doppelt dup + ; 7 doppelt` produces `[14]`.
+A definition alone does not run. `[ ... ]` executes on the separate compiler
+stack, allowing the base library's `if`, `for`, and other code emitters to
+modify definitions. The runtime stack starts empty; supply initial values directly in free code.
+
+The compact runtime stack, expandable compiler stack, searchable dictionary,
+and disassembly of newly generated memory update after a 350 ms typing pause.
+Disable Live for manual execution. Dictionary order starts descending and can be reversed. Stack
+tops are on the right; results are unsigned 16-bit values. Inputs accept
+decimal or `$`/`0x` hexadecimal. The disassembly is a raw code view; embedded
+data can appear as instructions.
+
+Each preview starts from fresh memory with separate compilation/runtime step
+budgets and stack bounds checks. Runtime errors retain the generated code and
+initialized dictionary entries. Incomplete source reports an error. There is
+no memory editor, instruction trace, UART display, or source highlighting.
+Source is not saved.
+
+The “Basiswörter” checkbox enables the base words by default. Disable it to
+start with only H and LATEST (CPU mnemonics remain available). With a custom
+`--library`, the checkbox controls that library instead.
+The default library is prepared at startup: startup compiles bootstrap, opcode
+emitters and base directly from the repository sources, without a prior build.
+Use `--library other.tf.toml` to replace this library, or `--port 8766`
+to select another local port. Outside the source checkout, supply `--library`.
+Stop the server with Ctrl+C.

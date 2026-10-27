@@ -4,7 +4,7 @@ from importlib import import_module
 
 COMMANDS = {'asm': 'assembler', 'tokenize': 'tokenizer', 'compile': 'compiler',
             'export': 'exporter', 'disasm': 'disassembler', 'debug': 'debugger',
-            'opcodes': 'isa'}
+            'opcodes': 'isa', 'live': 'live'}
 
 
 def debug_main(argv=None):
