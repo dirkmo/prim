@@ -23,8 +23,9 @@ the order of stack effects are described in the RTL documentation.
 | `src/base.cf`, `src/examples/` | Base library and example programs |
 | `rtl/sim_support/` | Shared simulation and comparison helpers |
 
-The old tools under `src/*.py` are compatibility wrappers. New Python imports
-use `prim.*`. The alternative Amaranth implementation under `hdl/` is currently
+Python tools run through `python -m prim` or the installed `prim-*` commands;
+library imports use `prim.*`. The old `src/*.py` compatibility wrappers have
+been removed. The alternative Amaranth implementation under `hdl/` is currently
 outside the scope of this work.
 
 ## TokenForth from source to CPU
@@ -117,6 +118,5 @@ The following items have been proposed and are not yet implemented:
 6. Add type annotations at module interfaces.
 7. Unify CLI argument processing and error handling.
 8. Set up Ruff and automated quality checks.
-9. Review the need for compatibility wrappers and their long-term maintenance.
 
 These proposals do not authorize implementation.

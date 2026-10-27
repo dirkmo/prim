@@ -70,7 +70,8 @@ are handled in CPU byte-lane order.
 ### D08 – Installable Python package with compatible tool entry points
 
 Implementations live under `src/prim/`; `pyproject.toml` defines installation
-and the CLI. Existing `src/*.py` commands remain available through wrappers.
+and the CLI. Existing `src/*.py` commands initially remained available through
+wrappers (removed in D12).
 Optional debugger and HDL dependencies are loaded only when needed. Tests
 import the installed package without changing `sys.path`.
 
@@ -108,3 +109,12 @@ change when saved. Empty symbol names are errors and are no longer repaired
 by interpreting them as commas.
 
 Commit: `4badd43`.
+
+### D12 – Remove the legacy Python tool wrappers
+
+All implementations and library imports use `prim.*`. Remove the redundant
+`src/*.py` compatibility wrappers and use `python -m prim` in the Makefile,
+CLI tests and IDE launch configurations. Installed console commands remain
+available. External callers of old script paths or top-level modules must
+switch to the package CLI or `prim.*` imports. This supersedes the wrapper
+retention in D08.

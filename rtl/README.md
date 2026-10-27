@@ -224,7 +224,7 @@ SRAM and an unbuffered `uart_tx.v` transmitter. External interrupts are tied
 low; the software INT instruction remains available. The top-level has no
 board pin assignments or SRAM loader yet.
 
-The memory map matches `src/tokenforth.py`'s Mif: writing a byte at `0xffff`
+The memory map matches `src/prim/compiler.py`'s Mif: writing a byte at `0xffff`
 sends it over UART instead of modifying SRAM. All reads, including `0xffff`,
 still read SRAM; there is no UART status register or receiver.
 
@@ -293,7 +293,7 @@ python3 rtl/test_tokenforth.py --compiler-python .venv/bin/python
 
 Every invocation freshly tokenizes and compiles `src/base.cf`, then the examples
 in `src/examples`. It exports the **memory** section of the resulting `.tf.toml`
-using `binexport.py`; token bytes are never treated as CPU code. Existing TOML
+using `python -m prim export`; token bytes are never treated as CPU code. Existing TOML
 files in `src/` are not used or overwritten. The four examples cover:
 
 | Source | Features | Expected UART output |

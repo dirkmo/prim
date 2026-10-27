@@ -48,10 +48,10 @@ Use `prim asm`, `prim tokenize`, `prim compile`, `prim export`, `prim disasm`,
 commands are also available. `python -m prim` exposes the same subcommands.
 Each command accepts `--help`.
 
-The old `src/*.py` tool paths remain compatibility wrappers; existing
-`python src/tokenforth.py ...` and Makefile workflows still work in the active
-environment. Library imports use `prim.cpu`, `prim.tokenizer`, `prim.compiler`,
-etc. The RTL tests import the installed package without modifying `sys.path`.
+The old `src/*.py` tool wrappers have been removed. Use, for example,
+`python -m prim compile ...` instead of `python src/tokenforth.py ...`.
+The Makefile uses the package CLI in the active environment. Library imports
+use `prim.cpu`, `prim.tokenizer`, `prim.compiler`, etc. The RTL tests import the installed package without modifying `sys.path`.
 See [rtl/README.md](rtl/README.md) for simulation and end-to-end tests.
 
 ## The Plan

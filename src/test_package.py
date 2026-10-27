@@ -6,8 +6,6 @@ import sys
 import tempfile
 import unittest
 
-ROOT = Path(__file__).resolve().parent.parent
-
 
 class PackageChecks(unittest.TestCase):
     def setUp(self):
@@ -62,14 +60,16 @@ print('PASS imports')
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn('usage:', result.stdout)
 
-    def test_legacy_and_package_assembler(self):
+    def test_package_assembler(self):
         source = self.directory / 'program.asm'
         source.write_text('1 2 + BREAK')
-        for mode in ('module', 'legacy'):
+        for mode in ('module', 'console'):
             output = self.directory / f'{mode}.bin'
-            command = (['-m', 'prim', 'asm'] if mode == 'module' else
-                       [str(ROOT / 'src' / 'primasm.py')])
-            result = self.run_python(*command, '-i', str(source), '-o', str(output))
+            command = ([sys.executable, '-I', '-m', 'prim', 'asm'] if mode == 'module' else
+                       [str(Path(sys.executable).absolute().parent / 'prim-asm')])
+            result = subprocess.run([*command, '-i', str(source),
+                                     '-o', str(output)], cwd=self.directory,
+                                    capture_output=True, text=True, timeout=15)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(output.read_bytes(), bytes([0x20, 1, 0x20, 2, 0x0c, 0x22]))
 

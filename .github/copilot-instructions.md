@@ -3,8 +3,8 @@
 ## Project Overview
 
 **Prim** is a two-layer stack machine implementation:
-1. **Stack Machine CPU** (`prim.py`, `hdl/prim.py`): 8-bit opcodes, 16-bit ALU, dual stacks (data & return), Forth-based instruction set
-2. **TokenForth Language** (`tokenizer.py`, `tokenforth.py`): A ColorForth-like language with compile-time and immediate-mode execution
+1. **Stack Machine CPU** (`prim/cpu.py`, `hdl/prim.py`): 8-bit opcodes, 16-bit ALU, dual stacks (data & return), Forth-based instruction set
+2. **TokenForth Language** (`prim/tokenizer.py`, `prim/compiler.py`): A ColorForth-like language with compile-time and immediate-mode execution
 
 The project includes Python-based simulation, HDL implementation (Amaranth), and Verilog/C++ simulation infrastructure.
 
@@ -12,12 +12,12 @@ The project includes Python-based simulation, HDL implementation (Amaranth), and
 
 ### Core Components
 
-- **`src/prim.py`** (Interpreter): Pure Python CPU simulator with data/return stack management, memory interface, instruction execution
+- **`src/prim/cpu.py`** (Interpreter): Pure Python CPU simulator with data/return stack management, memory interface, instruction execution
 - **`hdl/prim.py`** (Hardware): Amaranth HDL describing the actual CPU state machine with opcode decoding
-- **`src/tokenizer.py`**: Lexical analyzer converting TokenForth source → TOML token representation
-- **`src/tokenforth.py`**: Compiler converting tokenized input → binary bytecode (with embedded interpreter calls)
-- **`src/primasm.py`**: Assembler/disassembler for CPU opcodes (mnemonics ↔ 8-bit opcodes)
-- **`src/tokens.py`**: Token type definitions (13 types: WORD_CALL, NUMBER, MNEMONIC, etc.)
+- **`src/prim/tokenizer.py`**: Lexical analyzer converting TokenForth source → TOML token representation
+- **`src/prim/compiler.py`**: Compiler converting tokenized input → binary bytecode (with embedded interpreter calls)
+- **`src/prim/assembler.py`**: Assembler/disassembler for CPU opcodes (mnemonics ↔ 8-bit opcodes)
+- **`src/prim/tokens.py`**: Token type definitions (13 types: WORD_CALL, NUMBER, MNEMONIC, etc.)
 
 ### Data Flow
 
@@ -38,7 +38,7 @@ Memory/Stacks Output
 - **Immediate Mode in TokenForth**: Words between `[` and `]` execute at compile time, enabling meta-programming
 - **Opcode Format**: High byte is type flag (0=immediate/direct, 1=encoded). Low byte contains 4-bit ALU op + 2 bits each for stack pointers + 3 bits each for source/dest
 - **Memory Layout**: Dictionary grows downward from `0xFEFE`, code/data grow upward from `HERE` (`0x000A`)
-- **Build Dictionary**: `primconsts.py` auto-generates Verilog opcodes from Python class
+- **Build Dictionary**: `prim/isa.py` auto-generates Verilog opcodes from Python class
 
 ## Developer Workflows
 
@@ -74,7 +74,7 @@ make yosys               # Syntax check via Yosys
 
 **Key build targets**:
 - `genopcodes`: Exports `PrimOpcodes` class to `opcodes.v` (Verilog localparam)
-- `assemble`: Converts `test.asm` → `test.bin` via `primasm.py`
+- `assemble`: Converts `test.asm` → `test.bin` via `prim/assembler.py`
 - `simulator`: Runs Verilated circuit with binary input
 - `wave`: Displays VCD trace in GTKWave
 
@@ -109,7 +109,7 @@ class TokenWordCall(Token):
 
 ### Opcode Constants
 
-Update `src/primconsts.py` `PrimOpcodes` class → run `make genopcodes` to regenerate `opcodes.v`.
+Update `src/prim/isa.py` `PrimOpcodes` class → run `make genopcodes` to regenerate `opcodes.v`.
 
 ```python
 class PrimOpcodes:
@@ -130,8 +130,8 @@ Definitions stored at `DICT` (0xFEFE) growing downward:
 
 ### Tokenizer → Compiler Handoff
 
-1. `tokenizer.py` reads `.cf` (ColorForth), emits `.tok.toml` (TOML-serialized tokens)
-2. `tokenforth.py` consumes `.tok.toml`, executes immediate words via `Prim` interpreter, emits binary
+1. `prim/tokenizer.py` reads `.cf` (ColorForth), emits `.tok.toml` (TOML-serialized tokens)
+2. `prim/compiler.py` consumes `.tok.toml`, executes immediate words via `Prim` interpreter, emits binary
 3. **Key**: `Token.D` dictionary (Python dict) bridges both phases; must persist across invocations
 
 ### Immediate Mode Execution
@@ -145,7 +145,7 @@ During compilation:
 
 ### Verilog ↔ Python Synchronization
 
-- `primconsts.py` Python class → auto-export to `opcodes.v` (localparam)
+- `prim/isa.py` Python class → auto-export to `opcodes.v` (localparam)
 - `hdl/prim.py` Amaranth design reads `PrimOpcodes.py` to decode instruction bits
 - Keep instruction set synchronized: adding opcodes requires updates to both files
 
@@ -156,7 +156,7 @@ During compilation:
 ```bash
 cd src
 python3 test.py          # Runs Prim interpreter against TokenForth code
-python3 primdebug.py     # Interactive CPU debugger with stack/memory trace
+python3 -m prim debug     # Interactive CPU debugger with stack/memory trace
 ```
 
 ### Simulation Tests
@@ -176,9 +176,9 @@ make wave                # View VCD trace
 
 ## Common Debugging Patterns
 
-1. **TokenForth compile failure**: Check `tokenizer.py` output (TOML), verify token types match `tokens.py` classes
+1. **TokenForth compile failure**: Check `prim/tokenizer.py` output (TOML), verify token types match `prim/tokens.py` classes
 2. **Stack underflow/overflow**: Use `Prim.setLogLevel(Prim.LOG_LEVEL_DBG)` to trace execution
-3. **Opcode mismatch**: Regenerate `opcodes.v` after modifying `primconsts.py`, verify `hdl/prim.py` decoding matches
+3. **Opcode mismatch**: Regenerate `opcodes.v` after modifying `prim/isa.py`, verify `hdl/prim.py` decoding matches
 4. **Dictionary overflow**: Check `LATEST` pointer in memory dump; grows toward `HERE` → collision risk
 5. **Immediate mode side effects**: Trace `Prim` state after `[` blocks; inspect stack via `T()`, `N()` accessors
 
@@ -186,12 +186,12 @@ make wave                # View VCD trace
 
 ```
 src/
-  prim.py                 # CPU interpreter (execute, stack, memory)
-  primasm.py              # Assembler/disassembler mnemonics
-  primconsts.py           # Opcode constants + Verilog export
-  tokenizer.py            # TokenForth lexer
-  tokenforth.py           # TokenForth compiler + executor
-  tokens.py               # Token type classes
+  prim/cpu.py             # CPU interpreter (execute, stack, memory)
+  prim/assembler.py       # Assembler/disassembler mnemonics
+  prim/isa.py             # Opcode constants + Verilog export
+  prim/tokenizer.py       # TokenForth lexer
+  prim/compiler.py        # TokenForth compiler + executor
+  prim/tokens.py          # Token type classes
   test.cf                 # TokenForth source for testing
 
 hdl/

@@ -17,8 +17,6 @@ from prim.cpu import Prim
 from prim.isa import Consts, PrimOpcodes as Op
 from test import Mif as TestMemory
 
-SRC = Path(__file__).resolve().parent
-
 
 class ToolchainChecks(unittest.TestCase):
     def setUp(self):
@@ -135,7 +133,7 @@ class CommandLineChecks(unittest.TestCase):
         self.output = self.directory / 'output.toml'
 
     def tokenize(self, *arguments):
-        return subprocess.run([sys.executable, str(SRC / 'tokenizer.py'), '-i', str(self.source),
+        return subprocess.run([sys.executable, '-m', 'prim', 'tokenize', '-i', str(self.source),
                                '-o', str(self.output), *arguments],
                               capture_output=True, text=True, timeout=10)
 
@@ -189,7 +187,7 @@ class CommandLineChecks(unittest.TestCase):
                      tokens=[Token.MODE, Token.MODE_IMMEDIATE, Token.WORD_CALL, 2, 0],
                      **{'string-literals': [], 'num-literals': []})
         library.write_text(tomli_w.dumps(state))
-        result = subprocess.run([sys.executable, str(SRC / 'tokenforth.py'), '-i', str(library),
+        result = subprocess.run([sys.executable, '-m', 'prim', 'compile', '-i', str(library),
                                  '-o', str(self.output), '--max-immediate-steps', '12'],
                                 capture_output=True, text=True, timeout=10)
         self.assertNotEqual(result.returncode, 0)
@@ -304,7 +302,7 @@ class OptimizedPythonChecks(unittest.TestCase):
             for text in ('missing', ':x ; :x ;', '[ :x ]', '"open', ']'):
                 with self.subTest(source=text):
                     source.write_text(text)
-                    result = subprocess.run([sys.executable, '-O', str(SRC / 'tokenizer.py'),
+                    result = subprocess.run([sys.executable, '-O', '-m', 'prim', 'tokenize',
                                              '-i', str(source), '-o', str(output)],
                                             capture_output=True, text=True, timeout=10)
                     self.assertNotEqual(result.returncode, 0)
@@ -319,7 +317,7 @@ class OptimizedPythonChecks(unittest.TestCase):
             source.write_text(tomli_w.dumps(dict(type='tokenizer', symbols=['H', 'LATEST'],
                 memory=[], tokens=[Token.NUMBER, 1],
                 **{'string-literals': [], 'num-literals': []})))
-            result = subprocess.run([sys.executable, '-O', str(SRC / 'tokenforth.py'),
+            result = subprocess.run([sys.executable, '-O', '-m', 'prim', 'compile',
                                      '-i', str(source), '-o', str(output)],
                                     capture_output=True, text=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)
