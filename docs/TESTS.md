@@ -401,3 +401,13 @@ nicht. Ebenso sind die festen Simulationswartezeiten keine Zusage für eine
 bestimmte SRAM-/Board-Taktkonfiguration. Aktuelle Ergebnisse sollten immer mit
 dem tatsächlich ausgeführten Befehl und den vorhandenen Werkzeugen berichtet
 werden; die Dokumentation hält keine dauerhaft gültige Testanzahl fest.
+
+## FPGA-Debug-UART
+
+`python rtl/test_debug_uart.py` prüft den vollständigen seriellen Debugpfad sowie
+CPU-Halt/Step bei Speicherwartezyklen und UART-RX.
+`python src/test_debug_uart.py` prüft die kleine Hostbibliothek. CTest integriert
+beide als `debug_uart_checks` und `debug_uart_host_checks`; damit gibt es zehn
+Suiten. Details zum Testumfang, dem implementierten Protokoll und dem
+`synth_ice40`-Vergleich stehen in [DRAFT.md](DRAFT.md). FPGA-CPU-Ausgaben werden
+als sieben Nutzbits verglichen; UTF-8 wird auf dieser Leitung nicht erhalten.

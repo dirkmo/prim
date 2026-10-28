@@ -217,63 +217,38 @@ memory/return/self-modifying cases against Python after every instruction.
 Unused stack cells stay undefined in this simulation; unknown occupied cells
 are reported as mismatches rather than silently treated as zero.
 
-## UART TX and system integration
+## Shared CPU/debug UART
 
-`prim_system.v` connects the CPU to `memory_io.v`, which routes requests to
-SRAM and an unbuffered `uart_tx.v` transmitter. External interrupts are tied
-low; the software INT instruction remains available. The top-level has no
-board pin assignments or SRAM loader yet.
+`prim_system.v` connects CPU and debug master through a mux to `memory_io.v`.
+It has serial RX/TX and uses fixed 115200 baud, 8N1, with a constant divider
+rounded from CLK_HZ. RX uses two synchronizer flops and bit-centre samples.
+The existing unbuffered TX arbitrates at byte boundaries with debug priority.
+CPU output has seven useful bits (bit 7 is cleared); debug ASCII has bit 7 set.
+UTF-8 output is therefore not preserved on this FPGA UART.
 
-The memory map matches `src/prim/compiler.py`'s Mif: writing a byte at `0xffff`
-sends it over UART instead of modifying SRAM. All reads, including `0xffff`,
-still read SRAM; there is no UART status register or receiver.
+The write-only UART mapping remains at FFFF; reads still access SRAM. A word
+write at FFFE sends its high byte, and a word write at FFFF sends its low byte
+and writes its high byte to SRAM address zero. UART ACK means acceptance of
+the frame, not completed serial transmission. Debug MMIO uses the same path.
 
-| CPU write | SRAM effect | UART byte |
-|-----------|-------------|-----------|
-| c! at FFFF | None | Data bits 7:0 |
-| ! at FFFE | Bits 7:0 to FFFE | Bits 15:8 |
-| ! at FFFF | Bits 15:8 to address 0000 | Bits 7:0 |
-
-Other writes go entirely to SRAM. The decoder also supports the upper-only
-CPU byte mask. Split requests execute in increasing CPU lane order, matching
-Python's write16, including wraparound. One phase bit tracks split requests;
-no additional data buffer is needed because the CPU holds inputs until ACK.
-
-UART uses 8N1: one start bit, eight data bits least significant first, one stop
-bit, idle high. A byte is accepted on VALID && READY. CPU ACK means the UART
-has accepted the byte (and any SRAM part of the request has finished), not that
-the frame is already on the wire. Further writes wait while transmission is
-busy; there is no FIFO. Reset aborts transmission and restores idle-high TX.
-
-Set `prim_system` parameters CLK_HZ and BAUD to the actual clock and desired
-baud rate. The bit divider is rounded to the nearest integer and must be at
-least 1; defaults are 100000000 Hz and 115200 baud (868 clocks/bit). The lower
-level UART and memory_io modules take CLKS_PER_BIT directly. SRAM read/write
-timing parameters pass through the top-level unchanged.
-
-Run mapped-I/O and serial tests with:
+The complete command table, low-nibble-first numbers, persistent write modes,
+CPU HALT/STEP/RESET-HALT/BREAK semantics, host API, intentionally omitted error
+checks and synthesis comparison are in [docs/DRAFT.md](../docs/DRAFT.md).
+The standalone Prim inputs i_halt/i_run/i_step/i_debug_reset must be connected
+(tie low when unused). Standalone memory_io users tie i_debug_valid low when
+no debug transmitter is attached. CPU reset is distinct from system reset.
 
 ```sh
-python3 rtl/test_io.py
+python rtl/test_io.py
+python rtl/test_debug_uart.py
+python src/test_debug_uart.py
 ```
 
-CTest includes them as `uart_io_checks`. Tests check every byte at bit-level
-clock resolution with dividers 1, 4, and 7, reset during a frame, all CPU byte
-masks, split MMIO writes, SRAM preservation, and backpressure. CPU/SRAM/UART
-integration is compared with Python instruction by instruction; the serial
-output is independently decoded and checked, including an assembly
-"Hello, World!" example. The simulation drains the final frame after the CPU
-reaches BREAK/SIMEND. The ordinary C++ comparison remains a flat-RAM test;
-the mapped UART tests use the Icarus system simulation.
-
-An iCE40 synthesis check for the integrated top-level is:
-
-```sh
-yosys -p 'read_verilog -Irtl rtl/prim.v rtl/memory.v rtl/uart_tx.v rtl/memory_io.v rtl/prim_system.v; synth_ice40 -top prim_system; stat'
-```
-
-Board pin assignments, timing after place-and-route, and physical UART output
-still need verification on the board.
+CTest includes the existing mapped-I/O tests and both new debug suites.
+The full system simulation covers RX through physical SRAM bus and TX;
+additional CPU tests check halt and step during delayed memory operations.
+Board pin assignments, physical UART and timing after place-and-route still
+need verification on hardware.
 
 ## TokenForth end-to-end test
 
@@ -306,14 +281,15 @@ files in `src/` are not used or overwritten. The four examples cover:
 
 Each source uses an immediate block to install `PUSH16 main; CALL; BREAK` at
 address zero. The test verifies this entry against the compiled dictionary;
-it does not patch the binary. BREAK is the simulation stop marker, not a
-hardware halt instruction. The compiler must produce no UART output itself.
+it does not patch the binary. The comparison harness stops before BREAK; the integrated hardware now
+executes BREAK as a real halt and advances PC to the following instruction. The compiler must produce no UART output itself.
 
 All four 64-KiB binaries execute on CPU + physical SRAM controller + SRAM
 model + UART at the three timing configurations. Each retired instruction,
 including stack values, carry and logical memory reads/writes, is compared
-with Python. The decoded serial output must match both Python and the explicit
-expected byte string. The final frame is drained after the simulation marker.
+with Python. The decoded serial output must match the seven-bit projection of both Python
+and the explicit expected byte string. The UTF-8 strings example checks this
+intentional loss of bit 7; it does not claim UTF-8 compatibility. The final frame is drained after the simulation marker.
 
 `build/tokenforth/` keeps fresh base/example `.tok.toml`, `.tf.toml`, `.bin`,
 compiler logs, and a `.jsonl` retirement trace and `.uart.bin` serial capture

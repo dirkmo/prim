@@ -9,6 +9,12 @@ module Prim(
     output        o_we,
     input         i_ack,
 
+    input i_halt, i_run, i_step, i_debug_reset,
+    output reg o_halted,
+    output reg o_break_reason,
+    output reg o_break_event,
+    output [15:0] o_pc,
+
     input         i_irq
 );
 
@@ -49,9 +55,36 @@ localparam
     PHASE_EXECUTE = 2'h2;
 
 reg [1:0] r_phase /* verilator public */;
-wire w_phase_fetch = (r_phase == PHASE_FETCH);
+wire w_phase_fetch = (r_phase == PHASE_FETCH) && !o_halted;
 wire w_phase_execute = (r_phase == PHASE_EXECUTE);
 wire w_phase_memop = (r_phase == PHASE_MEMWAIT);
+
+wire cpu_reset = i_reset || i_debug_reset;
+reg stepping;
+assign o_pc = r_pc;
+always @(posedge i_clk) begin
+    o_break_event <= 0;
+    if (cpu_reset) begin
+        o_halted <= i_debug_reset;
+        o_break_reason <= 0;
+        stepping <= 0;
+    end else if (o_halted) begin
+        if (i_run || i_step) begin
+            o_halted <= 0;
+            stepping <= i_step;
+            if (i_run) o_break_reason <= 0;
+        end
+    end else if (w_phase_execute) begin
+        if (i_halt || stepping || r_ir[6:0] == OP_BREAK) begin
+            o_halted <= 1;
+            stepping <= 0;
+        end
+        if (r_ir[6:0] == OP_BREAK) begin
+            o_break_reason <= 1;
+            o_break_event <= 1;
+        end
+    end
+end
 
 reg [15:0] r_mem_data;
 
@@ -113,9 +146,9 @@ wire w_fetch_memop = (i_dat[6:0] == OP_PUSH) ||
 
 always @(posedge i_clk)
 begin
-    if (i_reset) begin
+    if (cpu_reset) begin
         r_phase <= PHASE_FETCH;
-    end else begin
+    end else if (!o_halted) begin
         case (r_phase)
             PHASE_FETCH:
                 if (i_ack)
@@ -137,7 +170,7 @@ wire [15:0] pc_plus_1 = r_pc + 1'd1;
 // Control-flow instructions ignore the return bit, as in the Python ISA.
 wire w_return = r_ir[7] && (r_ir[6:0] != OP_CALL) &&
                 (r_ir[6:0] != OP_JP) && (r_ir[6:0] != OP_JZ) &&
-                (r_ir[6:0] != OP_INT);
+                (r_ir[6:0] != OP_INT) && (r_ir[6:0] != OP_BREAK);
 wire w_rpush = (r_ir[6:0] == OP_CALL) || (r_ir[6:0] == OP_INT) ||
                (r_ir[6:0] == OP_TO_R);
 wire w_rpop = (r_ir[6:0] == OP_FROM_R) || (r_ir[6:0] == OP_RDROP);
@@ -170,7 +203,7 @@ end
 
 always @(posedge i_clk)
 begin
-    if (i_reset) begin
+    if (cpu_reset) begin
         r_pc <= 16'h0000;
     end else if (w_phase_execute) begin
         // PC is advanced only after the instruction has fully completed its
@@ -184,7 +217,7 @@ end
 // instruction register
 always @(posedge i_clk)
 begin
-    if (i_reset) begin
+    if (cpu_reset) begin
         r_ir <= 8'h00;
         r_mem_data <= 16'h0000;
     end else if (w_phase_fetch && i_ack) begin
@@ -253,7 +286,7 @@ end
 // Keep the cached top cells and the circular array coherent at retirement.
 // Clearing consumed cells preserves Python's behavior across pointer wraparound.
 always @(posedge i_clk) begin
-    if (i_reset) begin
+    if (cpu_reset) begin
         T <= 16'h0;
         N <= 16'h0;
     end else if (w_phase_execute) begin
@@ -279,13 +312,13 @@ end
 // needs no array write. Popped cells remain unused and are not cleared.
 always @(posedge i_clk)
 begin
-    if (!i_reset && w_phase_execute && w_rpush && !w_return)
+    if (!cpu_reset && w_phase_execute && w_rpush && !w_return)
         r_rstack[w_rsp_inc1] <= (r_ir[6:0] == OP_TO_R) ? T : pc_plus_1;
 end
 
 // data stack pointer
 always @(posedge i_clk) begin
-    if (i_reset)
+    if (cpu_reset)
         r_dsp <= 'h0;
     else if (w_phase_execute)
         r_dsp <= dsp_next;
@@ -294,7 +327,7 @@ end
 // return stack pointer
 always @(posedge i_clk)
 begin
-    if (i_reset) begin
+    if (cpu_reset) begin
         r_rsp <= 'h00;
     end else if (w_phase_execute) begin
         r_rsp <= w_rsp_next;
@@ -304,7 +337,7 @@ end
 // Carry for shifts is the last bit shifted out of the 16-bit operand.
 always @(posedge i_clk)
 begin
-    if (i_reset) begin
+    if (cpu_reset) begin
         r_carry <= 1'b0;
     end else if (w_phase_execute) begin
         casez (r_ir[6:0])
@@ -364,7 +397,7 @@ always @(*) begin
             r_bs = 2'b11;
         end
     end
-    if (i_reset) begin
+    if (cpu_reset) begin
         r_bs = 2'b00;
     end
 end
@@ -372,7 +405,7 @@ end
 // address generation
 reg [15:0] r_addr;
 always @(*) begin
-    if (i_reset) begin
+    if (cpu_reset) begin
         r_addr = 16'h0000;
     end else if (w_phase_fetch) begin
         // instruction fetch from pc
@@ -390,7 +423,7 @@ always @(*) begin
 end
 
 assign o_addr = r_addr;
-assign o_we = !i_reset && w_phase_memop && w_memwrite;
+assign o_we = !cpu_reset && w_phase_memop && w_memwrite;
 assign o_bs = r_bs;
 assign o_dat = N;
 

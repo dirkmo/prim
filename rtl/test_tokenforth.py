@@ -57,7 +57,7 @@ class TokenForthChecks(SramHarness, unittest.TestCase):
                 with self.subTest(program=name, timing=timing):
                     result = self.compare_result(image, timing)
                     actual = result.serial
-                    self.assertEqual(actual, EXAMPLES[name])
+                    self.assertEqual(actual, bytes(b & 0x7f for b in EXAMPLES[name]))
                     tag = f'{name}-{timing[0]}-{timing[1]}'
                     result.save(ARTIFACTS / tag)
                     steps = result.steps

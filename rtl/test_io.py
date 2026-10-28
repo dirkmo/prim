@@ -30,7 +30,7 @@ class IoChecks(SramScenarios, SramHarness, unittest.TestCase):
             asm = ' '.join(f'{byte} 0xffff c!' for byte in chunk)
             with self.subTest(offset=offset):
                 actual = self.compare_image(bytes(PrimAsm.assemble(asm) + [Op.BREAK]), (3, 4, 19))
-                self.assertEqual(actual, chunk)
+                self.assertEqual(actual, bytes(b & 0x7f for b in chunk))
 
     def test_serial_word_crossings(self):
         for timing in TIMINGS:

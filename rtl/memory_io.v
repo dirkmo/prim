@@ -14,6 +14,9 @@ module memory_io #(
     output [15:0] o_mem_to_cpu,
     output o_ack,
     output o_tx,
+    input i_debug_valid,
+    input [7:0] i_debug_data,
+    output o_debug_ready,
     output [15:0] ram_addr,
     inout [15:0] ram_data,
     output ram_cs_n,
@@ -29,6 +32,9 @@ reg second;
 wire uart_turn = uart_access && (!split || (second ? uart_high : uart_low));
 wire ram_turn = ram_access && !uart_turn;
 wire uart_ready, ram_ack;
+wire tx_ready;
+assign uart_ready = tx_ready && !i_debug_valid;
+assign o_debug_ready = tx_ready;
 wire complete = uart_turn ? uart_ready : (ram_turn && ram_ack);
 assign o_ack = !i_reset && complete && (!split || second);
 
@@ -41,8 +47,8 @@ end
 
 uart_tx #(.CLKS_PER_BIT(CLKS_PER_BIT)) uart(
     .i_clk(i_clk), .i_reset(i_reset),
-    .i_data(uart_low ? i_cpu_to_mem[7:0] : i_cpu_to_mem[15:8]),
-    .i_valid(uart_turn), .o_ready(uart_ready), .o_tx(o_tx));
+    .i_data(i_debug_valid ? i_debug_data : {1'b0, (uart_low ? i_cpu_to_mem[6:0] : i_cpu_to_mem[14:8])}),
+    .i_valid(i_debug_valid || uart_turn), .o_ready(tx_ready), .o_tx(o_tx));
 
 // For a split FFFF word write the RAM byte is the high lane, at address zero.
 memory #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) sram(

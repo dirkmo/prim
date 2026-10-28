@@ -18,7 +18,7 @@ the order of stack effects are described in the RTL documentation.
 |------|----------------|
 | `rtl/prim.v` | Verilog CPU |
 | `rtl/memory.v` | Adapt the byte-addressed CPU bus to SRAM supporting only whole-word transfers |
-| `rtl/memory_io.v`, `rtl/uart_tx.v`, `rtl/prim_system.v` | UART MMIO and system integration |
+| `rtl/memory_io.v`, `rtl/uart_tx.v`, `rtl/uart_rx.v`, `rtl/debug_uart.v`, `rtl/prim_system.v` | Shared CPU/debug UART, MMIO and system integration |
 | `src/prim/cpu.py`, `isa.py`, `assembler.py` | Python CPU, instruction set and assembler |
 | `src/prim/tokenizer.py`, `tokens.py` | Read TokenForth source and generate tokens |
 | `src/prim/compiler.py` | Compile tokens into a program image |
@@ -77,8 +77,12 @@ values must meet the requirements of the SRAM and board clock frequency.
 
 Writes to byte address `0xffff` go to UART TX. Reads there access SRAM. Word
 accesses crossing this boundary are split by byte between SRAM and UART,
-including wraparound to `0x0000`. UART uses 8N1 and currently has no FIFO,
-receiver or status register. CPU writes wait while the transmitter is busy.
+including wraparound to `0x0000`. UART uses fixed 115200 baud, 8N1, with a
+CLK_HZ-derived divider. Bit 7 separates seven-bit CPU output from debug ASCII.
+RX uses two synchronizer flops and bit-centre sampling; no FIFO or CPU RX/status
+register is added. CPU writes wait while the transmitter is busy. The debug
+master takes the bus only at confirmed CPU halt. Hardware HALT/STEP/RESET-HALT
+and BREAK plus the Python host API are specified in [DRAFT.md](DRAFT.md).
 External interrupts are tied inactive in the integrated system.
 
 ## Development and verification
@@ -105,7 +109,8 @@ With the debug extra installed, run
 Debugger inspection is side-effect-free; `uart <text>` queues UTF-8 bytes.
 Reset replays the initial UART file, discards interactive additions and
 temporary breakpoints, and retains user breakpoints. Without `-u`, RX starts
-empty. Its RX status/data at `0xfffe`/`0xffff` extend the TX-only RTL model.
+empty. Its CPU-visible RX status/data at `0xfffe`/`0xffff` are separate from
+the FPGA debug receiver; the RTL still maps CPU MMIO only to TX.
 See the root README for a standalone example and debugger keys.
 
 Run Python checks with `python -m unittest discover -s src -p 'test*.py'`.
@@ -133,9 +138,9 @@ The end-to-end TokenForth test freshly builds bootstrap, opcode words and
 timing configurations. Results are stored under `build/tokenforth/`.
 The Python regressions are included in this CTest suite.
 
-Last verified: all eight CTest suites passed, as did 14 artifact-format checks
-under `python -O`. This establishes simulation behavior. Board pin assignments,
-a program loader, timing after place-and-route and physical UART output remain
+Last verified: all ten CTest suites passed, including debug RTL and host checks.
+This establishes simulation behavior; SRAM can now be loaded through debug
+writes. Board pin assignments, timing after place-and-route and physical UART output remain
 open. Default clock and timing parameters are not a verified board configuration.
 
 Semicolon return folding is implemented for simple word endings, including

@@ -82,6 +82,10 @@ void tick() {
 }
 
 void reset() {
+    pCore->i_halt = 0;
+    pCore->i_run = 0;
+    pCore->i_step = 0;
+    pCore->i_debug_reset = 0;
     pCore->i_reset = 1;
     pCore->i_dat = 0;
     pCore->i_ack = 0;

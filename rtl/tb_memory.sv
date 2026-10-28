@@ -22,14 +22,15 @@ wire [1:0] request_bs = cpu_mode ? cpu_bs : bs;
 wire request_we = cpu_mode ? cpu_we : we;
 
 Prim cpu(.i_clk(clk), .i_reset(reset || !cpu_mode || halted), .o_addr(cpu_addr), .o_dat(cpu_data),
-         .i_dat(cpu_read), .o_bs(cpu_bs), .o_we(cpu_we), .i_ack(ack), .i_irq(1'b0));
+         .i_dat(cpu_read), .o_bs(cpu_bs), .o_we(cpu_we), .i_ack(ack), .i_irq(1'b0),
+         .i_halt(1'b0), .i_run(1'b0), .i_step(1'b0), .i_debug_reset(1'b0));
 generate if (WITH_UART) begin: io
 memory_io #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES),
             .CLKS_PER_BIT(CLKS_PER_BIT)) dut(
     .i_clk(clk), .i_reset(reset), .i_addr(request_addr), .i_cpu_to_mem(request_data),
     .o_mem_to_cpu(cpu_read), .i_bs(request_bs), .i_we(request_we), .o_ack(ack),
     .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(cs_n),
-    .ram_oe_n(oe_n), .ram_we_n(we_n), .o_tx(serial_tx));
+    .ram_oe_n(oe_n), .ram_we_n(we_n), .o_tx(serial_tx), .i_debug_valid(1'b0), .i_debug_data(8'b0));
 assign controller_drive = dut.sram.drive;
 assign uart_busy = !dut.uart.o_ready;
 end else begin: flat
@@ -146,7 +147,7 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
         write_count = wr ? read_count : 0;
         if (wr && b == 3 && !a[0]) read_count = 0;
         if (WITH_UART && wr && ((b[0] && a==16'hffff) || (b[1] && a==16'hfffe))) begin
-            expected_tx[expected_count] = a==16'hffff ? d[7:0] : d[15:8];
+            expected_tx[expected_count] = a==16'hffff ? {1'b0,d[6:0]} : {1'b0,d[14:8]};
             expected_count = expected_count + 1;
             read_count = b==3 ? 1 : 0;
             write_count = read_count;

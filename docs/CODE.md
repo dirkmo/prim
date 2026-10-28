@@ -519,8 +519,13 @@ Tokenarten auf der CPU implementiert sind.
 
 ```mermaid
 flowchart LR
-    CPU["prim.v: Prim CPU"] -->|Adresse, Daten, Byteauswahl, WE| IO["memory_io.v"]
-    IO -->|Lesedaten, ACK| CPU
+    CPU["prim.v: Prim CPU"] --> MUX["Bus-Multiplexer bei bestätigtem Halt"]
+    DEBUG["debug_uart.v"] --> MUX
+    RX["uart_rx.v"] --> DEBUG
+    DEBUG <-->|Halt, Run, Step, Reset, PC, BREAK| CPU
+    MUX --> IO["memory_io.v"]
+    IO -->|Lesedaten, ACK| MUX
+    DEBUG -->|Debug-TX valid/ready| IO
     IO --> SRAM["memory.v: SRAM-Controller"]
     SRAM <-->|16-Bit-Wortzugriffe| RAM["Externes SRAM"]
     IO --> UART["uart_tx.v"]
@@ -543,7 +548,11 @@ Konflikte auf dem bidirektionalen Datenbus.
 bleiben SRAM-Zugriffe. Wortschreibzugriffe über die Grenze zu UART oder über
 das Adressraumende werden in Bytereihenfolge aufgeteilt. UART-ACK bestätigt
 die Annahme des Bytes, nicht das Ende des seriellen Frames. Aktuell gibt es
-in dieser RTL-Integration weder RX noch FIFO oder Statusregister.
+einen Debug-RX mit zweistufiger Synchronisierung und Bitmittenabtastung, aber
+keinen FIFO oder CPU-UART-Statusregister. Bit 7 trennt Debug-ASCII von der
+7-Bit-CPU-Ausgabe. `debug_uart.v` übernimmt den Bus nur bei bestätigtem Halt;
+HALT, STEP, RESET-HALT und BREAK sind in der CPU implementiert. Das vollständige
+Protokoll und die Python-Hostbibliothek beschreibt [DRAFT.md](DRAFT.md).
 
 Details zu Signalen und Timing stehen in der [RTL-Dokumentation](../rtl/README.md).
 

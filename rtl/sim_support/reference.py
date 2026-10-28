@@ -26,7 +26,7 @@ class Memory(MemoryIf):
     def write8(self, addr, value):
         addr, value = addr & 0xffff, value & 0xff
         if self.uart and addr == 0xffff:
-            self.tx.append(value)
+            self.tx.append(value & 0x7f)
         else:
             self.data[addr] = value
         self.writes.append([addr, value])

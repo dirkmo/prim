@@ -382,3 +382,9 @@ emitters and base directly from the repository sources, without a prior build.
 Use `--library other.tf.toml` to replace this library, or `--port 8766`
 to select another local port. Outside the source checkout, supply `--library`.
 Stop the server with Ctrl+C.
+
+## DebugUart
+The FPGA now supports a shared 115200-baud CPU/debug UART with hardware
+HALT/STEP/BREAK and a small Python host client. CPU output on that link is
+limited to seven bits. See [the implemented protocol](docs/DRAFT.md) for commands,
+examples, tests and the iCE40 resource comparison.
