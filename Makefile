@@ -47,7 +47,7 @@ PROGRAM_IMAGE := $(SW_OUT)/$(PROGRAM_NAME).bin
 BASE := $(SRC_OUT)/base.tf.toml
 HOST = $(ROOT)/boards/$(BOARD)/host.py
 TOOL_SOURCES := $(wildcard $(ROOT)/src/prim/*.py) $(ROOT)/pyproject.toml $(ROOT)/Makefile
-SKIP_FLAG = $(if $(filter 1,$(SKIP_UART_MMIO)),--skip-uart-mmio,)
+SKIP_FLAG = $(if $(filter 1,$(SKIP_UART_MMIO)),--skip-mmio,)
 VERIFY_FLAG = $(if $(filter 1,$(VERIFY)),--verify,)
 HOST_COMMAND = $(call shq,$(PYTHON_EXEC)) $(call shq,$(HOST)) --port $(call shq,$(PORT)) --timeout $(call shq,$(TIMEOUT))
 
@@ -84,7 +84,7 @@ help:
 	 '  clean          Remove the four managed build trees; preserve .venv/source' \
 	 '' \
 	 'Variables: PYTHON BOARD PROGRAM ASM IMAGE ASM_IMAGE PORT TIMEOUT JOBS' \
-	 '  SKIP_UART_MMIO=1 explicitly omits/reports LED/UART MMIO at FFFD..FFFF while loading' \
+	 '  SKIP_UART_MMIO=1 explicitly omits/reports system MMIO at FFF0..FFFF while loading' \
 	 '  VERIFY=1 enables optional readback verification after loading' \
 	 '  WRITE_DELAY=0.001 inserts a 1-ms pause between streamed word writes' \
 	 '  ICEPROG_DEVICE and ICEPROG_INTERFACE select the programmer (not PORT)' \

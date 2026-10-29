@@ -435,11 +435,13 @@ The board host now provides a duplex CPU/debug console:
 Ctrl+B opens local debug commands, Ctrl+D exits, Ctrl+V quotes the next CPU byte.
 Use `help` in the prompt or `console --help` for all controls. RX at FFFF retains
 the last byte; FFFE reports received/TX-buffer-free. Debug and CPU traffic share
-one continuously open connection. Images covering FFFD..FFFF require the explicit
-`load --skip-uart-mmio` option; both register addresses are omitted and reported.
+one continuously open connection. Images covering FFF0..FFFF (timer/reserved/LED/UART MMIO) require the explicit
+`load --skip-mmio` option; included MMIO bytes are
+omitted and reported. The [timer reference](system/docs/timer_mmio.md) defines
+the new register addresses and clock divider.
 
 Build Hello with `make image PROGRAM=src/examples/hello.cf`, then enter
-`load build/software/hello.bin --skip-uart-mmio --run` in the console's Ctrl+B
+`load build/software/hello.bin --skip-mmio --run` in the console's Ctrl+B
 prompt. SRAM word writes stream continuously while OKs are counted. Optional
 `--verify` enables readback; `--write-delay 0.001` adds a 1-ms pause per word.
 Errors are reported without automatic retries. Progress updates replace the

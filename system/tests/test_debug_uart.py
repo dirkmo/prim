@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Directed debug protocol, CPU boundary control, and serial RX simulations."""
+"""Directed debug, peripheral MMIO, CPU boundary control and serial simulations."""
 import tempfile
 import unittest
 from pathlib import Path
@@ -24,21 +24,25 @@ class DebugChecks(unittest.TestCase):
 
     def test_duplex_cpu_echo(self):
         self.simulate('tb_uart_duplex', ['tb_uart_duplex.sv', 'prim_system.v', 'prim.v',
-                      'memory.v', 'memory_io.v', 'uart_tx.v', 'uart_rx.v', 'uart_buffers.v',
+                      'memory.v', 'memory_io.v', 'timer_mmio.v', 'timer.v', 'uart_tx.v', 'uart_rx.v', 'uart_buffers.v',
                       'debug_uart.v', 'bus_mux.v', 'uart_arbiter.v', 'debug_uart_link.v'])
+
+    def test_timer_mmio(self):
+        self.simulate('tb_timer_mmio', ['tb_timer_mmio.sv', 'memory.v', 'memory_io.v',
+                                      'timer_mmio.v', 'timer.v'])
 
     def test_streaming_sram_loader(self):
         for divider in (8, 217):
             with self.subTest(divider=divider):
                 self.simulate('tb_stream_load', ['tb_stream_load.sv', 'prim_system.v', 'prim.v',
-                              'memory.v', 'memory_io.v', 'uart_tx.v', 'uart_rx.v', 'uart_buffers.v',
+                              'memory.v', 'memory_io.v', 'timer_mmio.v', 'timer.v', 'uart_tx.v', 'uart_rx.v', 'uart_buffers.v',
                               'debug_uart.v', 'bus_mux.v', 'uart_arbiter.v', 'debug_uart_link.v'], {'DIV': divider})
 
     def test_system(self):
         for divider in (8, 9, 17):
             with self.subTest(divider=divider):
                 self.simulate('tb_debug', ['tb_debug.sv', 'prim_system.v', 'prim.v',
-                              'memory.v', 'memory_io.v', 'uart_tx.v', 'uart_rx.v', 'uart_buffers.v',
+                              'memory.v', 'memory_io.v', 'timer_mmio.v', 'timer.v', 'uart_tx.v', 'uart_rx.v', 'uart_buffers.v',
                               'debug_uart.v', 'bus_mux.v', 'uart_arbiter.v', 'debug_uart_link.v'], {'DIV': divider})
 
 

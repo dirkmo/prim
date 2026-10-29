@@ -17,6 +17,19 @@ from support.unittest_bridge import SramHarness
 class IoChecks(SramScenarios, SramHarness, unittest.TestCase):
     with_uart = True
 
+    def test_cpu_timer_registers(self):
+        # Keep ENABLE clear: compare the CPU's byte/word adapter with static MMIO.
+        asm = ('0x1234 0xfff0 ! 0xabcd 0xfff2 ! 6 0xfff4 ! '
+               '0xfff0 @ 0xfff2 @ 0xfff4 @ '
+               '0x5678 0xfff1 ! 0xfff0 @ 0xfff2 @ 0xfff1 @ '
+               '0xfe00 0xfff3 ! 0xfff2 @ 0xfff4 @ '
+               '0xff 0xfff5 c! 0xfff5 c@ '
+               '0x4142 0xffef ! 0xffef @ 0xffef c@ 0xfff0 c@ '
+               '0xffff 0xfff6 ! 0xfff6 @ 0xfffc c@')
+        for timing in TIMINGS:
+            with self.subTest(timing=timing):
+                self.compare_image(bytes(PrimAsm.assemble(asm) + [Op.BREAK]), timing)
+
     def test_led_register_readback(self):
         # Upper bits are ignored; byte and word accesses read back bits 1:0.
         asm = ' '.join(f'{value} 0xfffd c! 0xfffd c@ 0xffff c!'

@@ -6,13 +6,19 @@ always #5 clk=~clk;
 wire tx;
 wire [15:0] ra, rd;
 wire cs, oe, we;
-prim_system #(.CLK_HZ(115200*DIV), .READ_CYCLES(3), .WRITE_CYCLES(4)) dut(
+prim_system #(.CLK_HZ(115200*DIV), .READ_CYCLES(3), .WRITE_CYCLES(4), .TIMER_DIVISOR(4)) dut(
     .i_clk(clk), .i_reset(reset), .i_rx(rx), .o_tx(tx),
     .ram_addr(ra), .ram_data(rd), .ram_cs_n(cs), .ram_oe_n(oe), .ram_we_n(we));
 reg [15:0] mem[0:32767];
 assign rd=(!cs && !oe && we) ? mem[ra[14:0]] : 16'hzzzz;
 always @(posedge we) if (!reset && !cs) mem[ra[14:0]]=rd;
 integer n=0, pos=0, breaks=0, outputs=0, j;
+integer timer_irqs=0, saved_irqs;
+reg [15:0] saved_count;
+always @(posedge clk) if (!reset) begin
+    if (dut.cpu.i_irq !== dut.timer_irq) $fatal(1,"timer IRQ not wired to CPU");
+    if (dut.cpu.i_irq) timer_irqs=timer_irqs+1;
+end
 reg [7:0] captured[0:4095];
 reg [7:0] b;
 always begin
@@ -170,6 +176,32 @@ initial begin
     command("Z", "K"); command("G", "K"); command("Z", "K");
     command("P", "K0000"); command("?", "T1");
     command("A1001R", "K1234");
+    // Timer configuration through the real debug bus, while the CPU is halted.
+    command("A2fffW3000", "K");
+    command("A0fffW0000", "K");
+    command("A4fffW5000", "K");
+    command("A0fffR", "K3000"); command("A4fffR", "K5000");
+    if(timer_irqs!=1 || !dut.halted) $fatal(1,"timer one-shot while halted");
+    command("Z", "K");
+    command("A0fffR", "K3000"); command("A2fffR", "K3000");
+    command("A4fffR", "K5000");
+    if(timer_irqs!=1) $fatal(1,"CPU reset changed timer");
+    command("A0fffW0000", "K");
+    command("A0fffR", "K3000");
+    if(timer_irqs!=2) $fatal(1,"timer rearm");
+    command("A4fffW7000", "K");
+    saved_irqs=timer_irqs;
+    repeat(40) @(negedge clk);
+    if(timer_irqs<=saved_irqs) $fatal(1,"timer auto mode");
+    command("A4fffW4000", "K");
+    saved_count=dut.io.timer_bus.counter.count; saved_irqs=timer_irqs;
+    repeat(40) @(negedge clk);
+    if(dut.io.timer_bus.counter.count!==saved_count || timer_irqs!=saved_irqs)
+        $fatal(1,"disabled timer changed");
+    reset=1; repeat(4) @(negedge clk);
+    if(dut.timer_irq || dut.io.timer_bus.counter.count!==0 ||
+       dut.io.timer_bus.counter.compare!==0 || dut.io.timer_bus.counter.csr!==0)
+        $fatal(1,"system reset did not clear timer");
     $display("PASS debug system DIV=%0d",DIV); $finish;
 end
 endmodule

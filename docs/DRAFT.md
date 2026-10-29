@@ -278,9 +278,9 @@ Siehe [Board-Flow](../boards/olimex_ice40hx8k_evb/README.md).
 
 Das Board-Hostskript stellt `halt`, `run`, `step`, `reset-halt`, `pc` und
 `uart-status` separat bereit. `step` und `pc` prüfen vorab den Haltstatus.
-Images, die FFFD, FFFE oder FFFF enthalten, benötigen `load --skip-uart-mmio`.
+Images, die Adressen in FFF0..FFFF enthalten, benötigen `load --skip-mmio`.
 Jede enthaltene MMIO-Adresse wird gemeldet und beim Schreiben und Verifizieren
-ausgelassen. Ein vollständiges Image schreibt damit 65.534 SRAM-Bytes;
+ausgelassen. Ein vollständiges Image schreibt damit 65.520 SRAM-Bytes;
 die optionale Prüfung ist auf dieselben Bytes begrenzt.
 Der SRAM-Loader verwendet dauerhafte 16-Bit-Schreibzugriffe mit OK pro Wort und
 einen Bytezugriff für ein ungerades Restbyte. Rücklesen ist standardmäßig aus;
@@ -316,5 +316,5 @@ RESET. Ctrl+V überträgt das nächste Byte wörtlich, auch Ctrl+B oder Ctrl+D.
 Leeres Enter im Prompt kehrt in den CPU-Modus zurück. Im CPU-Modus wird Enter
 übertragen. `help`, `?` und `console --help` zeigen alle Befehle und Keybindings.
 Der Prompt bietet `halt`/`stop`, `step`, `reset-halt`, `run`, `pc`, `status`,
-`uart-status`, `sram-check`, `load DATEI [--skip-uart-mmio] [--run]` und `quit`. CPU-Ausgabe und
+`uart-status`, `sram-check`, `load DATEI [--skip-mmio] [--run]` und `quit`. CPU-Ausgabe und
 BREAK bleiben auch während Hilfe, Eingabe und ausstehender Antworten aktiv.

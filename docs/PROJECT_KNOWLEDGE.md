@@ -85,7 +85,12 @@ reset preserves them; full system reset clears them. UART uses 115200/8N1 with
 synchronized bit-centre RX. Debug ASCII uses bit 7 and has TX priority. q reads
 UART status while CPU runs, without taking the CPU bus. SRAM debug ownership
 still requires confirmed CPU halt. Details are in [DRAFT.md](DRAFT.md).
-External interrupts are tied inactive in the integrated system.
+The standalone timer in timer/ maps COUNT at FFF0, COMPARE at FFF2 and CSR at
+FFF4 through system/rtl/timer_mmio.v. FFF6..FFFC is reserved; the full MMIO
+range is FFF0..FFFF. Timer IRQ is wired directly to Prim.i_irq, but the CPU
+still does not handle interrupts. TIMER_DIVISOR is a system instantiation
+parameter (default 50000); the 25-MHz board selects 25000 for 1-ms intervals.
+CPU halt/debug reset preserve the running timer; system reset clears it.
 
 ## Development and verification
 
@@ -148,7 +153,7 @@ This establishes simulation behavior; SRAM can now be loaded through debug
 writes. Rev.B board pins and build/program targets are prepared under
 `boards/olimex_ice40hx8k_evb/`. The initial 100 MHz board timing failed (about
 52–54 MHz achieved); the user-approved board PLL now supplies a 25 MHz global
-system clock. The routed build passes at 25 MHz (50.12 MHz reported maximum);
+system clock. The routed build with timer passes at 25 MHz (40.87 MHz reported maximum);
 The debug UART uses GPIO1.33 (FPGA RX/G3) and GPIO1.34 (FPGA TX/F3).
 The user has confirmed functional board operation and streaming SRAM loading.
 External SRAM timing margins remain unmeasured; the reusable system's default
@@ -176,15 +181,15 @@ Ctrl+V quotes the next CPU byte; help/? and console --help list all commands.
 One continuous reader owns RX and dispatches CPU output, debug replies and BREAK.
 The input sender uses q credits and never holds the debug lock while RX is full.
 Full debug operations (including loads) exclude q polls. The loader requires
---skip-uart-mmio for any image covering FFFD..FFFF, reports/skips only included
-MMIO addresses and writes 65533 SRAM bytes for a full image using persistent
+--skip-mmio for any image covering FFF0..FFFF, reports/skips only included
+MMIO addresses and writes 65520 SRAM bytes for a full image using persistent
 word writes (an odd tail uses a byte write). SRAM words are sent ahead with
 concurrent OK counting; --write-delay optionally paces them. Failure is reported
 without automatic retry or RUN, and invalidates the connection. The user can
 reconnect and reload manually. Readback is optional via --verify
 and uses word reads with automatic pointer increment. --run follows successful
 loading and any requested verification. The board rebuild passes 25 MHz timing and uses
-3216/7680 logic cells, one PLL and no block RAM. On 29 October 2026 the user
+3414/7680 logic cells with timer, one PLL and no block RAM. On 29 October 2026 the user
 confirmed the running board bitstream, LED2 heartbeat, debug communication and
 successful streaming loading. This does not establish external SRAM timing
 margins or exercise every loader option on hardware.

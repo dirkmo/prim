@@ -14,6 +14,7 @@ reg we = 0;
 wire [15:0] cpu_addr, cpu_data, cpu_read, ram_addr;
 wire [1:0] cpu_bs;
 wire cpu_we, ack, cs_n, oe_n, we_n;
+wire timer_irq;
 wire [15:0] ram_data;
 wire serial_tx, uart_busy, controller_drive;
 wire [6:0] output_data;
@@ -27,7 +28,7 @@ wire [1:0] request_bs = cpu_mode ? cpu_bs : bs;
 wire request_we = cpu_mode ? cpu_we : we;
 
 Prim cpu(.i_clk(clk), .i_reset(reset || !cpu_mode || halted), .o_addr(cpu_addr), .o_dat(cpu_data),
-         .i_dat(cpu_read), .o_bs(cpu_bs), .o_we(cpu_we), .i_ack(ack), .i_irq(1'b0),
+         .i_dat(cpu_read), .o_bs(cpu_bs), .o_we(cpu_we), .i_ack(ack), .i_irq(timer_irq),
          .i_halt(1'b0), .i_run(1'b0), .i_step(1'b0), .i_debug_reset(1'b0));
 generate if (WITH_UART) begin: io
 memory_io #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) dut(
@@ -35,7 +36,8 @@ memory_io #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) dut(
     .o_mem_to_cpu(cpu_read), .i_bs(request_bs), .i_we(request_we), .o_ack(ack),
     .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(cs_n),
     .ram_oe_n(oe_n), .ram_we_n(we_n), .o_output_data(output_data), .o_output_valid(output_valid), .i_output_ready(output_ready),
-    .i_input_data(input_data), .i_uart_status(uart_status), .o_input_read(input_read), .o_leds(leds));
+    .i_input_data(input_data), .i_uart_status(uart_status), .o_input_read(input_read), .o_leds(leds),
+    .o_timer_irq(timer_irq));
 assign controller_drive = dut.sram.drive;
 uart_buffers buffers(.i_clk(clk), .i_reset(reset), .i_rx_data(8'b0), .i_rx_valid(1'b0),
     .i_input_read(input_read), .o_input_data(input_data), .o_status(uart_status),
@@ -53,6 +55,7 @@ memory #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) dut(
 assign controller_drive = dut.drive;
 assign serial_tx = 1'b1;
 assign uart_busy = 1'b0;
+assign timer_irq = 1'b0;
 end endgenerate
 
 reg [15:0] sram [0:32767];
@@ -161,7 +164,7 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
         write_count = wr ? read_count : 0;
         if (wr && b == 3 && !a[0]) read_count = 0;
         if (WITH_UART) begin
-            ram_mask = {b[1] && (((a+1)&65535) < 65533), b[0] && (a < 65533)};
+            ram_mask = {b[1] && (((a+1)&65535) < 65520), b[0] && (a < 65520)};
             if (ram_mask != b) begin
                 read_count = ram_mask!=0 ? 1 : 0;
                 write_count = wr ? read_count : 0;
@@ -181,6 +184,8 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
             $fatal(1, "Wrong SRAM access count addr=%h bs=%b we=%b reads=%0d expected=%0d writes=%0d expected=%0d",
                    a, b, wr, reads-before_reads, read_count, writes-before_writes, write_count);
         if (WITH_UART && !wr) begin
+            if (b[0] && a>=16'hfff6 && a<=16'hfffc) expected[7:0]=0;
+            if (b[1] && a>=16'hfff5 && a<=16'hfffb) expected[15:8]=0;
             if(b[0] && a==16'hfffd) expected[7:0]={6'b0,expected_leds};
             if(b[1] && a==16'hfffc) expected[15:8]={6'b0,expected_leds};
             if(b[0] && a==16'hfffe) expected[7:0]={6'b0,uart_status};
@@ -197,8 +202,8 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
         #1;
         if (WITH_UART && leds !== expected_leds) $fatal(1, "LED register mismatch");
         if (wr) begin
-            if (b[0] && !(WITH_UART && a>=16'hfffd)) reference[a] = d[7:0];
-            if (b[1] && !(WITH_UART && ((a+1)&65535)>=65533)) reference[(a+1)&65535] = d[15:8];
+            if (b[0] && !(WITH_UART && a>=16'hfff0)) reference[a] = d[7:0];
+            if (b[1] && !(WITH_UART && ((a+1)&65535)>=65520)) reference[(a+1)&65535] = d[15:8];
         end
         if (sram[a>>1] !== expected_word(a>>1) ||
             sram[((a+1)&65535)>>1] !== expected_word(((a+1)&65535)>>1))

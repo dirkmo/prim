@@ -1,8 +1,10 @@
-// FFFD: LEDs (bits 1:0); FFFE: UART status (RO); FFFF: RX/TX data.
-// Other lanes retain SRAM word/unaligned/wrapping semantics. Effects occur at ACK.
+// FFF0..FFF5: timer; FFF6..FFFC: reserved; FFFD: LEDs; FFFE/FFFF: UART.
+// Other lanes retain SRAM word/unaligned/wrapping semantics.
+// LED/UART effects occur at ACK; cross-register timer words use two phases.
 module memory_io #(
     parameter integer READ_CYCLES = 2,
-    parameter integer WRITE_CYCLES = 2
+    parameter integer WRITE_CYCLES = 2,
+    parameter integer TIMER_DIVISOR = 50000
 )(
     input i_clk, i_reset,
     input [15:0] i_addr, i_cpu_to_mem,
@@ -17,12 +19,19 @@ module memory_io #(
     input [1:0] i_uart_status,
     output o_input_read,
     output reg [1:0] o_leds,
+    output o_timer_irq,
     output [15:0] ram_addr,
     inout [15:0] ram_data,
     output ram_cs_n, ram_oe_n, ram_we_n
 );
-wire mmio_low = i_bs[0] && (i_addr >= 16'hfffd);
-wire mmio_high = i_bs[1] && (i_addr >= 16'hfffc && i_addr <= 16'hfffe);
+wire [15:0] next_addr = i_addr + 16'd1;
+wire mmio_low = i_bs[0] && i_addr[15:4] == 12'hfff;
+wire mmio_high = i_bs[1] && next_addr[15:4] == 12'hfff;
+wire timer_low = mmio_low && i_addr[3:0] <= 5;
+wire timer_high = mmio_high && next_addr[3:0] <= 5;
+wire timer_access = timer_low || timer_high;
+wire timer_ack;
+wire [15:0] timer_read;
 wire [1:0] ram_mask = {i_bs[1] && !mmio_high, i_bs[0] && !mmio_low};
 wire mmio_access = mmio_low || mmio_high;
 wire ram_access = |ram_mask;
@@ -41,13 +50,26 @@ wire [15:0] ram_read, ram_result;
 // memory's BS=10 lane formatting is combinational. Once its request is
 // deasserted for the MMIO phase, its retained byte is again in bits 7:0.
 assign ram_read = !ram_turn && ram_mask == 2'b10 ? {ram_result[7:0],8'b0} : ram_result;
-wire complete = mmio_turn ? (!tx_access || i_output_ready) : (ram_turn && ram_ack);
+wire complete = mmio_turn ? (timer_access ? timer_ack : (!tx_access || i_output_ready)) : (ram_turn && ram_ack);
 assign o_ack = !i_reset && complete && (!split || second);
 assign o_output_data = rx_low ? i_cpu_to_mem[6:0] : i_cpu_to_mem[14:8];
 assign o_output_valid = !i_reset && mmio_turn && tx_access;
 assign o_input_read = o_ack && !i_we && (rx_low || rx_high);
-wire [7:0] low_read = mmio_low ? (led_low ? {6'b0,o_leds} : rx_low ? {1'b0,i_input_data} : {6'b0,i_uart_status}) : ram_read[7:0];
-wire [7:0] high_read = mmio_high ? (led_high ? {6'b0,o_leds} : rx_high ? {1'b0,i_input_data} : {6'b0,i_uart_status}) : ram_read[15:8];
+function [7:0] peripheral_read;
+    input [3:0] address;
+    input [1:0] leds, status;
+    input [6:0] data;
+    begin
+        case (address)
+            4'hd: peripheral_read = {6'b0,leds};
+            4'he: peripheral_read = {6'b0,status};
+            4'hf: peripheral_read = {1'b0,data};
+            default: peripheral_read = 0;
+        endcase
+    end
+endfunction
+wire [7:0] low_read = mmio_low ? (timer_low ? timer_read[7:0] : peripheral_read(i_addr[3:0], o_leds, i_uart_status, i_input_data)) : ram_read[7:0];
+wire [7:0] high_read = mmio_high ? (timer_high ? timer_read[15:8] : peripheral_read(next_addr[3:0], o_leds, i_uart_status, i_input_data)) : ram_read[15:8];
 assign o_mem_to_cpu = {i_bs[1] ? high_read : 8'b0, i_bs[0] ? low_read : 8'b0};
 always @(posedge i_clk) begin
     if (i_reset) o_leds <= 0;
@@ -58,6 +80,10 @@ always @(posedge i_clk) begin
     if (i_reset) second <= 0;
     else if (complete) second <= split && !second;
 end
+timer_mmio #(.DIVISOR(TIMER_DIVISOR)) timer_bus(
+    .i_clk(i_clk), .i_reset(i_reset), .i_cs(mmio_turn && timer_access),
+    .i_we(i_we), .i_addr(i_addr), .i_wdata(i_cpu_to_mem), .i_bs(i_bs),
+    .o_rdata(timer_read), .o_ack(timer_ack), .o_irq(o_timer_irq));
 memory #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) sram(
     .i_clk(i_clk), .i_reset(i_reset), .i_addr(i_addr), .i_cpu_to_mem(i_cpu_to_mem),
     .i_bs(ram_turn ? ram_mask : 2'b00), .i_we(i_we), .o_mem_to_cpu(ram_result), .o_ack(ram_ack),

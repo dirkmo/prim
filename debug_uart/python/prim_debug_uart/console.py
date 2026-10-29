@@ -20,7 +20,7 @@ pc                       Read halted CPU's PC
 status                   Show CPU halt/BREAK status
 uart-status              Show RX received / TX buffer free
 sram-check               Halt CPU and test/restore the scratch SRAM region
-load FILE [--skip-uart-mmio] [--verify] [--write-delay SECONDS] [--run]
+load FILE [--skip-mmio] [--verify] [--write-delay SECONDS] [--run]
                          Stream CPU image; optional readback/pacing; no automatic retry
 quit                     Close console; CPU state is unchanged
 """

@@ -25,13 +25,13 @@ See the [Lattice primitive reference](https://www.latticesemi.com/view_document?
 FILTER_RANGE=5: PFD=100 MHz, VCO=800 MHz, output=25 MHz. nextpnr explicitly
 constrains the oscillator to 100 MHz and derives the PLL output constraint as
 25 MHz. The fixed seed-1 build passes after routing with a reported maximum
-system clock of **50.12 MHz**. This is an internal timing report, not a supported
+system clock of **40.87 MHz** with the timer integrated. This is an internal timing report, not a supported
 operating-frequency claim above the selected 25 MHz.
 
 The UART pin assignment requested by the user is GPIO1 pin 33 for FPGA RX
 (ball G3) and GPIO1 pin 34 for FPGA TX (ball F3). Artifacts are in
 `build/olimex_ice40hx8k_evb/`, including the bitstream `prim.bin`. Utilization is
-3216/7680 logic cells (41.9%), one PLL, and no block RAM. The user has confirmed
+3414/7680 logic cells (44.5%), one PLL, and no block RAM. The user has confirmed
 the running bitstream, working debug communication and successful
 streaming loading on the board (29 October 2026).
 The build stops before icepack if timing fails; there is no timing override.
@@ -153,7 +153,7 @@ make uart-console
 Press **Ctrl+B**, then enter this local debug command:
 
 ```text
-load build/software/hello.bin --skip-uart-mmio --run
+load build/software/hello.bin --skip-mmio --run
 ```
 
 The loader halts/resets the CPU, streams the image into SRAM, counts write OKs
@@ -165,7 +165,7 @@ on the board. This is a functional check, not an external SRAM timing measuremen
 
 | Load option | Default | Meaning |
 |---|---|---|
-| `--skip-uart-mmio` | off | Explicitly omit included FFFD..FFFF LED/UART bytes; required for the full compiler image |
+| `--skip-mmio` | off | Explicitly omit included FFF0..FFFF system MMIO bytes; required for the full compiler image |
 | `--run` | off | Start only after the complete load and any requested verification succeed |
 | `--verify` | off | Read back words and an optional last byte, checking all loaded bytes |
 | `--write-delay SECONDS` | `0` | Pause after each transmitted word; e.g. `0.001` for 1 ms |
@@ -173,7 +173,7 @@ on the board. This is a functional check, not an external SRAM timing measuremen
 For example, with both pacing and readback:
 
 ```text
-load build/software/hello.bin --skip-uart-mmio --write-delay 0.001 --verify --run
+load build/software/hello.bin --skip-mmio --write-delay 0.001 --verify --run
 ```
 
 For one-shot use outside the console, the equivalent Make targets are
@@ -241,34 +241,42 @@ image. Wait for `Loaded ...` (or `Loaded and verified ...` with `--verify`)
 and, with `--run`, `CPU running`;
 the initial MMIO-skipping messages do not indicate completion.
 
-Images of 1..65533 bytes load directly. Compiler memory exports contain 65536
-bytes; those require the explicit `--skip-uart-mmio` option:
+Images of 1..65520 bytes load directly. Compiler memory exports contain 65536
+bytes; those require the explicit `--skip-mmio` option:
 
 ```sh
 python -m prim export -i build/src/base.tf.toml -s memory -o build/base.bin
-python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapter> load build/base.bin --skip-uart-mmio
+python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapter> load build/base.bin --skip-mmio
 # With an image that has executable entry code at PC 0000, optionally add --run.
 ```
 
-With a full 64-KiB image, the script reports the omitted image bytes at
-`0xFFFD`, `0xFFFE` and `0xFFFF`, writes only `0x0000..0xFFFC` (65533 bytes), optionally verifies them, and
-preserves the existing physical SRAM bytes behind these registers. The omitted
-bytes are not verified. This avoids reading UART status/consuming RX during
-verification and avoids UART TX writes during loading. An image of 65534 bytes
-already covers FFFD and also requires the option, omitting/reporting only that
-included MMIO address. No automatic trimming occurs without the option.
+With a full 64-KiB image, the script reports the omitted bytes at
+`0xFFF0..0xFFFF`, writes only `0x0000..0xFFEF` (65520 bytes), optionally verifies
+them, and preserves the physical SRAM bytes hidden behind MMIO. Timer registers,
+reserved bytes, LEDs and UART are all excluded. Any image exceeding 65520 bytes
+requires `--skip-mmio`.
+Only included MMIO bytes are reported; no trimming occurs without this option.
 Empty images and images larger than 65536 bytes remain errors. Invalid sizes
 and a missing skip option are rejected before connecting to the board.
 The base-library example demonstrates loading a compiler image; it does not
 install a runnable application entry at PC 0000.
 
-## CPU LED/UART registers
+## CPU timer/LED/UART registers
 
 | Address | Read | Write |
 |---|---|---|
+| FFF0..FFF1 | timer COUNT, 16 bits | set COUNT |
+| FFF2..FFF3 | timer COMPARE, 16 bits | set COMPARE |
+| FFF4..FFF5 | timer CSR: ENABLE/AUTO/INTEN in bits 0/1/2 | set control bits |
+| FFF6..FFFC | reserved, zero | ignored |
 | FFFD | LED1 in bit 0, LED2 in bit 1; other bits zero | set LEDs from bits 0/1; ignore bits 7:2 |
 | FFFE | bit 0 received, bit 1 TX buffer free; other bits zero | ignored |
 | FFFF | last received seven-bit byte; clear received on final bus ACK | enqueue seven-bit CPU TX byte; wait when full |
+
+The [timer reference](../../system/docs/timer_mmio.md) describes counting and
+word access behavior. The board uses `TIMER_DIVISOR=25000` at 25 MHz (1 ms per
+counting interval). Timer IRQ is connected to the CPU, which does not yet
+handle interrupts. CPU halt/debug reset leave the timer running.
 
 Reading an empty RX register returns the last byte, initially zero. New reception
 wins over simultaneous consumption. TX buffer free does not imply an idle UART
@@ -315,8 +323,8 @@ status
 uart-status
 sram-check
 load build/example.bin
-load build/program.bin --skip-uart-mmio --run
-load build/program.bin --skip-uart-mmio --verify --run
+load build/program.bin --skip-mmio --run
+load build/program.bin --skip-mmio --verify --run
 quit
 ```
 

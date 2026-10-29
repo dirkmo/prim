@@ -2,6 +2,8 @@
 
 Eigenständiges, synthetisierbares Verilog-Modul in `rtl/timer.v`, ohne
 Abhängigkeiten zum übrigen Repository. Es verwendet ausschließlich `i_clk`.
+Die konkrete Prim-Systemanbindung ist separat unter
+[`system/docs/timer_mmio.md`](../system/docs/timer_mmio.md) beschrieben.
 Der Instanziierungsparameter `DIVISOR` (Default: 50_000) legt die Anzahl der
 Systemtakte pro Zählfreigabe fest. Er muss eine positive Ganzzahl sein;
 `DIVISOR=1` zählt bei jedem Systemtakt. Es gibt keine zusätzliche Clock-Domain.

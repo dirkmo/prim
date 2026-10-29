@@ -101,7 +101,7 @@ class MakefileChecks(unittest.TestCase):
         actions = self.actions()
         self.assertEqual(len(actions), 1)
         self.assertEqual(actions[0]['kind'], 'host')
-        self.assertEqual(actions[0]['args'], ['--port', port, '--timeout', '2', 'load', str(binary), '--skip-uart-mmio', '--write-delay', '0'])
+        self.assertEqual(actions[0]['args'], ['--port', port, '--timeout', '2', 'load', str(binary), '--skip-mmio', '--write-delay', '0'])
         self.assertFalse((self.root / 'injected').exists())
         self.assertFalse((self.root / 'build/src').exists())
         self.make('upload', f'IMAGE={binary}', 'PORT=/dev/test', 'VERIFY=1')
@@ -128,7 +128,7 @@ class MakefileChecks(unittest.TestCase):
         action = self.actions()[-1]
         self.assertEqual(action['kind'], 'host')
         self.assertEqual(action['args'][-1], '--run')
-        self.assertIn('--skip-uart-mmio', action['args'])
+        self.assertIn('--skip-mmio', action['args'])
         self.assertIn('--verify', action['args'])
         self.assertEqual(action['args'][-3:-1], ['--write-delay', '0.001'])
         image = self.root / 'build/software/hello.bin'

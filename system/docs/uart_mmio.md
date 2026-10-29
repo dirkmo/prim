@@ -5,6 +5,8 @@ The reusable [`debug_uart_link`](../../debug_uart/rtl/debug_uart_link.v) exposes
 RX, TX and status signals without address decoding. Their buffer/handshake
 semantics are described in the
 [UART register-interface reference](../../debug_uart/docs/register_interface.md).
+The full system reserves FFF0..FFFF for MMIO, including the
+[timer at FFF0..FFF5](timer_mmio.md). FFF6..FFFC is reserved and reads zero.
 
 ## Byte addresses
 
@@ -16,7 +18,7 @@ semantics are described in the
 
 LED1 (M12) and LED2 (R16) turn on when their respective bit is 1. Full system
 reset clears the LED register; CPU-only reset preserves it. 0000 remains SRAM.
-SRAM cells behind FFFD..FFFF are not accessible through this map.
+SRAM cells behind FFF0..FFFF are not accessible through this map.
 CPU and debug master see the same register side effects. A debug read of FFFF
 also consumes RX; debug command q instead reads UART status without consuming
 input or acquiring the CPU bus. STATUS is not write-one-to-clear.
@@ -35,7 +37,7 @@ The table below applies to BS=11:
 
 | Starting byte address of 16-bit access | Low byte, bits 7:0 | High byte, bits 15:8 | Write effect |
 |---|---|---|---|
-| `FFFC` | SRAM[FFFC] | LEDs at FFFD | Write low byte to SRAM[FFFC]; set LEDs from high bits 1:0 |
+| `FFFC` | Reserved (zero) | LEDs at FFFD | Ignore low byte; set LEDs from high bits 1:0 |
 | `FFFD` | LEDs at FFFD | STATUS at FFFE | Set LEDs from low bits 1:0; ignore high status byte |
 | `FFFE` | STATUS at FFFE | RX DATA at FFFF | Ignore low status byte; enqueue high byte's low seven bits |
 | `FFFF` | RX DATA at FFFF | SRAM[0000], due to wraparound | Enqueue low byte's low seven bits; write all eight high-byte bits to SRAM[0000] |
@@ -47,7 +49,7 @@ the SRAM phase must not repeat that SRAM write. A word read at FFFE returns
 the pre-consumption STATUS value. A simultaneous new reception can leave the
 received flag set after ACK.
 
-All other byte/word transfers use the existing SRAM word operations, including
+Transfers below FFF0 use the existing SRAM word operations, including
 unaligned accesses and address wrapping. The table describes this system's
 adapter behavior, not an inherent feature of the UART module.
 
@@ -72,9 +74,10 @@ full system reset clears them.
 
 ## Image loading
 
-This system reserves FFFD, FFFE and FFFF. A full 64-KiB SRAM image therefore
-requires `load --skip-uart-mmio` in the board host tool. It reports each included
-MMIO address, writes/verifies only 0000..FFFC (65533 bytes for a full image),
+This system reserves FFF0..FFFF. A full 64-KiB SRAM image therefore
+requires `load --skip-mmio` in the board host tool.
+It reports each included MMIO address, writes/verifies only 0000..FFEF
+(65520 bytes for a full image),
 and leaves the physical SRAM bytes behind the registers unchanged. Readback
 through the mapped registers does not verify those hidden SRAM cells.
 

@@ -3,7 +3,7 @@
 `rtl/prim_system.v` composes the standalone CPU from `cpu/rtl/`, the serial
 subsystem from `debug_uart/rtl/`, and this component's bus mux and memory/MMIO
 controllers. `rtl/bus_mux.v` grants the debug bus only on confirmed CPU halt.
-`rtl/memory_io.v` owns the FFFD..FFFF LED/UART address mapping and produces a seven-bit
+`rtl/memory_io.v` owns the FFF0..FFFF timer/reserved/LED/UART address mapping and produces a seven-bit
 valid/ready output stream; it does not instantiate or configure a UART.
 `rtl/memory.v` implements the physical SRAM interface. The system wrapper adds
 no CPU instruction behavior.
@@ -168,7 +168,8 @@ word accesses, repeated accesses, self-modifying code, memory instructions with
 the return bit, and 257-cycle stalls.
 
 These handshake tests use the C++ memory model. The physical controller has
-separate tests described below; external interrupts remain outside the tests.
+separate tests described below. Timer IRQ wiring is tested in the system suite;
+the CPU does not yet implement interrupt handling.
 
 ## Whole-word SRAM controller
 
@@ -243,6 +244,11 @@ UTF-8 output is therefore not preserved on this FPGA UART.
 
 The [system UART MMIO reference](docs/uart_mmio.md) defines the byte addresses,
 word accesses and loader exclusions.
+The [timer MMIO reference](docs/timer_mmio.md) describes COUNT at FFF0, COMPARE
+at FFF2, CSR at FFF4 and the `TIMER_DIVISOR` system parameter. FFF6..FFFC is
+reserved (read zero, writes ignored). The timer's one-clock IRQ is wired to
+the CPU; CPU interrupt handling is still unimplemented. CPU halt/debug reset
+preserve the running timer; system reset clears it.
 
 FFFD controls LED1/LED2 in bits 0/1 (1 = on); reads return these bits with
 bits 7:2 zero. System reset turns both off; CPU-only reset preserves them.
@@ -256,7 +262,7 @@ taking the CPU bus, allowing input credit checks while the CPU runs.
 Word accesses combine MMIO and SRAM as little-endian lanes. Mixed operations
 finish their SRAM lane before the final MMIO phase. FFFE is status low/RX high
 on reads, ignored low/TX high on writes. FFFF combines RX or TX low with SRAM
-address zero high. FFFC combines SRAM low/LEDs high; FFFD combines LEDs low/status high. Normal RAM word operations
+address zero high. FFFC combines reserved low/LEDs high; FFFD combines LEDs low/status high. Normal RAM word operations
 remain whole-word requests. All RX-consume/TX-enqueue effects occur once at the final bus ACK. Tests cover all byte masks,
 unaligned/wrapped words, TX stalls, CPU echo with concurrent debug traffic,
 RESET-HALT preservation and MMIO/OK deadlock freedom.

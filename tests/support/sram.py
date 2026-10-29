@@ -34,7 +34,8 @@ class SramSimulation:
             self.simulators[read, write, delay] = build.icarus(output, tools=self.tools, top='tb_memory',
                 parameters={'READ_CYCLES': read, 'WRITE_CYCLES': write, 'SRAM_DELAY_NS': delay,
                             'WITH_UART': int(self.with_uart)},
-                sources=('tb_memory.sv', 'memory.v', 'prim.v', 'uart_tx.v', 'uart_buffers.v', 'memory_io.v'))
+                sources=('tb_memory.sv', 'memory.v', 'prim.v', 'uart_tx.v', 'uart_buffers.v',
+                         'memory_io.v', 'timer_mmio.v', 'timer.v'))
 
     def run(self, timing, *options):
         return run([self.tools.vvp, self.simulators[timing], *options], cwd=self.directory).stdout

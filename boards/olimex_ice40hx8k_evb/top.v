@@ -32,7 +32,8 @@ always @(posedge clk_sys) begin
 end
 wire [15:0] ram_addr;
 assign sram_addr = {2'b00, ram_addr};
-prim_system #(.CLK_HZ(25000000), .READ_CYCLES(3), .WRITE_CYCLES(3), .START_HALTED(1)) system(
+prim_system #(.CLK_HZ(25000000), .READ_CYCLES(3), .WRITE_CYCLES(3), .START_HALTED(1),
+              .TIMER_DIVISOR(25000)) system(
     .i_clk(clk_sys), .i_reset(reset), .i_rx(uart_rx), .o_tx(uart_tx), .o_leds(leds),
     .ram_addr(ram_addr), .ram_data(sram_data), .ram_cs_n(sram_cs_n),
     .ram_oe_n(sram_oe_n), .ram_we_n(sram_we_n));

@@ -29,21 +29,21 @@ def check_sram(client, report=print):
     report('SRAM byte/unaligned-word check passed; scratch bytes restored')
 
 
-def prepare_image(path, skip_uart_mmio=False, report=None):
+def prepare_image(path, skip_mmio=False, report=None):
     image = Path(path).read_bytes()
     if not 1 <= len(image) <= 65536:
         raise ValueError('Image must contain 1..65536 bytes')
-    if len(image) > 0xfffd:
-        if not skip_uart_mmio:
-            raise ValueError('Addresses 0xFFFD..0xFFFF are LED/UART MMIO; use --skip-uart-mmio to omit them explicitly')
-        for address in range(0xfffd, len(image)):
+    if len(image) > 0xfff0:
+        if not skip_mmio:
+            raise ValueError('Addresses 0xFFF0..0xFFFF are timer/reserved/LED/UART MMIO; use --skip-mmio to omit them explicitly')
+        for address in range(0xfff0, len(image)):
             message = (f'Skipping address 0x{address:04X} (image byte 0x{image[address]:02x}): '
-                       'LED/UART MMIO; not written or verified.')
+                       'system MMIO; not written or verified.')
             if report:
                 report(message)
             else:
                 print(message, file=sys.stderr)
-        image = image[:0xfffd]
+        image = image[:0xfff0]
     return image
 
 
@@ -64,8 +64,8 @@ def add_commands(parser, *, console=False):
     load.add_argument('--verify', action='store_true', help='Read back and verify the loaded bytes')
     load.add_argument('--write-delay', type=write_delay, default=0,
                       help='Minimum pause between streamed word writes in seconds (default: 0)')
-    load.add_argument('--skip-uart-mmio', action='store_true',
-                      help='Explicitly omit LED/UART MMIO at FFFD..FFFF from writing and verification')
+    load.add_argument('--skip-mmio', action='store_true',
+                      help='Explicitly omit timer/reserved/LED/UART MMIO at FFF0..FFFF from writing and verification')
     if console:
         from prim_debug_uart.console import HELP
         commands.add_parser('console', description=HELP, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -94,7 +94,7 @@ def dispatch(client, args, *, image=None, report=print, progress_report=None):
         check_sram(client, report)
     elif args.command == 'load':
         if image is None:
-            image = prepare_image(args.image, args.skip_uart_mmio, report)
+            image = prepare_image(args.image, args.skip_mmio, report)
         report('Resetting CPU and waiting for halt...')
         client.reset_halt()
         total = len(image)
@@ -197,7 +197,7 @@ def main(argv=None):
     image = None
     if args.command == 'load':
         try:
-            image = prepare_image(args.image, args.skip_uart_mmio)
+            image = prepare_image(args.image, args.skip_mmio)
         except ValueError as exc:
             parser.error(str(exc))
     if args.command == 'console':

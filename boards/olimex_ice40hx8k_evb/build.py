@@ -9,7 +9,8 @@ BOARD = Path(__file__).resolve().parent
 ROOT = BOARD.parents[1]
 SOURCES = [
     ROOT / 'cpu/rtl/prim.v',
-    *(ROOT / 'system/rtl' / name for name in ('memory.v', 'memory_io.v', 'bus_mux.v', 'prim_system.v')),
+    ROOT / 'timer/rtl/timer.v',
+    *(ROOT / 'system/rtl' / name for name in ('memory.v', 'memory_io.v', 'timer_mmio.v', 'bus_mux.v', 'prim_system.v')),
     *(ROOT / 'debug_uart/rtl' / name for name in
       ('uart_rx.v', 'uart_tx.v', 'uart_buffers.v', 'uart_arbiter.v', 'debug_uart.v', 'debug_uart_link.v')),
     BOARD / 'top.v',

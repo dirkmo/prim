@@ -4,7 +4,7 @@ from prim.assembler import PrimAsm
 from prim.isa import PrimOpcodes as Op
 
 class Memory(MemoryIf):
-    """64 KiB RAM; optionally map FFFD LEDs, FFFE status and FFFF UART data."""
+    """64 KiB RAM; optionally map system MMIO (timer clock is not simulated)."""
 
     def __init__(self, image, uart=False):
         self.data = bytearray([0xff]) * 65536
@@ -14,12 +14,17 @@ class Memory(MemoryIf):
         self.uart = uart
         self.tx = []
         self.leds = 0
+        self.timer = bytearray(6)
         self.status_samples = iter(())
 
     def read8(self, addr):
         addr &= 0xffff
         value = self.data[addr]
-        if self.uart and addr == 0xfffd:
+        if self.uart and 0xfff0 <= addr <= 0xfff5:
+            value = self.timer[addr - 0xfff0]
+        elif self.uart and 0xfff6 <= addr <= 0xfffc:
+            value = 0
+        elif self.uart and addr == 0xfffd:
             value = self.leds
         elif self.uart and addr == 0xfffe:
             value = next(self.status_samples, 2) & 2
@@ -33,7 +38,12 @@ class Memory(MemoryIf):
 
     def write8(self, addr, value):
         addr, value = addr & 0xffff, value & 0xff
-        if self.uart and addr == 0xfffd:
+        if self.uart and 0xfff0 <= addr <= 0xfff5:
+            offset = addr - 0xfff0
+            self.timer[offset] = value if offset < 4 else value & 7 if offset == 4 else 0
+        elif self.uart and 0xfff6 <= addr <= 0xfffc:
+            pass
+        elif self.uart and addr == 0xfffd:
             self.leds = value & 3
         elif self.uart and addr == 0xffff:
             self.tx.append(value & 0x7f)
