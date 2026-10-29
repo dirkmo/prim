@@ -12,13 +12,13 @@ CASES = [
     ),
     (
         'int_isr_return',
-        'int nop BREAK nop 2.ret',
-        {'pc': 0x0003, 'dsp': 1, 'rsp': 0, 'T': 0x0002, 'N': 0x0000, 'R': 0x0000},
+        '7 intad int nop BREAK nop 2.ret',
+        {'pc': 0x0006, 'dsp': 1, 'rsp': 0, 'T': 0x0002, 'N': 0x0000, 'R': 0x0000},
     ),
     (
         'int_preserves_data_stack',
-        '0x55 int BREAK 2.ret',
-        {'pc': 0x0004, 'dsp': 2, 'rsp': 0, 'T': 0x0002, 'N': 0x0055, 'R': 0x0000},
+        '7 intad 0x55 int BREAK 2.ret',
+        {'pc': 0x0007, 'dsp': 2, 'rsp': 0, 'T': 0x0002, 'N': 0x0055, 'R': 0x0000},
     ),
     (
         'jp',

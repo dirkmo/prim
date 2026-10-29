@@ -47,6 +47,9 @@ class PrimOpcodes:
     PUSH8  = 0x20
     PUSH = 0x21
     BREAK = 0x22
+    INTEI = 0x23
+    INTDI = 0x24
+    INTAD = 0x25
     SIMEND = 0xff
 
 

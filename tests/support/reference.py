@@ -98,7 +98,7 @@ def compare_records(image, records, max_steps=1000, exit_code=0, uart=False, mem
                     else -2 if op in (Op.JZ, Op.STORE, Op.BYTE_STORE)
                     else -1 if op in (Op.CALL, Op.JP, Op.AND, Op.OR, Op.XOR,
                                      Op.ADD, Op.SUB, Op.LTS, Op.LTU, Op.NIP,
-                                     Op.DROP, Op.TO_R) else 0)
+                                     Op.DROP, Op.TO_R, Op.INTAD) else 0)
         rs_delta = (1 if op in (Op.CALL, Op.INT, Op.TO_R)
                     else -1 if op in (Op.FROM_R, Op.RDROP) else 0)
         ds_depth = min(16, max(0, ds_depth + ds_delta))

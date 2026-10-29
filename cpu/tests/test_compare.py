@@ -105,13 +105,13 @@ class ComparisonChecks(VerilatorHarness, unittest.TestCase):
         for asm in ('5 call.ret BREAK nop 2.ret',
                     '4 jp.ret BREAK 0xff',
                     '0 6 jz.ret BREAK 0xfe', '1 6 jz.ret BREAK 0xfe',
-                    'int.ret BREAK nop nop 2.ret'):
+                    '7 intad int.ret BREAK nop nop 2.ret'):
             with self.subTest(asm=asm):
                 self.run_asm(asm)
 
     def test_return_after_regular_operations(self):
         operations = ('nop and or xor not sr srw sl slw + - < <u swap over '
-                      'dup nip rot -rot drop carry @ c@ ! c! 7 0x1234').split()
+                      'dup nip rot -rot drop carry @ c@ ! c! intei intdi intad 7 0x1234').split()
         for op in operations:
             # The fall-through path must not run; return skips it to BREAK.
             body = f'0xaaaa 0xbbbb 0x1000 {op}.ret 0xdead BREAK'

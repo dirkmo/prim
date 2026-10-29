@@ -19,9 +19,6 @@ class Prim:
     # stack sizes
     DS_SIZE = 16
     RS_SIZE = 16
-    # isr
-    ISR_ADDR = 4
-
     LOG_LEVEL_MUTE = 0
     LOG_LEVEL_WARN = 1
     LOG_LEVEL_INF = 2
@@ -40,6 +37,9 @@ class Prim:
         self._dsp = 0
         self._rsp = 0
         self._carry = 0
+        self._int_enable = False
+        self._int_addr = 0
+        self._irq_pending = False
 
     def setLogLevel(self, level):
         self._log_level = level
@@ -205,7 +205,13 @@ class Prim:
         elif ir == PrimOpcodes.INT:
             retbit = 0
             self.rpush(self._pc)
-            self._pc = Prim.ISR_ADDR
+            self._pc = self._int_addr
+        elif ir == PrimOpcodes.INTEI:
+            self._int_enable = True
+        elif ir == PrimOpcodes.INTDI:
+            self._int_enable = False
+        elif ir == PrimOpcodes.INTAD:
+            self._int_addr = self.dpop()
         elif ir == PrimOpcodes.FETCH:
             self.dpush(self.read16(self.dpop()))
         elif ir == PrimOpcodes.BYTE_FETCH:
@@ -223,11 +229,19 @@ class Prim:
         if retbit:
             self._pc = self.rpop()
 
+    def request_irq(self):
+        """Latch a synchronous IRQ pulse; repeated requests coalesce."""
+        self._irq_pending = True
+
     def step(self):
         ir = self.fetch8()
         if ir in (PrimOpcodes.BREAK, PrimOpcodes.SIMEND):
             return ir
         self.execute(ir)
+        if self._int_enable and self._irq_pending:
+            self._irq_pending = False
+            self.rpush(self._pc)
+            self._pc = self._int_addr
         return ir & 0x7f
 
     def status(self):

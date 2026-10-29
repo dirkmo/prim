@@ -169,7 +169,7 @@ the return bit, and 257-cycle stalls.
 
 These handshake tests use the C++ memory model. The physical controller has
 separate tests described below. Timer IRQ wiring is tested in the system suite;
-the CPU does not yet implement interrupt handling.
+CPU interrupt semantics and tests are described in [cpu/README.md](../cpu/README.md).
 
 ## Whole-word SRAM controller
 
@@ -247,8 +247,8 @@ word accesses and loader exclusions.
 The [timer MMIO reference](docs/timer_mmio.md) describes COUNT at FFF0, COMPARE
 at FFF2, CSR at FFF4 and the `TIMER_DIVISOR` system parameter. FFF6..FFFC is
 reserved (read zero, writes ignored). The timer's one-clock IRQ is wired to
-the CPU; CPU interrupt handling is still unimplemented. CPU halt/debug reset
-preserve the running timer; system reset clears it.
+the CPU; configure its ISR with INTAD before enabling interrupts with INTEI.
+CPU halt/debug reset preserve the running timer; system reset clears it.
 
 FFFD controls LED1/LED2 in bits 0/1 (1 = on); reads return these bits with
 bits 7:2 zero. System reset turns both off; CPU-only reset preserves them.

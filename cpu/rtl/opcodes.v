@@ -36,4 +36,7 @@ localparam
     OP_PUSH8 = 7'h20,
     OP_PUSH = 7'h21,
     OP_BREAK = 7'h22,
+    OP_INTEI = 7'h23,
+    OP_INTDI = 7'h24,
+    OP_INTAD = 7'h25,
     OP_SIMEND = 7'hff;

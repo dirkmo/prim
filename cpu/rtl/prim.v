@@ -22,8 +22,6 @@ parameter
     DSS /* verilator public */ = 4, // data stack size: 2^DSS
     RSS /* verilator public */ = 4; // return stack size: 2^RSS
 
-localparam [15:0] ISR_ADDR = 16'h0004;
-
 `include "opcodes.v"
 
 // stack pointers
@@ -52,7 +50,8 @@ wire w_popop;
 localparam
     PHASE_FETCH = 2'h0,
     PHASE_MEMWAIT = 2'h1,
-    PHASE_EXECUTE = 2'h2;
+    PHASE_EXECUTE = 2'h2,
+    PHASE_IRQ = 2'h3;
 
 reg [1:0] r_phase /* verilator public */;
 wire w_phase_fetch = (r_phase == PHASE_FETCH) && !o_halted;
@@ -61,6 +60,34 @@ wire w_phase_memop = (r_phase == PHASE_MEMWAIT);
 
 wire cpu_reset = i_reset || i_debug_reset;
 reg stepping;
+reg r_int_enable /* verilator public */;
+reg [15:0] r_int_addr /* verilator public */;
+reg r_irq_pending /* verilator public */;
+// IRQ is a synchronous pulse. Masking and HALT retain coalesced requests.
+wire w_stop = i_halt || stepping || (r_ir[6:0] == OP_BREAK);
+wire w_int_enabled_next = (r_ir[6:0] == OP_INTEI) ? 1'b1 :
+                          (r_ir[6:0] == OP_INTDI) ? 1'b0 : r_int_enable;
+wire w_take_irq = w_phase_execute && !o_halted && !w_stop &&
+                  w_int_enabled_next && (r_irq_pending || i_irq);
+wire w_phase_irq = (r_phase == PHASE_IRQ) && !o_halted;
+always @(posedge i_clk) begin
+    if (cpu_reset) begin
+        r_int_enable <= 0;
+        r_int_addr <= 0;
+        r_irq_pending <= 0;
+    end else begin
+        // Consume the old request; retain a simultaneous new pulse if an old
+        // request was pending. A directly accepted pulse is consumed once.
+        if (w_take_irq)
+            r_irq_pending <= r_irq_pending && i_irq;
+        else
+            r_irq_pending <= r_irq_pending || i_irq;
+        if (w_phase_execute && !o_halted) begin
+            r_int_enable <= w_int_enabled_next;
+            if (r_ir[6:0] == OP_INTAD) r_int_addr <= T;
+        end
+    end
+end
 assign o_pc = r_pc;
 always @(posedge i_clk) begin
     o_break_event <= 0;
@@ -75,7 +102,7 @@ always @(posedge i_clk) begin
             if (i_run) o_break_reason <= 0;
         end
     end else if (w_phase_execute) begin
-        if (i_halt || stepping || r_ir[6:0] == OP_BREAK) begin
+        if (w_stop) begin
             o_halted <= 1;
             stepping <= 0;
         end
@@ -132,8 +159,8 @@ always @(*) begin
 end
 
 // r_phase
-// Strict 3-phase flow:
-//   FETCH -> (optional MEMWAIT) -> EXECUTE -> FETCH
+// Instruction flow with optional interrupt entry after retirement:
+//   FETCH -> (optional MEMWAIT) -> EXECUTE -> (optional IRQ) -> FETCH
 // The phase transition is driven together with the fetch latch so the decision
 // to enter MEMWAIT is based on the opcode that was just fetched, not a stale
 // value from a separate combinational path.
@@ -157,6 +184,8 @@ begin
                 if (i_ack)
                     r_phase <= PHASE_EXECUTE;
             PHASE_EXECUTE:
+                r_phase <= w_take_irq ? PHASE_IRQ : PHASE_FETCH;
+            PHASE_IRQ:
                 r_phase <= PHASE_FETCH;
             default:
                 r_phase <= PHASE_FETCH;
@@ -193,7 +222,7 @@ begin
             OP_CALL: r_pc_next = T;
             OP_JP: r_pc_next = T;
             OP_JZ: r_pc_next = (N==16'h0) ? T : pc_plus_1;
-            OP_INT: r_pc_next = ISR_ADDR;
+            OP_INT: r_pc_next = r_int_addr;
             OP_PUSH8: r_pc_next = r_pc + 2;
             OP_PUSH:  r_pc_next = r_pc + 3;
             default: r_pc_next = pc_plus_1;
@@ -205,6 +234,8 @@ always @(posedge i_clk)
 begin
     if (cpu_reset) begin
         r_pc <= 16'h0000;
+    end else if (w_phase_irq) begin
+        r_pc <= r_int_addr;
     end else if (w_phase_execute) begin
         // PC is advanced only after the instruction has fully completed its
         // fetch / memory wait sequence. This keeps immediate operands and memory
@@ -250,7 +281,7 @@ always @(*) begin
         OP_PUSH, OP_PUSH8, OP_DUP, OP_OVER, OP_CARRY, OP_FROM_R:
             dsp_next = w_dsp_inc1;
         OP_DROP, OP_NIP, OP_CALL, OP_JP, OP_AND, OP_OR, OP_XOR,
-        OP_ADD, OP_SUB, OP_LTS, OP_LTU, OP_TO_R:
+        OP_ADD, OP_SUB, OP_LTS, OP_LTU, OP_TO_R, OP_INTAD:
             dsp_next = w_dsp_dec1;
         OP_STORE, OP_BYTE_STORE, OP_JZ: dsp_next = w_dsp_dec2;
         default: ;
@@ -264,7 +295,7 @@ always @(*) begin
     case (r_ir[6:0])
         OP_PUSH, OP_FETCH: t_next = r_mem_data;
         OP_PUSH8, OP_BYTE_FETCH: t_next = {8'h00, r_mem_data[7:0]};
-        OP_SWAP, OP_OVER, OP_NROT, OP_DROP, OP_CALL, OP_JP, OP_TO_R:
+        OP_SWAP, OP_OVER, OP_NROT, OP_DROP, OP_CALL, OP_JP, OP_TO_R, OP_INTAD:
             t_next = N;
         OP_ROT, OP_STORE, OP_BYTE_STORE, OP_JZ: t_next = w_stack_third;
         OP_FROM_R: t_next = R;
@@ -276,7 +307,7 @@ always @(*) begin
         OP_PUSH, OP_PUSH8, OP_CARRY, OP_DUP, OP_SWAP, OP_OVER, OP_ROT, OP_FROM_R:
             n_next = T;
         OP_NIP, OP_NROT, OP_DROP, OP_CALL, OP_JP, OP_AND, OP_OR, OP_XOR,
-        OP_ADD, OP_SUB, OP_LTS, OP_LTU, OP_TO_R:
+        OP_ADD, OP_SUB, OP_LTS, OP_LTU, OP_TO_R, OP_INTAD:
             n_next = w_stack_third;
         OP_JZ, OP_STORE, OP_BYTE_STORE: n_next = w_stack_fourth;
         default: ;
@@ -312,8 +343,12 @@ end
 // needs no array write. Popped cells remain unused and are not cleared.
 always @(posedge i_clk)
 begin
-    if (!cpu_reset && w_phase_execute && w_rpush && !w_return)
-        r_rstack[w_rsp_inc1] <= (r_ir[6:0] == OP_TO_R) ? T : pc_plus_1;
+    if (!cpu_reset) begin
+        if (w_phase_irq)
+            r_rstack[w_rsp_inc1] <= r_pc;
+        else if (w_phase_execute && w_rpush && !w_return)
+            r_rstack[w_rsp_inc1] <= (r_ir[6:0] == OP_TO_R) ? T : pc_plus_1;
+    end
 end
 
 // data stack pointer
@@ -329,6 +364,8 @@ always @(posedge i_clk)
 begin
     if (cpu_reset) begin
         r_rsp <= 'h00;
+    end else if (w_phase_irq) begin
+        r_rsp <= w_rsp_inc1;
     end else if (w_phase_execute) begin
         r_rsp <= w_rsp_next;
     end

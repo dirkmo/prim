@@ -19,6 +19,15 @@ class DebugCpuChecks(unittest.TestCase):
                                   top='tb_uart_cpu', sources=['tb_uart_cpu.sv', 'prim.v'])
             self.assertIn('PASS', run([self.tools.vvp, binary], timeout=30).stdout)
 
+    def test_interrupts(self):
+        for case in range(13):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                binary = build.icarus(Path(directory) / 'irq-cpu', tools=self.tools,
+                                      top='tb_interrupt_cpu',
+                                      sources=['tb_interrupt_cpu.sv', 'prim.v'],
+                                      parameters={'CASE': case})
+                self.assertIn('PASS', run([self.tools.vvp, binary], timeout=30).stdout)
+
     def test_waits(self):
         with tempfile.TemporaryDirectory() as directory:
             binary = build.icarus(Path(directory) / 'cpu', tools=self.tools,

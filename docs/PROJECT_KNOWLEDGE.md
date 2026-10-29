@@ -87,8 +87,10 @@ UART status while CPU runs, without taking the CPU bus. SRAM debug ownership
 still requires confirmed CPU halt. Details are in [DRAFT.md](DRAFT.md).
 The standalone timer in timer/ maps COUNT at FFF0, COMPARE at FFF2 and CSR at
 FFF4 through system/rtl/timer_mmio.v. FFF6..FFFC is reserved; the full MMIO
-range is FFF0..FFFF. Timer IRQ is wired directly to Prim.i_irq, but the CPU
-still does not handle interrupts. TIMER_DIVISOR is a system instantiation
+range is FFF0..FFFF. Timer IRQ is wired directly to Prim.i_irq. The CPU latches pending pulses and
+accepts interrupts at instruction boundaries when enabled with INTEI. INTDI masks
+acceptance; INTAD pops the ISR address into a reset-to-zero register. Software INT
+uses the same register. See cpu/README.md for entry, nesting and debug semantics. TIMER_DIVISOR is a system instantiation
 parameter (default 50000); the 25-MHz board selects 25000 for 1-ms intervals.
 CPU halt/debug reset preserve the running timer; system reset clears it.
 
