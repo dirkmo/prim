@@ -458,3 +458,11 @@ Existing `compile_document`, `snapshot` and `load_library` mapping APIs and
 command-line flags remain available. For new code, `tokenize_document` and
 `compile_tokens` provide typed input/output. Run the artifact regressions with
 `python src/test_artifacts.py`; the TokenForth CTest entry includes them too.
+
+## Board wrapper
+
+The optional `START_HALTED` parameter (default 0) starts the CPU halted on
+system reset, before its first fetch. `o_halted` exposes confirmed CPU halt to
+board-level indicators. The [Olimex Rev.B wrapper](../boards/olimex_ice40hx8k_evb/README.md)
+sets START_HALTED=1 and supplies power-up/button reset; default pin-independent
+system behavior remains unchanged.

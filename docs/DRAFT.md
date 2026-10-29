@@ -112,7 +112,10 @@ fort. RESET-HALT fordert zunächst Halt an, um einen laufenden SRAM-Auftrag
 ordnungsgemäß abzuschließen, setzt dann nur die CPU zurück und hält sie bei
 0x0000. UART, Debug-Controller, dessen Pointer und SRAM werden nicht zurückgesetzt.
 Ein externer `i_reset` setzt dagegen das gesamte System einschließlich UART
-und Debug-Controller zurück; die SRAM-Zellen besitzen auch dann keinen Reset.
+und Debug-Controller zurück. Mit `prim_system.START_HALTED=1` bleibt die CPU
+dabei vor dem ersten Fetch bei PC 0000 angehalten (Standardwert 0 startet
+die Ausführung). `o_halted` meldet den bestätigten Halt an den Board-Wrapper;
+die SRAM-Zellen besitzen auch dann keinen Reset.
 
 BREAK (auch mit gesetztem Return-Bit) verändert keinen Stack und hat keinen
 Return-Effekt. Der PC rückt auf die Folgeinstruktion vor. BREAK setzt den
@@ -233,3 +236,9 @@ yosys -p 'read_verilog -Icpu/rtl cpu/rtl/prim.v system/rtl/memory.v debug_uart/r
 Dies ist ein Synthesevergleich, keine Platzierungs-, Routing- oder Frequenzzusage.
 Board-Pins, Hardware-UART, reale Metastabilitäts-/Baudtoleranz und SRAM-Timing
 nach Place-and-Route wurden nicht auf physischer Hardware geprüft.
+
+Der Olimex-Rev.B-Board-Wrapper verwendet nach ausdrücklicher Freigabe eine
+FPGA-PLL von 100 auf 25 MHz. CPU, UART und SRAM nutzen gemeinsam diesen globalen
+Systemtakt; der UART-Teiler ist dort 217. Die PLL-Ausnahme ist auf den Board-Wrapper
+beschränkt. Reset wird erst nach synchronisiertem PLL-Lock freigegeben.
+Siehe [Board-Flow](../boards/olimex_ice40hx8k_evb/README.md).

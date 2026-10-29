@@ -2,12 +2,14 @@
 module prim_system #(
     parameter integer CLK_HZ = 100000000,
     parameter integer READ_CYCLES = 2,
-    parameter integer WRITE_CYCLES = 2
+    parameter integer WRITE_CYCLES = 2,
+    parameter integer START_HALTED = 0
 )(
     input i_clk,
     input i_reset,
     input i_rx,
     output o_tx,
+    output o_halted,
     output [15:0] ram_addr,
     inout [15:0] ram_data,
     output ram_cs_n,
@@ -19,6 +21,7 @@ wire [1:0] bs, cpu_bs, debug_bs;
 wire we, ack, cpu_we, debug_we, halted, halt_request, run_request, step_request, reset_cpu;
 wire break_reason, break_event, cpu_ack, debug_ack, output_valid, output_ready;
 wire [6:0] output_data;
+assign o_halted = halted;
 bus_mux bus(.i_halted(halted), .i_cpu_addr(cpu_addr), .i_cpu_data(cpu_data),
     .i_cpu_bs(cpu_bs), .i_cpu_we(cpu_we), .i_debug_addr(debug_addr), .i_debug_data(debug_data),
     .i_debug_bs(debug_bs), .i_debug_we(debug_we), .o_addr(addr), .o_data(to_mem),
@@ -26,7 +29,7 @@ bus_mux bus(.i_halted(halted), .i_cpu_addr(cpu_addr), .i_cpu_data(cpu_data),
 Prim cpu(.i_clk(i_clk), .i_reset(i_reset), .o_addr(cpu_addr), .o_dat(cpu_data),
          .i_dat(from_mem), .o_bs(cpu_bs), .o_we(cpu_we), .i_ack(cpu_ack), .i_irq(1'b0),
          .i_halt(halt_request), .i_run(run_request), .i_step(step_request),
-         .i_debug_reset(reset_cpu), .o_halted(halted), .o_pc(pc),
+         .i_debug_reset(reset_cpu || (i_reset && START_HALTED)), .o_halted(halted), .o_pc(pc),
          .o_break_reason(break_reason), .o_break_event(break_event));
 debug_uart_link #(.CLK_HZ(CLK_HZ)) uart(.i_clk(i_clk), .i_reset(i_reset), .i_rx(i_rx), .o_tx(o_tx),
     .i_output_data(output_data), .i_output_valid(output_valid), .o_output_ready(output_ready),

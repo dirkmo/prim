@@ -129,3 +129,5 @@ if(YOSYS_EXECUTABLE)
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         VERBATIM)
 endif()
+
+include(boards/olimex_ice40hx8k_evb/cmake.cmake)

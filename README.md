@@ -402,3 +402,8 @@ The FPGA now supports a shared 115200-baud CPU/debug UART with hardware
 HALT/STEP/BREAK and a small Python host client. CPU output on that link is
 limited to seven bits. See [the implemented protocol](docs/DRAFT.md) for commands,
 examples, tests and the iCE40 resource comparison.
+
+The [Olimex Rev.B board flow](boards/olimex_ice40hx8k_evb/README.md) adds explicit
+`fpga_bitstream` and `fpga_program` targets plus UART first-contact tools. The
+initial 100 MHz timing check failed; the approved board PLL now supplies a
+25 MHz system clock and the routed build passes timing. The debug UART uses GPIO1 pin 33 (FPGA RX) and pin 34 (FPGA TX).

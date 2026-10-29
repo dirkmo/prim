@@ -138,10 +138,14 @@ The end-to-end TokenForth test freshly builds bootstrap, opcode words and
 timing configurations. Results are stored under `build/tokenforth/`.
 The Python regressions are included in this CTest suite.
 
-Last verified: all twelve CTest suites passed, including debug RTL and host checks.
+Last verified: all thirteen CTest suites passed, including debug RTL and host checks.
 This establishes simulation behavior; SRAM can now be loaded through debug
-writes. Board pin assignments, timing after place-and-route and physical UART output remain
-open. Default clock and timing parameters are not a verified board configuration.
+writes. Rev.B board pins and build/program targets are prepared under
+`boards/olimex_ice40hx8k_evb/`. The initial 100 MHz board timing failed (about
+52–54 MHz achieved); the user-approved board PLL now supplies a 25 MHz global
+system clock. The routed build passes at 25 MHz (54.72 MHz reported maximum);
+The debug UART uses GPIO1.33 (FPGA RX/G3) and GPIO1.34 (FPGA TX/F3).
+Physical UART/SRAM verification remains open. Default clock and timing parameters are not a verified board configuration.
 
 Semicolon return folding is implemented for simple word endings, including
 generated PUSH instructions. Immediate/control-flow/data cases retain NOP.RET.

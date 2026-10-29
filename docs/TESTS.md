@@ -186,7 +186,7 @@ Stacks geprüft. Der erzeugte Einstieg muss ein kleines Programm aufrufen,
 das mit 42 auf dem Datenstack hält. CLI-Tests vergleichen TokenForth-Export,
 Standarddateinamen und den weiterhin voreingestellten Verilog-Export.
 
-## 4. Die zwölf CTest-Suites
+## 4. Die dreizehn CTest-Suites
 
 Die Registrierung steht in [CMakeLists.txt](../CMakeLists.txt).
 
@@ -203,9 +203,10 @@ Die Registrierung steht in [CMakeLists.txt](../CMakeLists.txt).
 | `debug_uart_host_checks` | `debug_uart/tests/test_host.py` | Hostprotokoll, BREAK, Kanaltrennung und Timeouts |
 | `cpu_debug_checks` | `cpu/tests/test_debug_cpu.py` | HALT/STEP mit Speicherwartezyklen und BREAK.RET |
 | `uart_component_checks` | `debug_uart/tests/test_rtl.py` | UART RX/TX, Parser ohne CPU/System und TX-Arbitrierung |
+| `olimex_board_checks` | `boards/olimex_ice40hx8k_evb/test_board.py` | Power-up-Halt, Tasterreset und Build-Abbruch bei Timingfehlern |
 | `test_harness_checks` | `test_support.py` | Importnebenwirkungen, Prozessfehler, Timeouts, Traces und unabhängige Optionen |
 
-Es handelt sich um Suites, nicht um zwölf einzelne Testfälle. Suites enthalten
+Es handelt sich um Suites, nicht um dreizehn einzelne Testfälle. Suites enthalten
 mehrere Tests und teils viele Unterfälle. Mit `-N` lässt sich die Registrierung
 anzeigen; mit `-R` eine Auswahl ausführen:
 
@@ -413,6 +414,6 @@ werden; die Dokumentation hält keine dauerhaft gültige Testanzahl fest.
 `python debug_uart/tests/test_rtl.py` prüft RX/TX, Parser und TX-Arbiter ohne
 CPU- oder Systeminstanzen. `python debug_uart/tests/test_host.py` prüft die
 Hostbibliothek. CTest integriert alle vier Einstiegspunkte; insgesamt gibt es
-zwölf Suiten. Details zum implementierten Protokoll und zum `synth_ice40`-Vergleich
+dreizehn Suiten einschließlich des Olimex-Boardtests. Details zum implementierten Protokoll und zum `synth_ice40`-Vergleich
 stehen in [DRAFT.md](DRAFT.md). FPGA-CPU-Ausgaben werden als sieben Nutzbits
 verglichen; UTF-8 wird auf dieser Leitung nicht erhalten.
