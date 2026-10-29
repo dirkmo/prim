@@ -7,9 +7,9 @@ import sys
 import threading
 
 HELP = """CPU mode: keys go to the seven-bit CPU channel (no local echo).
-Ctrl+J       Open local debug prompt
+Ctrl+B       Open local debug prompt
 Ctrl+D       Quit the console in either mode; CPU state is unchanged
-Ctrl+V key   Send the next byte literally (including Ctrl+J or Ctrl+D)
+Ctrl+V key   Send the next byte literally (including Ctrl+B or Ctrl+D)
 Debug mode: Enter submits a command; empty Enter returns to CPU mode.
 help / ?                 Show all commands and keybindings
 halt / stop              Halt CPU at an instruction boundary
@@ -20,8 +20,8 @@ pc                       Read halted CPU's PC
 status                   Show CPU halt/BREAK status
 uart-status              Show RX received / TX buffer free
 sram-check               Halt CPU and test/restore the scratch SRAM region
-load FILE [--skip-uart-mmio] [--run]
-                         Load/verify CPU image; explicitly skip FFFE/FFFF
+load FILE [--skip-uart-mmio] [--verify] [--write-delay SECONDS] [--run]
+                         Stream CPU image; optional readback/pacing; no automatic retry
 quit                     Close console; CPU state is unchanged
 """
 
@@ -37,6 +37,7 @@ class Console:
         self.line = bytearray()
         self._partial = ''
         self._shown_partial = False
+        self._progress_active = False
         self._lock = threading.RLock()
         self._commands = queue.Queue()
 
@@ -46,6 +47,9 @@ class Console:
 
     def cpu_output(self, data):
         with self._lock:
+            if self._progress_active:
+                self.output.write('\r\x1b[2K')
+                self._progress_active = False
             text = data.decode('ascii')
             if self.debug_mode:
                 self.output.write('\r\x1b[2K')
@@ -72,14 +76,28 @@ class Console:
 
     def message(self, text):
         with self._lock:
+            self._progress_active = False
             self._partial = ''
             self._shown_partial = False
             self.output.write('\r\x1b[2K' + text.replace('\n', '\r\n') + '\r\n')
             self._prompt()
             self.output.flush()
 
+    def progress(self, text):
+        """Replace the current status line without adding a newline."""
+        with self._lock:
+            self._progress_active = bool(text)
+            self.output.write('\r\x1b[2K' + text)
+            if not text:
+                self._prompt()
+            self.output.flush()
+
     def key(self, byte):
         with self._lock:
+            if self._progress_active:
+                self._progress_active = False
+                self.output.write('\r\x1b[2K')
+                self._prompt()
             if self.quoted:
                 self.quoted = False
                 self.session.queue_cpu(bytes([byte]))
@@ -87,7 +105,7 @@ class Console:
                 self.running = False
             elif byte == 22:
                 self.quoted = True
-            elif byte == 10 and not self.debug_mode:
+            elif byte == 2 and not self.debug_mode:
                 self.debug_mode = True
                 self.output.write('\r\n')
                 self._prompt()
@@ -144,13 +162,13 @@ class Console:
         previous = termios.tcgetattr(fd)
         worker = threading.Thread(target=self._worker, daemon=True)
         try:
-            # Raw mode distinguishes Enter (CR) from Ctrl+J (LF), and handles Ctrl+D locally.
+            # Raw mode distinguishes Enter (CR) from Ctrl+B (STX), and handles Ctrl+D locally.
             tty.setraw(fd)
             settings = termios.tcgetattr(fd)
             settings[1] = previous[1]  # Preserve normal terminal output processing.
             termios.tcsetattr(fd, termios.TCSANOW, settings)
             worker.start()
-            self.message('Prim UART console: Ctrl+J debug, Ctrl+D quit; Ctrl+J then help for commands')
+            self.message('Prim UART console: Ctrl+B debug, Ctrl+D quit; Ctrl+B then help for commands')
             while self.running:
                 if session.error:
                     raise OSError(f'UART session failed: {session.error}')

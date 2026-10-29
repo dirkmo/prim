@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 import sys
 import shlex
+import time
+import math
 
 from prim_debug_uart import DebugUART
 
@@ -45,13 +47,23 @@ def prepare_image(path, skip_uart_mmio=False, report=None):
     return image
 
 
+def write_delay(value):
+    delay = float(value)
+    if not math.isfinite(delay) or delay < 0:
+        raise argparse.ArgumentTypeError('write delay must be finite and nonnegative (seconds)')
+    return delay
+
+
 def add_commands(parser, *, console=False):
     commands = parser.add_subparsers(dest='command', required=True)
     for command in ('status', 'uart-status', 'sram-check', 'halt', 'run', 'step', 'reset-halt', 'pc'):
         commands.add_parser(command)
     load = commands.add_parser('load')
     load.add_argument('image', type=Path, help='Raw CPU machine-code image, not token bytes')
-    load.add_argument('--run', action='store_true', help='Run only after verified loading')
+    load.add_argument('--run', action='store_true', help='Run after loading (and verification if requested)')
+    load.add_argument('--verify', action='store_true', help='Read back and verify the loaded bytes')
+    load.add_argument('--write-delay', type=write_delay, default=0,
+                      help='Minimum pause between streamed word writes in seconds (default: 0)')
     load.add_argument('--skip-uart-mmio', action='store_true',
                       help='Explicitly omit FFFE/FFFF from writing and verification')
     if console:
@@ -59,7 +71,7 @@ def add_commands(parser, *, console=False):
         commands.add_parser('console', description=HELP, formatter_class=argparse.RawDescriptionHelpFormatter)
 
 
-def dispatch(client, args, *, image=None, report=print):
+def dispatch(client, args, *, image=None, report=print, progress_report=None):
     if args.command == 'status':
         status = client.status()
         report(f'halted={status.halted} break={status.break_reason}')
@@ -83,13 +95,63 @@ def dispatch(client, args, *, image=None, report=print):
     elif args.command == 'load':
         if image is None:
             image = prepare_image(args.image, args.skip_uart_mmio, report)
+        report('Resetting CPU and waiting for halt...')
         client.reset_halt()
-        client.write_bytes(image, address=0)
-        for address, expected in enumerate(image):
-            actual = client.read8(address)
-            if actual != expected:
-                raise RuntimeError(f'Verify failed at 0x{address:04x}: {actual:02x} != {expected:02x}')
-        report(f'Loaded and verified {len(image)} bytes; PC=0x{client.read_pc():04x}')
+        total = len(image)
+        last_report = 0.0
+        line_width = 0
+
+        def inline_progress(text):
+            nonlocal line_width
+            print('\r' + text.ljust(line_width), end='', flush=True)
+            if not text:
+                print('\r', end='', flush=True)
+            line_width = len(text)
+
+        if progress_report is None:
+            progress_report = inline_progress
+
+        def progress(phase, done):
+            nonlocal last_report
+            now = time.monotonic()
+            if done in (0, total) or now - last_report >= 1:
+                progress_report(f'{phase}: {done}/{total} bytes ({100 * done // total}%)')
+                last_report = now
+
+        word_bytes = total & ~1
+
+        def values():
+            for address in range(0, word_bytes, 2):
+                yield image[address] | (image[address + 1] << 8)
+
+        try:
+            progress('Writing', 0)
+            if word_bytes:
+                client.write_words_stream(values(), address=0, write_delay=args.write_delay,
+                                          on_progress=lambda words: progress('Writing', words * 2))
+            if total != word_bytes:
+                client.write_bytes(image[word_bytes:], address=word_bytes)
+                progress('Writing', total)
+            if args.verify:
+                progress('Verifying', 0)
+                client.set_address(0)
+                for address in range(0, word_bytes, 2):
+                    actual = client.read16()
+                    for offset in range(2):
+                        expected = image[address + offset]
+                        byte = (actual >> (8 * offset)) & 255
+                        if byte != expected:
+                            raise RuntimeError(f'Verify failed at 0x{address + offset:04x}: {byte:02x} != {expected:02x}')
+                    progress('Verifying', address + 2)
+                if total != word_bytes:
+                    actual = client.read8()
+                    if actual != image[-1]:
+                        raise RuntimeError(f'Verify failed at 0x{word_bytes:04x}: {actual:02x} != {image[-1]:02x}')
+                    progress('Verifying', total)
+        finally:
+            progress_report('')
+        label = 'Loaded and verified' if args.verify else 'Loaded'
+        report(f'{label} {total} bytes; PC=0x{client.read_pc():04x}')
         if args.run:
             client.run()
             report('CPU running')
@@ -115,7 +177,7 @@ def run_console(args):
         if tokens and tokens[0] == 'stop':
             tokens[0] = 'halt'
         command = parser.parse_args(tokens)
-        dispatch(session, command, report=ui.message)
+        dispatch(session, command, report=ui.message, progress_report=ui.progress)
 
     ui = Console(execute)
     session = UARTSession.connect(args.port, timeout=args.timeout,

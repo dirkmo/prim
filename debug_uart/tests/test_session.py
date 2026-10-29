@@ -81,6 +81,38 @@ class Transport:
 
 
 class SessionChecks(unittest.TestCase):
+    def test_stream_keeps_reader_live_and_blocks_credit_polls(self):
+        transport = Transport()
+        with UARTSession(transport) as session:
+            errors = []
+            def load():
+                try:
+                    session.write_words_stream([0x4321, 0xdcba], 0)
+                except Exception as exc:
+                    errors.append(exc)
+            thread = threading.Thread(target=load)
+            thread.start()
+            until(lambda: '1234abcd' in transport.commands)
+            session.queue_cpu(b'x')
+            transport.emit(b'live' + wire('B'))
+            until(lambda: session.output == b'live' and session.break_events == 1)
+            self.assertNotIn('q', transport.commands)
+            transport.emit(wire('KK'))
+            thread.join(timeout=2)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(errors, [])
+            until(lambda: 'q' in transport.commands)
+
+    def test_stream_failure_invalidates_session_without_retry(self):
+        transport = Transport()
+        with UARTSession(transport, timeout=0.02) as session:
+            with self.assertRaisesRegex(RuntimeError, '0/2 word OKs'):
+                session.write_words_stream([1, 2], 0)
+            self.assertIsNotNone(session.error)
+            self.assertEqual(transport.commands.count('W'), 1)
+            with self.assertRaises(OSError):
+                session.status()
+
     def test_idle_output_break_and_debug_with_full_rx(self):
         transport = Transport()
         output, events = bytearray(), []
@@ -141,21 +173,50 @@ class SessionChecks(unittest.TestCase):
         ui.key(13)  # Enter in CPU mode.
         ui.session.queue_cpu.assert_called_once_with(b'\r')
         ui.session.reset_mock()
-        ui.key(10)
+        ui.key(11)  # Ctrl+K is now an ordinary CPU byte.
+        ui.session.queue_cpu.assert_called_once_with(b'\x0b')
+        self.assertFalse(ui.debug_mode)
+        ui.session.reset_mock()
+        ui.key(2)
         self.assertTrue(ui.debug_mode)
         for byte in b'help\r':
             ui.key(byte)
         self.assertIn('uart-status', ui.output.getvalue())
         self.assertIn('Ctrl+D', ui.output.getvalue())
+        self.assertIn('Ctrl+B', ui.output.getvalue())
+        ui.key(22); ui.key(2)
+        ui.session.queue_cpu.assert_called_once_with(b'\x02')
+        ui.session.reset_mock()
         ui.key(22); ui.key(4)
         ui.session.queue_cpu.assert_called_once_with(b'\x04')
         self.assertTrue(ui.running)
         ui.key(13)
         self.assertFalse(ui.debug_mode)
-        ui.key(10); ui.key(4)
+        ui.key(2); ui.key(4)
         self.assertFalse(ui.running)
         for command in ('halt', 'stop', 'step', 'reset-halt', 'run', 'pc', 'status', 'load', 'quit'):
             self.assertIn(command, HELP)
+
+    def test_progress_replaces_line_and_preserves_prompt_and_cpu_output(self):
+        ui = Console(lambda text: None, output=io.StringIO())
+        ui.session = Mock()
+        ui.key(2)
+        ui.line.extend(b'status')
+        ui.output.seek(0); ui.output.truncate()
+        ui.progress('Writing: 0/10')
+        ui.progress('Writing: 2/10')
+        self.assertEqual(ui.output.getvalue(), '\r\x1b[2KWriting: 0/10\r\x1b[2KWriting: 2/10')
+        ui.cpu_output(b'hello\n')
+        self.assertIn('hello\r\n', ui.output.getvalue())
+        self.assertTrue(ui.output.getvalue().endswith('debug> status'))
+        ui.progress('Verifying: 10/10')
+        ui.message('Loaded')
+        self.assertTrue(ui.output.getvalue().endswith('Loaded\r\ndebug> status'))
+        ui.progress('Writing: 0/10')
+        ui.key(ord('!'))
+        self.assertTrue(ui.output.getvalue().endswith('debug> status!'))
+        ui.progress('')
+        self.assertTrue(ui.output.getvalue().endswith('debug> status!'))
 
     def test_pty_debug_prompt_keeps_rx_live_and_restores_terminal(self):
         master, slave = pty.openpty()
@@ -167,7 +228,7 @@ class SessionChecks(unittest.TestCase):
         try:
             thread.start()
             until(lambda: 'Prim UART console' in ui.output.getvalue())
-            os.write(master, b'\n')
+            os.write(master, b'\x02')
             until(lambda: ui.debug_mode)
             transport.emit(b'live CPU\r\n' + wire('B'))
             until(lambda: '[BREAK]' in ui.output.getvalue())

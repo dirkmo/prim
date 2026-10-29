@@ -78,6 +78,15 @@ class UARTSession(DebugUART):
                 raise OSError('UART session is closed')
             super()._send(text)
 
+    def write_words_stream(self, *args, **kwargs):
+        with self._operation_lock:
+            try:
+                return super().write_words_stream(*args, **kwargs)
+            except Exception as exc:
+                # Pending replies cannot be associated with later commands safely.
+                self._fail(exc)
+                raise
+
     def queue_cpu(self, data):
         data = bytes(data)
         if any(byte & 128 for byte in data):

@@ -172,6 +172,23 @@ und Export neu einplanen; danach wird tatsächlich gebaut. Der Clean-Test legt
 zusätzliche TOML-Dateien im Ausgabe- und Quellverzeichnis an. Diese müssen
 bleiben, während die benannten Ausgaben entfernt werden.
 
+`tests/test_makefile.py` prüft zusätzlich das Toplevel-Makefile in temporären
+Projektkopien. Es baut echte Softwareabbilder, prüft inkrementelle und parallele
+Builds, Quellwechsel bei gleichem Dateinamen sowie lokale Einstellungen. UART
+und Programmer sind Testprogramme: Upload darf keinen Flash-Build auslösen,
+`load-run` darf nach einem Compilerfehler kein altes Abbild laden, und `make -n`
+darf keine Hardwareaktion ausführen. Weitere Fälle prüfen Shell-Quoting,
+fehlende Portangaben, Ressourcenberichte und sichere Bereinigung einschließlich
+Symlinks. Aufruf: `make test-makefile`; enthalten in `make test` und CTest.
+
+Die Streaming-Ladetests senden Wörter ohne Warten auf einzelne Bestätigungen,
+zählen OKs und prüfen fehlende/falsche Antworten ohne automatischen Neustart.
+Sessiontests prüfen gleichzeitig CPU-Ausgabe/BREAK und ausgeschlossene
+RX-Credit-Abfragen. `system/tests/tb_stream_load.sv` prüft lückenlose SRAM-Writes
+einschließlich OK-Zahl, Pointer und Speicherinhalt mit UART-Teilern 8 und 217.
+Das ist ein Simulationsnachweis für die gewählten SRAM-Wartezyklen, keine
+Garantie für beliebig lange Buswartezeiten oder eine Hardwaremessung.
+
 ### Generierte Opcodewörter und Bootstrap
 
 `test_isa.py` erzeugt die Opcodequelle in einem temporären Verzeichnis und
@@ -186,7 +203,7 @@ Stacks geprüft. Der erzeugte Einstieg muss ein kleines Programm aufrufen,
 das mit 42 auf dem Datenstack hält. CLI-Tests vergleichen TokenForth-Export,
 Standarddateinamen und den weiterhin voreingestellten Verilog-Export.
 
-## 4. Die fünfzehn CTest-Suites
+## 4. Die sechzehn CTest-Suites
 
 Die Registrierung steht in [CMakeLists.txt](../CMakeLists.txt).
 
@@ -204,11 +221,12 @@ Die Registrierung steht in [CMakeLists.txt](../CMakeLists.txt).
 | `cpu_debug_checks` | `cpu/tests/test_debug_cpu.py` | HALT/STEP mit Speicherwartezyklen und BREAK.RET |
 | `uart_session_checks` | `debug_uart/tests/test_session.py` | Gleichzeitige Kanäle, RX-Flusskontrolle, ununterbrochener Schreibmodus, PTY-Keybindings und Terminal-Restore |
 | `uart_component_checks` | `debug_uart/tests/test_rtl.py` | UART RX/TX, Parser ohne CPU/System und TX-Arbitrierung |
-| `olimex_host_checks` | `boards/olimex_ice40hx8k_evb/test_host.py` | CPU-Steuerkommandos, 64-KiB-Loader, explizites Überspringen von FFFE/FFFF, Verifikationsfehler und Portfreigabe |
+| `olimex_host_checks` | `boards/olimex_ice40hx8k_evb/test_host.py` | CPU-Steuerkommandos, 64-KiB-Wort-Loader, ungerade Restbytes, optionale Wort-Verifikation, explizites Überspringen von FFFE/FFFF, Verifikationsfehler und Portfreigabe |
 | `olimex_board_checks` | `boards/olimex_ice40hx8k_evb/test_board.py` | Power-up-Halt, Tasterreset und Build-Abbruch bei Timingfehlern |
 | `test_harness_checks` | `test_support.py` | Importnebenwirkungen, Prozessfehler, Timeouts, Traces und unabhängige Optionen |
+| `top_makefile_checks` | `tests/test_makefile.py` | Build-Pipeline, inkrementelle Übersetzung, paralleler Build, lokale Einstellungen, sichere Bereinigung und Hardwareaufrufe mit Testprogrammen |
 
-Es handelt sich um Suites, nicht um fünfzehn einzelne Testfälle. Suites enthalten
+Es handelt sich um Suites, nicht um sechzehn einzelne Testfälle. Suites enthalten
 mehrere Tests und teils viele Unterfälle. Mit `-N` lässt sich die Registrierung
 anzeigen; mit `-R` eine Auswahl ausführen:
 
@@ -416,6 +434,6 @@ werden; die Dokumentation hält keine dauerhaft gültige Testanzahl fest.
 `python debug_uart/tests/test_rtl.py` prüft RX/TX, Parser und TX-Arbiter ohne
 CPU- oder Systeminstanzen. `python debug_uart/tests/test_host.py` prüft die
 Hostbibliothek. CTest integriert alle vier Einstiegspunkte; insgesamt gibt es
-fünfzehn Suiten einschließlich der Olimex-Board- und Host-CLI-Tests. Details zum implementierten Protokoll und zum `synth_ice40`-Vergleich
+sechzehn Suiten einschließlich der Olimex-Board-, Host-CLI- und Toplevel-Makefile-Tests. Details zum implementierten Protokoll und zum `synth_ice40`-Vergleich
 stehen in [DRAFT.md](DRAFT.md). FPGA-CPU-Ausgaben werden als sieben Nutzbits
 verglichen; UTF-8 wird auf dieser Leitung nicht erhalten.

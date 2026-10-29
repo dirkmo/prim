@@ -1,0 +1,18 @@
+# Copy to config.local.mk; command-line assignments override these settings.
+PORT = /dev/serial/by-id/your-uart-adapter
+PROGRAM = src/examples/hello.cf
+JOBS = 2
+TIMEOUT = 2
+
+# Explicitly opt in when uploading a compiler's full 64-KiB memory image:
+# SKIP_UART_MMIO = 1
+
+# Optional readback after loading (disabled by default):
+# VERIFY = 1
+
+# Minimum pause between streamed word writes, in seconds (default 0):
+# WRITE_DELAY = 0.001
+
+# Programmer selection is independent of the UART PORT:
+# ICEPROG_DEVICE = s:0x0403:0x6010:your-programmer-serial
+# ICEPROG_INTERFACE = A

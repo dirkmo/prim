@@ -25,6 +25,8 @@ class Client:
         self.transport = SimpleNamespace(close=Mock())
         self.calls = []
         self.reads = []
+        self.word_reads = []
+        self.pointer = 0
         self.corrupt_address = None
 
     def status(self):
@@ -64,7 +66,34 @@ class Client:
         self.calls.append(('write_bytes', address, values))
         self.memory[address:address + len(values)] = values
 
-    def read8(self, address):
+    def write_words(self, values, address=None):
+        values = tuple(values)
+        data = b''.join(value.to_bytes(2, 'little') for value in values)
+        if address is None or address + len(data) > 0xfffe:
+            raise AssertionError('word write touched UART MMIO')
+        self.calls.append(('write_words', address, values))
+        self.memory[address:address + len(data)] = data
+
+    def write_words_stream(self, values, address=None, *, write_delay=0, on_progress=None):
+        self.stream_delay = write_delay
+        values = tuple(values)
+        self.write_words(values, address)
+        for done in range(1, len(values) + 1):
+            if on_progress:
+                on_progress(done)
+
+    def set_address(self, address):
+        self.calls.append(('set_address', address))
+        self.pointer = address
+
+    def read16(self):
+        self.word_reads.append(self.pointer)
+        return self.read8() | (self.read8() << 8)
+
+    def read8(self, address=None):
+        if address is None:
+            address = self.pointer
+        self.pointer = address + 1
         if address >= 0xfffe:
             raise AssertionError('skipped image byte was verified')
         self.reads.append(address)
@@ -124,12 +153,20 @@ class HostChecks(unittest.TestCase):
             image = Path(directory) / 'image.bin'
             image.write_bytes(data)
             client = Client()
-            output, errors = self.invoke(client, 'load', str(image), '--skip-uart-mmio', '--run')
+            output, errors = self.invoke(client, 'load', str(image), '--skip-uart-mmio', '--verify', '--run')
             self.assertEqual(client.memory[:0xfffe], data[:0xfffe])
             self.assertEqual(client.memory[0xfffe:], b'\x5a\x5a')
             self.assertEqual(client.reads, list(range(0xfffe)))
-            self.assertEqual(client.calls, ['reset_halt', ('write_bytes', 0, data[:-2]), 'read_pc', 'run'])
+            words = tuple(int.from_bytes(data[i:i+2], 'little') for i in range(0, 0xfffe, 2))
+            self.assertEqual(client.calls, ['reset_halt', ('write_words', 0, words), ('set_address', 0), 'read_pc', 'run'])
+            self.assertEqual(client.word_reads, list(range(0, 0xfffe, 2)))
             self.assertIn('65534 bytes', output)
+            self.assertIn('Writing: 0/65534 bytes (0%)', output)
+            self.assertIn('Writing: 65534/65534 bytes (100%)', output)
+            self.assertIn('Verifying: 0/65534 bytes (0%)', output)
+            self.assertIn('Verifying: 65534/65534 bytes (100%)', output)
+            self.assertLess(output.index('Writing: 65534/65534'), output.index('Verifying: 0/65534'))
+            self.assertLess(output.index('Verifying: 65534/65534'), output.index('CPU running'))
             self.assertIn('0xFFFF', errors)
             self.assertIn('0xff', errors)
             self.assertIn('not written or verified', errors)
@@ -147,7 +184,9 @@ class HostChecks(unittest.TestCase):
                     self.assertNotIn('run', client.calls)
                     self.assertEqual(client.memory[:size], data)
                     self.assertEqual(client.memory[size:], bytes([0x5a]) * (65536 - size))
-                    self.assertEqual(client.reads, list(range(size)))
+                    self.assertEqual(client.reads, [])
+                    self.assertNotIn('Verifying:', output)
+                    self.assertNotIn('Loaded and verified', output)
                     self.assertFalse(errors)
 
     def test_partial_mmio_image_skips_only_fffe(self):
@@ -159,7 +198,7 @@ class HostChecks(unittest.TestCase):
             self.assertIn('0xFFFE', errors)
             self.assertNotIn('0xFFFF', errors)
             self.assertEqual(client.memory[0xfffe:], b'\x5a\x5a')
-            self.assertEqual(len(client.reads), 65534)
+            self.assertEqual(client.reads, [])
             with patch.object(host.DebugUART, 'connect') as connect, redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit):
                     host.main(['--port', '/dev/test-uart', 'load', str(image)])
@@ -172,7 +211,7 @@ class HostChecks(unittest.TestCase):
                 host.main(['console', '--help'])
         self.assertEqual(raised.exception.code, 0)
         connect.assert_not_called()
-        for text in ('Ctrl+J', 'Ctrl+D', 'Ctrl+V', 'uart-status', 'reset-halt', 'load', '--skip-uart-mmio'):
+        for text in ('Ctrl+B', 'Ctrl+D', 'Ctrl+V', 'uart-status', 'reset-halt', 'load', '--skip-uart-mmio', '--verify'):
             self.assertIn(text, output.getvalue())
 
     def test_invalid_sizes_rejected_even_with_skip(self):
@@ -194,10 +233,92 @@ class HostChecks(unittest.TestCase):
             client = Client()
             client.corrupt_address = 1
             with self.assertRaisesRegex(RuntimeError, 'Verify failed at 0x0001'):
-                self.invoke(client, 'load', str(image), '--run')
+                self.invoke(client, 'load', str(image), '--verify', '--run')
             self.assertNotIn('run', client.calls)
             self.assertTrue(client.halted)
             client.transport.close.assert_called_once()
+
+    def test_word_order_odd_tail_and_optional_verification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / 'odd.bin'
+            image.write_bytes(b'\x12\x34\xab\xcd\xef')
+            for verify in (False, True):
+                with self.subTest(verify=verify):
+                    client = Client()
+                    self.invoke(client, 'load', str(image), '--run', *(['--verify'] if verify else []))
+                    self.assertEqual(client.calls[:3], ['reset_halt',
+                        ('write_words', 0, (0x3412, 0xcdab)), ('write_bytes', 4, b'\xef')])
+                    self.assertEqual(client.memory[:6], b'\x12\x34\xab\xcd\xef\x5a')
+                    self.assertEqual(client.word_reads, [0, 2] if verify else [])
+                    self.assertEqual(client.reads, list(range(5)) if verify else [])
+                    self.assertEqual(client.calls[-1], 'run')
+
+    def test_verification_detects_each_lane_and_odd_tail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / 'odd.bin'
+            image.write_bytes(b'abc')
+            for address in range(3):
+                with self.subTest(address=address):
+                    client = Client()
+                    client.corrupt_address = address
+                    with self.assertRaisesRegex(RuntimeError, f'Verify failed at 0x{address:04x}'):
+                        self.invoke(client, 'load', str(image), '--verify', '--run')
+                    self.assertNotIn('run', client.calls)
+
+    def test_single_byte_verification_does_not_read_neighbor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / 'one.bin'
+            image.write_bytes(b'\xab')
+            client = Client()
+            self.invoke(client, 'load', str(image), '--verify')
+            self.assertEqual(client.calls[:2], ['reset_halt', ('write_bytes', 0, b'\xab')])
+            self.assertEqual(client.word_reads, [])
+            self.assertEqual(client.reads, [0])
+            self.assertEqual(client.memory[1], 0x5a)
+
+    def test_progress_has_no_newlines_and_clears_on_error(self):
+        parser = host.ConsoleParser()
+        host.add_commands(parser)
+        args = parser.parse_args(['load', 'unused.bin', '--verify'])
+        for corrupt in (None, 0):
+            with self.subTest(corrupt=corrupt):
+                client = Client()
+                client.corrupt_address = corrupt
+                messages, progress = [], []
+                if corrupt is None:
+                    host.dispatch(client, args, image=b'ab', report=messages.append, progress_report=progress.append)
+                    self.assertTrue(messages[-1].startswith('Loaded and verified'))
+                else:
+                    with self.assertRaises(RuntimeError):
+                        host.dispatch(client, args, image=b'ab', report=messages.append, progress_report=progress.append)
+                self.assertEqual(progress[0], 'Writing: 0/2 bytes (0%)')
+                self.assertEqual(progress[-1], '')
+                self.assertTrue(all('\n' not in line and '\r' not in line for line in progress))
+
+    def test_stream_failure_reports_error_without_reset_retry_or_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / 'image.bin'
+            image.write_bytes(b'abcd')
+            client = Client()
+            client.write_words_stream = Mock(side_effect=RuntimeError('missing word OK'))
+            with self.assertRaisesRegex(RuntimeError, 'missing word OK'):
+                self.invoke(client, 'load', str(image), '--run')
+            self.assertEqual(client.calls, ['reset_halt'])
+            client.write_words_stream.assert_called_once()
+            client.transport.close.assert_called_once()
+
+    def test_write_delay_cli_validation_and_forwarding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / 'image.bin'
+            image.write_bytes(b'ab')
+            client = Client()
+            self.invoke(client, 'load', str(image), '--write-delay', '0.001')
+            self.assertEqual(client.stream_delay, 0.001)
+            for value in ('-1', 'nan', 'inf'):
+                with patch.object(host.DebugUART, 'connect') as connect, redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        host.main(['--port', 'unused', 'load', str(image), '--write-delay', value])
+                    connect.assert_not_called()
 
 
 if __name__ == '__main__':

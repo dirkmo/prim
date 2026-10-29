@@ -141,7 +141,7 @@ The end-to-end TokenForth test freshly builds bootstrap, opcode words and
 timing configurations. Results are stored under `build/tokenforth/`.
 The Python regressions are included in this CTest suite.
 
-CTest registers fifteen suites. The debug-host, board and board-host suites
+CTest registers sixteen suites. The debug-host, board and board-host suites
 passed after the board host CLI extension.
 This establishes simulation behavior; SRAM can now be loaded through debug
 writes. Rev.B board pins and build/program targets are prepared under
@@ -149,7 +149,9 @@ writes. Rev.B board pins and build/program targets are prepared under
 52–54 MHz achieved); the user-approved board PLL now supplies a 25 MHz global
 system clock. The routed build passes at 25 MHz (50.12 MHz reported maximum);
 The debug UART uses GPIO1.33 (FPGA RX/G3) and GPIO1.34 (FPGA TX/F3).
-Physical UART/SRAM verification remains open. Default clock and timing parameters are not a verified board configuration.
+The user has confirmed functional board operation and streaming SRAM loading.
+External SRAM timing margins remain unmeasured; the reusable system's default
+clock/timing parameters are not the board's selected 25-MHz configuration.
 
 Semicolon return folding is implemented for simple word endings, including
 generated PUSH instructions. Immediate/control-flow/data cases retain NOP.RET.
@@ -168,12 +170,20 @@ The following items have been proposed and are not yet implemented:
 These proposals do not authorize implementation.
 
 The Olimex host.py provides halt/run/step/reset-halt/pc/uart-status and a POSIX
-console. Ctrl+J opens local commands, Ctrl+D exits without changing CPU state,
+console. Ctrl+B opens local commands, Ctrl+D exits without changing CPU state,
 Ctrl+V quotes the next CPU byte; help/? and console --help list all commands.
 One continuous reader owns RX and dispatches CPU output, debug replies and BREAK.
 The input sender uses q credits and never holds the debug lock while RX is full.
 Full debug operations (including loads) exclude q polls. The loader requires
 --skip-uart-mmio for any image covering FFFE/FFFF, reports/skips only included
-MMIO addresses and verifies 65534 SRAM bytes for a full image. --run follows
-successful verification only. The board rebuild passes 25 MHz timing and uses
-3216/7680 logic cells, one PLL and no block RAM. Physical hardware is unverified.
+MMIO addresses and writes 65534 SRAM bytes for a full image using persistent
+word writes (an odd tail uses a byte write). SRAM words are sent ahead with
+concurrent OK counting; --write-delay optionally paces them. Failure is reported
+without automatic retry or RUN, and invalidates the connection. The user can
+reconnect and reload manually. Readback is optional via --verify
+and uses word reads with automatic pointer increment. --run follows successful
+loading and any requested verification. The board rebuild passes 25 MHz timing and uses
+3216/7680 logic cells, one PLL and no block RAM. On 29 October 2026 the user
+confirmed the running board bitstream, LED2 heartbeat, debug communication and
+successful streaming loading. This does not establish external SRAM timing
+margins or exercise every loader option on hardware.

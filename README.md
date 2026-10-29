@@ -6,6 +6,8 @@
   Tokenformat, Compiler, CPU, Debugger und RTL mit Diagrammen.
 - [Tests und Verifikation](docs/TESTS.md): Testdateien, Aufrufe, Prüfkriterien
   und Grenzen der Abdeckung.
+- [Build und Board-Workflow](docs/BUILD.md): Toplevel-Makefile, Programme,
+  Bitstream, Flashen, UART-Konsole und lokale Einstellungen.
 - [Project knowledge](docs/PROJECT_KNOWLEDGE.md): kompakter Projektüberblick.
 - [Decisions](docs/DECISIONS.md): Anforderungen und technische Entscheidungen.
 
@@ -52,16 +54,21 @@ Each command accepts `--help`.
 
 The old `src/*.py` tool wrappers have been removed. Use, for example,
 `python -m prim compile ...` instead of `python src/tokenforth.py ...`.
-The Makefile uses the package CLI in the active environment. Library imports
+The `src/Makefile` uses the package CLI in the active environment. Library imports
 use `prim.cpu`, `prim.tokenizer`, `prim.compiler`, etc. The RTL tests import the installed package without modifying `sys.path`.
 See [system/README.md](system/README.md) for simulation and end-to-end tests.
 
 ## Build and debug
 
+The root Makefile provides software builds, FPGA bitstreams/programming, UART
+loading/control/console, tests and resource reports. Start with `make help`;
+see [the workflow guide](docs/BUILD.md) for configuration and examples.
+`make setup` also installs pyserial for the hardware host tools.
+
 From the repository root, with the environment activated:
 
 ```sh
-make -C src
+make software
 pip install -e '.[debug]'  # once, for the terminal debugger
 prim debug -i build/src/interpreter.tf.toml -u build/src/test.tok
 ```
@@ -83,7 +90,7 @@ prim opcodes --format tokenforth build/src/opcodes.cf
 library can install their reset entry with `[ 'main boot! ]`, which writes
 `PUSH16 main; CALL; BREAK` at address zero and preserves the current HERE.
 
-The Makefile writes generated files to `build/src/`. Convenient targets such
+The `src/Makefile` writes generated files to `build/src/`. Convenient targets such
 as `make -C src base.tf.toml` still work. Override `OUT_DIR` to choose another
 output directory, or `PYTHON` to choose the interpreter. Changes to Python tool
 modules, `pyproject.toml` or the Makefile trigger a rebuild. `make -C src clean`
@@ -109,8 +116,8 @@ replays the initial `-u` file bytes and discards later interactive UART input
 and temporary step-over breakpoints. User breakpoints remain set.
 UART input is optional: without `-u`, the queue starts empty. An explicitly
 specified unreadable input file is reported as an error. The debugger models
-RX status at `0xfffe` and RX data at `0xffff`; this RX extension is not part
-of the current TX-only RTL system.
+RX status at `0xfffe` and RX data at `0xffff`. The FPGA uses the same register
+addresses and restricts UART data to seven bits; see the system register map.
 
 Python checks (debugger tests require the debug extra):
 
@@ -425,8 +432,16 @@ The board host now provides a duplex CPU/debug console:
 .venv/bin/python boards/olimex_ice40hx8k_evb/host.py --port "$PORT" console
 ```
 
-Ctrl+J opens local debug commands, Ctrl+D exits, Ctrl+V quotes the next CPU byte.
+Ctrl+B opens local debug commands, Ctrl+D exits, Ctrl+V quotes the next CPU byte.
 Use `help` in the prompt or `console --help` for all controls. RX at FFFF retains
 the last byte; FFFE reports received/TX-buffer-free. Debug and CPU traffic share
 one continuously open connection. Images covering FFFE/FFFF require the explicit
 `load --skip-uart-mmio` option; both register addresses are omitted and reported.
+
+Build Hello with `make image PROGRAM=src/examples/hello.cf`, then enter
+`load build/software/hello.bin --skip-uart-mmio --run` in the console's Ctrl+B
+prompt. SRAM word writes stream continuously while OKs are counted. Optional
+`--verify` enables readback; `--write-delay 0.001` adds a 1-ms pause per word.
+Errors are reported without automatic retries. Progress updates replace the
+same line. The user has confirmed streaming loading on the Rev.B board; see
+the [Hello quick start](boards/olimex_ice40hx8k_evb/README.md#hello-quick-start).

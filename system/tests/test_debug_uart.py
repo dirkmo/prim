@@ -27,6 +27,13 @@ class DebugChecks(unittest.TestCase):
                       'memory.v', 'memory_io.v', 'uart_tx.v', 'uart_rx.v', 'uart_buffers.v',
                       'debug_uart.v', 'bus_mux.v', 'uart_arbiter.v', 'debug_uart_link.v'])
 
+    def test_streaming_sram_loader(self):
+        for divider in (8, 217):
+            with self.subTest(divider=divider):
+                self.simulate('tb_stream_load', ['tb_stream_load.sv', 'prim_system.v', 'prim.v',
+                              'memory.v', 'memory_io.v', 'uart_tx.v', 'uart_rx.v', 'uart_buffers.v',
+                              'debug_uart.v', 'bus_mux.v', 'uart_arbiter.v', 'debug_uart_link.v'], {'DIV': divider})
+
     def test_system(self):
         for divider in (8, 9, 17):
             with self.subTest(divider=divider):

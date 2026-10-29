@@ -31,7 +31,9 @@ operating-frequency claim above the selected 25 MHz.
 The UART pin assignment requested by the user is GPIO1 pin 33 for FPGA RX
 (ball G3) and GPIO1 pin 34 for FPGA TX (ball F3). Artifacts are in
 `build/olimex_ice40hx8k_evb/`, including the bitstream `prim.bin`. Utilization is
-3216/7680 logic cells (41.9%), one PLL, and no block RAM. No image has been programmed.
+3216/7680 logic cells (41.9%), one PLL, and no block RAM. The user has confirmed
+the running bitstream, LED2 heartbeat, working debug communication and successful
+streaming loading on the board (29 October 2026).
 The build stops before icepack if timing fails; there is no timing override.
 
 For comparison, the original direct-100-MHz attempt failed at about 52–54 MHz;
@@ -83,6 +85,12 @@ The configuration RESET button reconfigures the FPGA; BUT1 is the logic reset.
 
 ## Build and programming
 
+The [root Makefile](../../docs/BUILD.md) offers `make bitstream`, `make resources`
+and explicit `make flash` shortcuts. `make load-run PORT=... SKIP_UART_MMIO=1`
+builds/loads a TokenForth program and starts it; add `VERIFY=1` for readback;
+`make uart-console PORT=...` opens the duplex console. Use `make help` for all
+targets and `config.local.mk.example` for local UART/programmer settings.
+
 Run these commands from the project root. All pin assignments come directly
 from [board.pcf](board.pcf); no UART pin parameters are passed to CMake or the
 Python build script. The board build uses `build/olimex_ice40hx8k_evb`;
@@ -118,7 +126,7 @@ iceprog setup. Use the separate UART adapter's stable `/dev/serial/by-id/` path.
 
 Outputs include `synth.log`, `nextpnr.log`, `timing.json`, `prim.json`,
 `prim.asc` and, only after passed timing, `prim.bin`. A failed rebuild removes a
-stale binary. CTest registers 15 suites. The board test is included as
+stale binary. CTest registers 16 suites. The board test is included as
 `olimex_board_checks` and checks PLL startup, reset
 release, loss of LOCK, recovery and UART at 25 MHz. `pll_sim.v` is a test-only
 ideal frequency/LOCK model and is never included in production synthesis;
@@ -129,6 +137,50 @@ The UART session/PTY suite additionally checks continuous output/BREAK,
 RX-credit backpressure, uninterrupted debug write modes and terminal restoration. Logs: `build/olimex-validation/ctest.log`.
 
 ## First contact and loading
+
+### Hello quick start
+
+From the project root, build and open the console (`PORT` may be set in
+`config.local.mk`):
+
+```sh
+make image PROGRAM=src/examples/hello.cf
+make uart-console
+```
+
+Press **Ctrl+B**, then enter this local debug command:
+
+```text
+load build/software/hello.bin --skip-uart-mmio --run
+```
+
+The loader halts/resets the CPU, streams the image into SRAM, counts write OKs
+and starts the CPU after successful loading. The console stays connected to both
+channels. Expect `Hello, World!` and a BREAK notification; `status` then shows
+halted=true, break=true and PC 0005. Empty Enter leaves the debug prompt;
+Ctrl+D exits the console. The user has reported this streaming workflow working
+on the board. This is a functional check, not an external SRAM timing measurement.
+
+| Load option | Default | Meaning |
+|---|---|---|
+| `--skip-uart-mmio` | off | Explicitly omit included FFFE/FFFF bytes; required for the full compiler image |
+| `--run` | off | Start only after the complete load and any requested verification succeed |
+| `--verify` | off | Read back words and an optional last byte, checking all loaded bytes |
+| `--write-delay SECONDS` | `0` | Pause after each transmitted word; e.g. `0.001` for 1 ms |
+
+For example, with both pacing and readback:
+
+```text
+load build/software/hello.bin --skip-uart-mmio --write-delay 0.001 --verify --run
+```
+
+For one-shot use outside the console, the equivalent Make targets are
+`make load-run PROGRAM=src/examples/hello.cf SKIP_UART_MMIO=1`, optionally with
+`WRITE_DELAY=0.001 VERIFY=1`. `make upload IMAGE=...` loads an existing image and
+leaves the CPU halted. Keep one owner of the UART port: issue commands inside
+the console while it is open.
+
+### Detailed loading behavior
 
 Install the root Python package and pyserial in the active environment.
 After successful build/programming and connecting the GPIO1 UART pins:
@@ -160,10 +212,32 @@ reject a running CPU with a clear message; they do not silently halt it.
 The debug library continues to handle CPU output and asynchronous BREAK
 notifications while waiting for replies. Each CLI invocation closes its port.
 
-`load` performs RESET-HALT, loads a raw CPU binary at zero, verifies every byte
-written and leaves the CPU halted. `--run` resumes only after successful
-verification. A failed verification does not start the CPU. Token streams are
-not CPU binaries.
+`load` performs RESET-HALT and loads a raw CPU binary at zero using the persistent
+16-bit write mode. It streams SRAM words without waiting between values, while
+a concurrent reader counts one OK per word. Words are little-endian; an odd
+final byte uses a byte write without changing its neighbor. Readback is disabled
+by default. `--verify` enables word reads plus an optional final byte read,
+setting the read pointer once and then using its automatic increment.
+`--run` resumes after successful loading and, when requested, verification.
+A failed verification does not start the CPU. Token streams are not CPU binaries.
+
+This SRAM loader intentionally sends ahead of the ordinary protocol's per-value
+wait rule. Data may be lost if a bus operation takes too long. Missing/invalid
+OKs cause an error, never an automatic retry or RUN. A failed streaming console
+session closes to discard late replies: restart the console and load the full
+image again manually. `--write-delay 0.001` inserts a 1-ms pause after each word
+has drained to the UART; the default is zero. With Make use `WRITE_DELAY=0.001`.
+Correct OK counts do not prove data integrity; `--verify` checks actual contents.
+
+The loader reports Writing (and, with `--verify`, Verifying) byte counts at least once per second while
+transfers advance, and at the start/end of each phase. Updates replace the same
+terminal line without newlines; normal messages and CPU output remain available.
+Full images require many
+individual operations; optional readback still waits for each reply and may take
+several minutes with USB-UART latency. The console prompt remains visible while its worker loads the
+image. Wait for `Loaded ...` (or `Loaded and verified ...` with `--verify`)
+and, with `--run`, `CPU running`;
+the initial MMIO-skipping messages do not indicate completion.
 
 Images of 1..65534 bytes load directly. Compiler memory exports contain 65536
 bytes; those require the explicit `--skip-uart-mmio` option:
@@ -175,7 +249,7 @@ python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapte
 ```
 
 With a full 64-KiB image, the script reports the omitted image bytes at
-`0xFFFE` and `0xFFFF`, writes/verifies only `0x0000..0xFFFD` (65534 bytes), and
+`0xFFFE` and `0xFFFF`, writes only `0x0000..0xFFFD` (65534 bytes), optionally verifies them, and
 preserves the existing physical SRAM bytes behind both registers. The omitted
 bytes are not verified. This avoids reading UART status/consuming RX during
 verification and avoids UART TX writes during loading. An image of 65535 bytes
@@ -217,13 +291,13 @@ CPU data are seven-bit; UTF-8 input is rejected instead of becoming debug bytes.
 
 | Key | Action |
 |---|---|
-| Ctrl+J | Open local debug prompt (not sent to CPU) |
+| Ctrl+B | Open local debug prompt (not sent to CPU) |
 | Ctrl+D | Quit either mode without HALT/RESET |
-| Ctrl+V, then a byte | Send that byte literally to CPU, including Ctrl+J/Ctrl+D |
+| Ctrl+V, then a byte | Send that byte literally to CPU, including Ctrl+B/Ctrl+D |
 | Empty Enter in debug prompt | Return to CPU mode |
 | Enter in CPU mode | Send Enter to CPU |
 
-The console uses raw input so Enter (CR) and Ctrl+J (LF) are distinct. `help` or
+The console uses raw input so Enter (CR) and Ctrl+B (STX) are distinct. `help` or
 `?` prints every command/keybinding; `console --help` works without opening USB.
 The local prompt accepts these commands (no port argument is needed there):
 
@@ -239,6 +313,7 @@ uart-status
 sram-check
 load build/example.bin
 load build/program.bin --skip-uart-mmio --run
+load build/program.bin --skip-uart-mmio --verify --run
 quit
 ```
 
@@ -256,7 +331,8 @@ terminal settings; it does not abort an already-started FPGA bus operation.
 A protocol timeout, invalid reply or disconnected adapter terminates the session
 instead of misinterpreting late replies. Regular one-shot CLI commands still
 close their port on completion; use console for continuous output monitoring.
-No physical UART/flash operation has been performed from this workspace.
+The user has confirmed board operation and streaming loading; no physical
+UART/flash operation was performed by the development agent.
 
 ## Resource comparison for the duplex extension
 

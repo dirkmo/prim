@@ -263,8 +263,10 @@ yosys -p 'read_verilog -Icpu/rtl cpu/rtl/prim.v system/rtl/memory.v debug_uart/r
 ```
 
 Dies ist ein Synthesevergleich, keine Platzierungs-, Routing- oder Frequenzzusage.
-Board-Pins, Hardware-UART, reale Metastabilitäts-/Baudtoleranz und SRAM-Timing
-nach Place-and-Route wurden nicht auf physischer Hardware geprüft.
+Der Benutzer hat den laufenden Board-Bitstream, LED2-Heartbeat, Debug-Kommunikation
+und erfolgreiches SRAM-Streaming-Laden am 29. Oktober 2026 bestätigt.
+Metastabilitäts-/Baudtoleranz und externe SRAM-Timingreserven sind dadurch nicht
+vermessen; nicht jede Loader-Option wurde auf Hardware geprüft.
 
 Der Olimex-Rev.B-Board-Wrapper verwendet nach ausdrücklicher Freigabe eine
 FPGA-PLL von 100 auf 25 MHz. CPU, UART und SRAM nutzen gemeinsam diesen globalen
@@ -276,8 +278,25 @@ Das Board-Hostskript stellt `halt`, `run`, `step`, `reset-halt`, `pc` und
 `uart-status` separat bereit. `step` und `pc` prüfen vorab den Haltstatus.
 Images, die FFFE oder FFFF enthalten, benötigen `load --skip-uart-mmio`.
 Jede enthaltene MMIO-Adresse wird gemeldet und beim Schreiben und Verifizieren
-ausgelassen. Ein vollständiges Image schreibt und prüft damit 65.534 SRAM-Bytes.
-`--run` startet ausschließlich nach erfolgreicher Verifikation.
+ausgelassen. Ein vollständiges Image schreibt damit 65.534 SRAM-Bytes;
+die optionale Prüfung ist auf dieselben Bytes begrenzt.
+Der SRAM-Loader verwendet dauerhafte 16-Bit-Schreibzugriffe mit OK pro Wort und
+einen Bytezugriff für ein ungerades Restbyte. Rücklesen ist standardmäßig aus;
+`--verify` aktiviert Wort-Lesezugriffe mit automatischem Pointer-Inkrement und
+gegebenenfalls einen letzten Bytezugriff. `--run` startet nach erfolgreichem
+Laden und, falls angefordert, erfolgreicher Verifikation. Das vollständige
+Speicherabbild wird weiterhin übertragen; eine Verkleinerung ist noch offen.
+
+Auf Wunsch wird beim SRAM-Laden die Wartebedingung pro Wert bewusst gelockert:
+Der Host sendet Wörter fortlaufend und zählt OKs parallel. Der Controller erhält
+keinen RX-FIFO und verwirft weiterhin RX-Zeichen während BUS. Fehlende/falsche
+Bestätigungen brechen den Ladevorgang mit Fehlermeldung ab; kein automatischer
+Neustart und kein RUN. Nach einem Streamingfehler wird die Verbindung geschlossen
+und der Benutzer kann das gesamte Abbild erneut laden. `--write-delay` setzt eine
+optionale Pause in Sekunden zwischen Wörtern. Streaming ist auf SRAM-Laden
+beschränkt; normale `write_words`/`write_bytes` warten weiterhin auf jedes OK.
+Bestätigungszählung allein erkennt keine beliebige Datenverfälschung; `--verify`
+bleibt die optionale Inhaltsprüfung. Ein hängender Buszugriff wird nicht abgebrochen.
 
 ## Interaktive Konsole
 
@@ -290,8 +309,8 @@ nicht zwischen die Zeichen oder Werte einer laufenden Debug-Operation geschoben.
 SRAM-Debugzugriffe benötigen weiterhin CPU-Halt; Transport beider Kanäle bleibt
 auch dann aktiv. Nicht-ASCII/UTF-8-Eingaben werden als CPU-Daten abgewiesen.
 
-Ctrl+J öffnet den lokalen Debug-Prompt, Ctrl+D beendet die Konsole ohne HALT oder
-RESET. Ctrl+V überträgt das nächste Byte wörtlich, auch Ctrl+J oder Ctrl+D.
+Ctrl+B öffnet den lokalen Debug-Prompt, Ctrl+D beendet die Konsole ohne HALT oder
+RESET. Ctrl+V überträgt das nächste Byte wörtlich, auch Ctrl+B oder Ctrl+D.
 Leeres Enter im Prompt kehrt in den CPU-Modus zurück. Im CPU-Modus wird Enter
 übertragen. `help`, `?` und `console --help` zeigen alle Befehle und Keybindings.
 Der Prompt bietet `halt`/`stop`, `step`, `reset-halt`, `run`, `pc`, `status`,

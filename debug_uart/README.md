@@ -254,6 +254,18 @@ It offers `halt`, `run`, `step`, `reset_halt`, `status`, `uart_status`, `read_pc
 check all CPU-state preconditions. Its transport needs bounded reads. A positive
 response timeout uses a monotonic clock. Timeout is not a hardware bus abort.
 
+`write_words_stream(values, address=None, write_delay=0, on_progress=None)` is a
+separate SRAM-loading operation: a sender writes ahead while replies are counted
+concurrently. `on_progress` receives the count of acknowledged words. It relaxes
+the normal wait-per-value rule and can lose input during bus stalls. The optional
+delay is in seconds, after draining each word to the UART. Missing/invalid OKs
+raise an error without retry; discard the connection and manually reload the
+whole image. Matching counts alone are not a readback check. The ordinary
+`write_words` and `write_bytes` keep their per-value handshake. `UARTSession`
+keeps CPU/BREAK reception active and excludes credit polls throughout a stream;
+a streaming error invalidates that session so late replies cannot leak into
+later commands. No FPGA FIFO or protocol bytes were added.
+
 For simultaneous application/debug traffic use
 `prim_debug_uart.session.UARTSession`, a context manager with one continuous RX
 thread and a separate CPU-input sender. Example, assuming the application has
@@ -300,10 +312,10 @@ python boards/olimex_ice40hx8k_evb/host.py console --help
 python boards/olimex_ice40hx8k_evb/host.py --port "$PORT" console
 ```
 
-Ctrl+J opens local commands, Ctrl+D quits either mode without HALT/RESET, Ctrl+V
+Ctrl+B opens local commands, Ctrl+D quits either mode without HALT/RESET, Ctrl+V
 quotes the next CPU byte, and empty Enter in the prompt returns to CPU mode.
 Normal Enter goes to the CPU. Raw terminal input distinguishes Enter (CR) from
-Ctrl+J (LF); terminal attributes are restored on exit. `help` or `?` lists
+Ctrl+B (STX); terminal attributes are restored on exit. `help` or `?` lists
 all commands. CPU output and BREAK remain active while entering commands,
 displaying help, loading images, or waiting for replies. The command adapter
 can be replaced for another project's image format and CPU controls.

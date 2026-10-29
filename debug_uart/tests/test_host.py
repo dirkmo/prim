@@ -69,6 +69,47 @@ class DebugUARTChecks(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Expected'):
             DebugUART(Transport(wire('T'))).halt()
 
+    def test_stream_sends_all_words_without_waiting_and_counts_oks(self):
+        class StreamTransport(Transport):
+            def write(self, data):
+                super().write(data)
+                if data == wire('1234abcd'):
+                    self.replies.extend(b'Hi' + wire('BKKB'))
+                return len(data)
+        transport = StreamTransport(b'')
+        client = DebugUART(transport, timeout=0.1)
+        progress = []
+        client.write_words_stream([0x4321, 0xdcba], 0, on_progress=progress.append)
+        self.assertEqual(transport.writes, list(map(wire, ['A0000', 'W', '1234abcd'])))
+        self.assertEqual(progress, [1, 2])
+        self.assertEqual(client.output, b'Hi')
+        self.assertEqual(client.break_events, 1)
+
+    def test_stream_missing_or_invalid_ok_fails_without_retry(self):
+        for replies in ('K', 'KT'):
+            with self.subTest(replies=replies):
+                transport = Transport(wire(replies))
+                client = DebugUART(transport, timeout=0.02)
+                with self.assertRaisesRegex(RuntimeError, '1/2 word OKs'):
+                    client.write_words_stream([1, 2], 0)
+                self.assertEqual(transport.writes.count(wire('A0000')), 1)
+                self.assertEqual(transport.writes.count(wire('W')), 1)
+
+    def test_stream_delay_flushes_each_word(self):
+        from unittest.mock import Mock
+        transport = Transport(wire('KK'))
+        transport.flush = Mock()
+        DebugUART(transport).write_words_stream([0x4321, 0xdcba], write_delay=0.001)
+        self.assertEqual(transport.writes, list(map(wire, ['W', '1234', 'abcd'])))
+        self.assertEqual(transport.flush.call_count, 2)
+
+    def test_stream_rejects_invalid_delay_before_sending(self):
+        for delay in (-1, float('nan'), float('inf')):
+            transport = Transport(b'')
+            with self.assertRaises(ValueError):
+                DebugUART(transport).write_words_stream([0], write_delay=delay)
+            self.assertEqual(transport.writes, [])
+
 
 if __name__ == '__main__':
     unittest.main()

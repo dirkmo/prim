@@ -58,7 +58,8 @@ class DebugUART:
         """Open pyserial at fixed 115200 baud, 8N1; caller closes transport."""
         import serial
         return cls(serial.Serial(port, baudrate=115200, bytesize=8,
-                                 parity='N', stopbits=1, timeout=0.1), **kwargs)
+                                 parity='N', stopbits=1, timeout=0.1,
+                                 write_timeout=kwargs.get('timeout', 2.0)), **kwargs)
 
     def _send(self, text):
         data = bytes(ord(c) | 0x80 for c in text)
@@ -170,3 +171,76 @@ class DebugUART:
     @transaction
     def write_words(self, values, address=None):
         self._write(values, 4, address)
+
+    @transaction
+    def write_words_stream(self, values, address=None, *, write_delay=0, on_progress=None):
+        """SRAM loader: send ahead while counting OKs, with no automatic retry.
+
+        This deliberately relaxes the per-value wait rule. A missed character
+        may corrupt subsequent writes; a failed transfer must be reloaded in full.
+        """
+        if write_delay < 0 or not float(write_delay) < float('inf'):
+            raise ValueError('write_delay must be finite and nonnegative')
+        words = [encode_number(value, 4) for value in values]
+        if not words:
+            return
+        if address is not None:
+            self.set_address(address)
+        self._send('W')
+        stop = threading.Event()
+        errors = []
+
+        def send():
+            try:
+                if write_delay:
+                    for word in words:
+                        if stop.is_set():
+                            return
+                        self._send(word)
+                        # Delay after the physical write, rather than filling
+                        # the USB output queue with nominally spaced writes.
+                        flush = getattr(self.transport, 'flush', None)
+                        if flush:
+                            flush()
+                        if stop.wait(write_delay):
+                            return
+                else:
+                    for offset in range(0, len(words), 256):
+                        if stop.is_set():
+                            return
+                        self._send(''.join(words[offset:offset + 256]))
+            except Exception as exc:
+                errors.append(exc)
+
+        sender = threading.Thread(target=send, daemon=True)
+        received = 0
+        sender.start()
+        try:
+            while received < len(words):
+                char = self._debug_char(time.monotonic() + self.timeout + write_delay)
+                if char != 'K':
+                    raise RuntimeError(f'Expected write OK, received {char!r}')
+                received += 1
+                if on_progress:
+                    on_progress(received)
+            sender.join(timeout=self.timeout + write_delay)
+            if sender.is_alive():
+                raise DebugTimeout('UART sender did not finish')
+            if errors:
+                raise errors[0]
+        except Exception as exc:
+            stop.set()
+            for method in ('cancel_write', 'reset_output_buffer'):
+                cleanup = getattr(self.transport, method, None)
+                if cleanup:
+                    try:
+                        cleanup()
+                    except OSError:
+                        pass  # Preserve the transfer error if USB is already gone.
+            if errors:
+                exc = errors[0]
+            raise RuntimeError(f'Streaming load failed after {received}/{len(words)} word OKs: {exc}. '
+                               'No retry performed; restart the connection and reload the complete image.') from exc
+        finally:
+            stop.set()
+            sender.join(timeout=self.timeout)

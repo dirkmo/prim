@@ -16,3 +16,6 @@ prim.vcd
 !pyproject.toml
 *.egg-info/
 dist/
+
+# Per-machine Makefile configuration
+/config.local.mk
