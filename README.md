@@ -407,3 +407,14 @@ The [Olimex Rev.B board flow](boards/olimex_ice40hx8k_evb/README.md) adds explic
 `fpga_bitstream` and `fpga_program` targets plus UART first-contact tools. The
 initial 100 MHz timing check failed; the approved board PLL now supplies a
 25 MHz system clock and the routed build passes timing. The debug UART uses GPIO1 pin 33 (FPGA RX) and pin 34 (FPGA TX).
+
+Use a separate build directory for the Olimex board:
+
+```sh
+cmake -S . -B build/olimex_ice40hx8k_evb
+cmake --build build/olimex_ice40hx8k_evb --target fpga_bitstream
+```
+
+The bitstream is `build/olimex_ice40hx8k_evb/prim.bin`; `build/sim` remains the
+simulator build directory. Programming is a separate `fpga_program` target
+described in the board README.

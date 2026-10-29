@@ -5,7 +5,8 @@ find_program(ICEPROG_EXECUTABLE iceprog)
 set(OLIMEX_ICEPROG_DEVICE "" CACHE STRING "Optional iceprog -d device selector")
 set(OLIMEX_ICEPROG_INTERFACE "A" CACHE STRING "UM-FT2232H interface used for programming")
 set(OLIMEX_BOARD_DIR "${PROJECT_SOURCE_DIR}/boards/olimex_ice40hx8k_evb")
-set(OLIMEX_OUTPUT_DIR "${CMAKE_BINARY_DIR}/olimex_ice40hx8k_evb")
+# Board builds are configured with -B build/olimex_ice40hx8k_evb.
+set(OLIMEX_OUTPUT_DIR "${CMAKE_BINARY_DIR}")
 file(GLOB OLIMEX_RTL CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/cpu/rtl/*.v"
     "${PROJECT_SOURCE_DIR}/system/rtl/*.v"

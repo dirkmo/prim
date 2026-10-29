@@ -30,7 +30,7 @@ operating-frequency claim above the selected 25 MHz.
 
 The UART pin assignment requested by the user is GPIO1 pin 33 for FPGA RX
 (ball G3) and GPIO1 pin 34 for FPGA TX (ball F3). Artifacts are in
-`build/sim/olimex_ice40hx8k_evb/`, including the bitstream `prim.bin`. Utilization is
+`build/olimex_ice40hx8k_evb/`, including the bitstream `prim.bin`. Utilization is
 3145/7680 logic cells, one PLL, and no block RAM. No image has been programmed.
 The build stops before icepack if timing fails; there is no timing override.
 
@@ -44,7 +44,12 @@ timing alone does not establish external SRAM setup/hold margins.
 GPIO1 pins 33/34 are the selected UART connection. The Rev.B netlist maps
 GPIO1.33 to PIO3_14/IOL_8A (FPGA ball G3) and GPIO1.34 to PIO3_15/IOL_8B
 (FPGA ball F3). Both assignments are defined directly in `board.pcf`, the
-single pin-constraint source used by CMake and the standalone build script.
+single pin-constraint source used by CMake and the standalone build script:
+
+```tcl
+set_io -pullup yes uart_rx G3
+set_io uart_tx F3
+```
 
 | USB-UART adapter | Rev.B board connection | FPGA ball |
 |---|---|---|
@@ -63,9 +68,9 @@ unconstrained IOs.
 synchronized PLL LOCK and synchronized BUT1 generate a synchronous system reset.
 Reset stays asserted until LOCK has passed two synchronizer stages and the
 four-cycle reset pipe has drained. Lock loss reasserts reset synchronously
-while the system clock is running; it is released through the same sequence. `START_HALTED=1` holds the CPU at PC
-0000 from the first fetch; no SRAM boot contents are assumed. UART/debug logic
-remain available after reset. BUT1 resets CPU, UART, debug controller and its
+while the system clock is running; it is released through the same sequence.
+`START_HALTED=1` holds the CPU at PC 0000 from the first fetch; no SRAM boot
+contents are assumed. UART/debug logic remain available after reset. BUT1 resets CPU, UART, debug controller and its
 pointer. UART `Z` resets only the CPU and retains the debug pointer.
 
 LED1 shows confirmed CPU halt, LED2 is a heartbeat (about 1.49 Hz at 25 MHz).
@@ -78,18 +83,23 @@ The configuration RESET button reconfigures the FPGA; BUT1 is the logic reset.
 
 ## Build and programming
 
-From the project root, with the GPIO1 UART connection above:
+Run these commands from the project root. All pin assignments come directly
+from [board.pcf](board.pcf); no UART pin parameters are passed to CMake or the
+Python build script. The board build uses `build/olimex_ice40hx8k_evb`;
+`build/sim` is reserved for the simulator workflow. Artifacts are written directly
+to the selected CMake build directory, without an additional board subfolder.
 
 ```sh
-cmake -S . -B build/sim
-cmake --build build/sim --target fpga_bitstream
+cmake -S . -B build/olimex_ice40hx8k_evb
+cmake --build build/olimex_ice40hx8k_evb --target fpga_bitstream
 # Explicit action; never invoked by the ordinary build or CTest:
-cmake --build build/sim --target fpga_program
+cmake --build build/olimex_ice40hx8k_evb --target fpga_program
 ```
 
 The board tools must be on PATH: yosys, nextpnr-ice40, icepack, iceprog.
 The board targets do not participate in the default simulator build.
-The independent equivalent is:
+The standalone build script uses the same `board.pcf` and the same output
+folder, `build/olimex_ice40hx8k_evb/`:
 
 ```sh
 python boards/olimex_ice40hx8k_evb/build.py build

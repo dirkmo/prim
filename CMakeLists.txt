@@ -86,7 +86,7 @@ add_test(NAME test_harness_checks
 
 
 # The CPU simulator deliberately links no system or UART sources.
-verilate(simulator TRACE
+verilate(simulator TRACE_VCD
     INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/cpu/rtl"
     VERILATOR_ARGS "+define+SIM=1"
     SOURCES cpu/rtl/prim.v)
