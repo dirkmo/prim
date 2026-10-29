@@ -54,7 +54,7 @@ The old `src/*.py` tool wrappers have been removed. Use, for example,
 `python -m prim compile ...` instead of `python src/tokenforth.py ...`.
 The Makefile uses the package CLI in the active environment. Library imports
 use `prim.cpu`, `prim.tokenizer`, `prim.compiler`, etc. The RTL tests import the installed package without modifying `sys.path`.
-See [rtl/README.md](rtl/README.md) for simulation and end-to-end tests.
+See [system/README.md](system/README.md) for simulation and end-to-end tests.
 
 ## Build and debug
 
@@ -383,7 +383,21 @@ Use `--library other.tf.toml` to replace this library, or `--port 8766`
 to select another local port. Outside the source checkout, supply `--library`.
 Stop the server with Ctrl+C.
 
-## DebugUart
+## FPGA components
+
+- [cpu/](cpu/README.md): standalone CPU and instruction-level tests.
+- [debug_uart/](debug_uart/README.md): UART RX/TX, debug protocol, host library and component tests.
+- [system/](system/README.md): bus mux, SRAM/MMIO and complete system integration.
+- `tests/support/`: shared simulation helpers.
+
+Build and run all suites from the repository root:
+
+```sh
+cmake -S . -B build/sim
+cmake --build build/sim
+ctest --test-dir build/sim --output-on-failure
+```
+
 The FPGA now supports a shared 115200-baud CPU/debug UART with hardware
 HALT/STEP/BREAK and a small Python host client. CPU output on that link is
 limited to seven bits. See [the implemented protocol](docs/DRAFT.md) for commands,

@@ -2,7 +2,7 @@
 
 As of October 27, 2026. This document summarizes the architecture and development
 workflows. [DECISIONS.md](DECISIONS.md) records the reasons behind the choices.
-See [rtl/README.md](../rtl/README.md) for signal details, edge cases and simulations.
+See [system/README.md](../system/README.md) for signal details, edge cases and simulations.
 
 Detailed walkthroughs are in [Code and architecture](CODE.md) and
 [Tests and verification](TESTS.md).
@@ -16,15 +16,15 @@ the order of stack effects are described in the RTL documentation.
 
 | Path | Responsibility |
 |------|----------------|
-| `rtl/prim.v` | Verilog CPU |
-| `rtl/memory.v` | Adapt the byte-addressed CPU bus to SRAM supporting only whole-word transfers |
-| `rtl/memory_io.v`, `rtl/uart_tx.v`, `rtl/uart_rx.v`, `rtl/debug_uart.v`, `rtl/prim_system.v` | Shared CPU/debug UART, MMIO and system integration |
+| `cpu/rtl/prim.v` | Verilog CPU |
+| `system/rtl/memory.v` | Adapt the byte-addressed CPU bus to SRAM supporting only whole-word transfers |
+| `system/rtl/memory_io.v`, `debug_uart/rtl/uart_tx.v`, `debug_uart/rtl/uart_rx.v`, `debug_uart/rtl/debug_uart.v`, `system/rtl/prim_system.v` | Shared CPU/debug UART, MMIO and system integration |
 | `src/prim/cpu.py`, `isa.py`, `assembler.py` | Python CPU, instruction set and assembler |
 | `src/prim/tokenizer.py`, `tokens.py` | Read TokenForth source and generate tokens |
 | `src/prim/compiler.py` | Compile tokens into a program image |
 | `src/prim/artifacts.py` | Document models, validation and TOML/binary I/O |
 | `src/base.cf`, `src/examples/` | Base library and example programs |
-| `rtl/sim_support/` | Shared simulation and comparison helpers |
+| `tests/support/` | Shared simulation and comparison helpers |
 
 Python tools run through `python -m prim` or the installed `prim-*` commands;
 library imports use `prim.*`. The old `src/*.py` compatibility wrappers have
@@ -121,9 +121,9 @@ The complete RTL checks require CMake, Verilator, Icarus Verilog and a C++17
 compiler:
 
 ```sh
-cmake -S rtl -B build/rtl
-cmake --build build/rtl
-ctest --test-dir build/rtl --output-on-failure
+cmake -S . -B build/sim
+cmake --build build/sim
+ctest --test-dir build/sim --output-on-failure
 ```
 
 CTest does not rebuild the simulator. The Python/RTL comparison checks
@@ -138,7 +138,7 @@ The end-to-end TokenForth test freshly builds bootstrap, opcode words and
 timing configurations. Results are stored under `build/tokenforth/`.
 The Python regressions are included in this CTest suite.
 
-Last verified: all ten CTest suites passed, including debug RTL and host checks.
+Last verified: all twelve CTest suites passed, including debug RTL and host checks.
 This establishes simulation behavior; SRAM can now be loaded through debug
 writes. Board pin assignments, timing after place-and-route and physical UART output remain
 open. Default clock and timing parameters are not a verified board configuration.

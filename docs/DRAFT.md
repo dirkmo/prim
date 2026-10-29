@@ -1,8 +1,10 @@
 # Implementierte FPGA-Debug-UART
 
 Stand: 28. Oktober 2026. Diese Beschreibung ist das implementierte Protokoll,
-kein alternativer Protokollvorschlag. RTL: `rtl/prim_system.v`, `debug_uart.v`,
-`uart_rx.v`, `uart_tx.v`, `prim.v` und `memory_io.v`.
+kein alternativer Protokollvorschlag. Die Quellen sind in `cpu/rtl/`, `debug_uart/rtl/` und `system/rtl/` getrennt.
+`system/rtl/prim_system.v` instanziiert die CPU, den Bus-Multiplexer, den
+Speicher/MMIO-Controller und `debug_uart_link`. RX, TX und TX-Arbiter liegen
+vollständig in `debug_uart/rtl/`. Der CPU-Kern enthält keine Systemintegration.
 
 ## Leitung und Kanäle
 
@@ -141,7 +143,7 @@ MMIO-Ausgabe blockieren. Eine unabhängige BREAK-Meldung darf vorher senden.
 
 ## Python-Hostbibliothek
 
-`prim.debug_uart.DebugUART` benötigt ein Byte-Transportobjekt mit `read(size)`
+`prim_debug_uart.DebugUART` (kompatibel auch `prim.debug_uart.DebugUART`) benötigt ein Byte-Transportobjekt mit `read(size)`
 und `write(bytes)`, etwa pyserial. `connect()` öffnet optional pyserial fest mit
 115200/8N1. pyserial muss dafür separat installiert sein. Ein vorhandenes
 `timeout`-Attribut wird auf höchstens 0,1 Sekunden gesetzt. Andere Transports
@@ -150,7 +152,7 @@ eine monotone Uhr und werfen `DebugTimeout`; unerwartete Antworten erzeugen
 eine verständliche Exception. Der Transport wird vom Aufrufer geschlossen.
 
 ```python
-from prim.debug_uart import DebugUART
+from prim_debug_uart import DebugUART
 
 uart = DebugUART.connect('/dev/ttyUSB0', timeout=2.0)
 try:
@@ -189,38 +191,43 @@ Nichtabbruch laufender Buszugriffe, undefiniert.
 
 ## Prüfung und Ressourcen
 
-`python rtl/test_debug_uart.py` prüft RX einschließlich Startglitch,
-Bitmittenabtastung mit Phasenversatz/Jitter, Reset und aller 256 Leitungsbytes;
-Kanaltrennung; Nibblereihenfolge; Teiladressen; dauerhafte Schreibmodi;
-Moduswechsel und unvollständige Eingaben; Pointerinkrement und Überlauf;
-stabile Busaufträge bei Wartezyklen; HALT/STEP einschließlich Speicherzugriffen;
-BREAK.RET mit belegten Stacks; BREAK bei belegtem TX und während einer
-mehrstelligen Antwort; STEP auf BREAK; RESET-HALT mit erhaltenem SRAM/Pointer;
-MMIO einschließlich überlaufender Wortschreibzugriffe ohne Deadlock.
-`python src/test_debug_uart.py` prüft Hostkodierung, Antwortwartebedingungen,
-Kanaltrennung, BREAK-Verarbeitung und Fehler-/Timeoutmeldungen. Beide sind in
-CTest integriert. Bestehende SRAM-, ISA-, Compiler- und UART-TX-Tests bleiben
-erhalten; die FPGA-Ausgabevergleiche erwarten jetzt sieben Nutzbits.
+Die Tests sind ihren Komponenten zugeordnet:
 
-Alle zehn CTest-Suiten bestanden (60,70 s). Die abschließenden direkten
-Debug-RTL-Tests bestanden ebenfalls nach der Vereinfachung der Hexdekodierung.
-Ergebnisprotokolle liegen in `build/debug-uart/ctest.log` und
-`directed-tests.log`.
+- `python debug_uart/tests/test_rtl.py`: RX einschließlich Startglitch,
+  Phasenversatz/Jitter, Reset und aller 256 Leitungsbytes; TX; Priorisierung und
+  Rückstau im TX-Arbiter; Parser und Debug-Master ohne CPU oder Systemmodule.
+- `python cpu/tests/test_debug_cpu.py`: stabile Busaufträge bei Wartezyklen,
+  HALT/STEP einschließlich Speicherzugriffen und BREAK.RET mit belegten Stacks.
+- `python system/tests/test_debug_uart.py`: vollständiger serieller Debugpfad,
+  Kanaltrennung, Teiladressen, Schreibmodi, Pointerinkrement/Überlauf,
+  BREAK bei belegtem TX und während mehrstelliger Antwort, RESET-HALT mit
+  erhaltenem SRAM/Pointer und UART-MMIO ohne Deadlock.
+- `python debug_uart/tests/test_host.py`: Hostkodierung, Antwortwartebedingungen,
+  Kanaltrennung, BREAK-Verarbeitung und Fehler-/Timeoutmeldungen.
+
+Alle zwölf CTest-Suiten bestanden nach der Trennung der Komponenten. Die
+bestehenden SRAM-, ISA-, Compiler- und UART-Tests bleiben enthalten.
+Ergebnisprotokoll: `build/restructure/ctest.log`.
 
 Synthese mit Yosys 0.68+136, `synth_ice40 -top prim_system`, gleicher Standardtakt,
-Vergleich mit dem unveränderten Ausgangsstand dieser Änderung:
+Vergleich mit dem ursprünglichen Stand vor Einführung der Debug-UART und
+dem Stand direkt vor der Verzeichnis-/Komponententrennung:
 
-| Ressource | Vorher | Nachher | Differenz |
+| Ressource | Ohne Debug | Vor Trennung | Nach Trennung |
 |---|---:|---:|---:|
-| SB_LUT4 | 2311 | 2674 | +363 |
-| SB_DFF* gesamt | 651 | 750 | +99 |
-| SB_CARRY | 109 | 187 | +78 |
-| Zellen einschließlich Scopeinfo/TBUF | 3091 | 3633 | +542 |
+| SB_LUT4 | 2311 | 2674 | 2693 |
+| SB_DFF* gesamt | 651 | 750 | 750 |
+| SB_CARRY | 109 | 187 | 191 |
+| Zellen einschließlich Scopeinfo/TBUF | 3091 | 3633 | 3659 |
 
-Logs: `build/debug-uart/synth-before.log` und `synth-after.log`.
+Die Trennung verwendet keine zusätzlichen Register oder FIFOs. Die Synthese
+der getrennten Module ergibt 19 zusätzliche LUT4 und vier Carry-Zellen.
+Logs: ursprüngliche Synthesen unter `build/debug-uart/`; aktuelle Synthese unter
+`build/restructure/synth.log`. Reproduzierbar über den Root-CMake-Target `yosys`
+oder `yosys -s system/synth.ys` vom Projekt-Root aus.
 
 ```sh
-yosys -p 'read_verilog -Irtl rtl/prim.v rtl/memory.v rtl/uart_tx.v rtl/uart_rx.v rtl/debug_uart.v rtl/memory_io.v rtl/prim_system.v; synth_ice40 -top prim_system; stat'
+yosys -p 'read_verilog -Icpu/rtl cpu/rtl/prim.v system/rtl/memory.v debug_uart/rtl/uart_tx.v debug_uart/rtl/uart_rx.v debug_uart/rtl/debug_uart.v system/rtl/memory_io.v system/rtl/bus_mux.v debug_uart/rtl/uart_arbiter.v debug_uart/rtl/debug_uart_link.v system/rtl/prim_system.v; synth_ice40 -top prim_system; stat'
 ```
 
 Dies ist ein Synthesevergleich, keine Platzierungs-, Routing- oder Frequenzzusage.

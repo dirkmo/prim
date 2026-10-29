@@ -2,14 +2,14 @@
 
 Read [project knowledge](../docs/PROJECT_KNOWLEDGE.md) and
 [decisions](../docs/DECISIONS.md) for architecture, requirements and rationale.
-[RTL documentation](../rtl/README.md) describes signal and simulation details.
+[RTL documentation](../system/README.md) describes signal and simulation details.
 
 Detailed code flow: [Code documentation](../docs/CODE.md). Test entry points
 and coverage: [Test documentation](../docs/TESTS.md).
 
 ## Scope and architecture
 
-Active implementations are `rtl/` (Verilog) and `src/prim/` (Python).
+Active implementations are `cpu/rtl/`, `debug_uart/rtl/`, `system/rtl/` (Verilog) and `src/prim/` (Python).
 The alternative Amaranth implementation under `hdl/` is outside the current
 scope; its dependencies remain optional.
 
@@ -20,7 +20,7 @@ scope; its dependencies remain optional.
 - `src/prim/compiler.py`: compilation, per-compilation dictionary and immediate execution.
 - `src/prim/artifacts.py`: owned token/program models, validation and TOML/binary I/O.
 - `src/prim/debugger.py`: optional terminal debugger and UART RX extension.
-- `rtl/sim_support/`: shared simulation, reference and test helpers.
+- `tests/support/`: shared simulation, reference and test helpers.
 
 The CPU has 8-bit opcodes, a 16-bit ALU, 16-bit addresses and two stacks of
 16 entries. Opcode bit 7 is the return bit. Do not add RTL stack-array resets;
@@ -76,18 +76,18 @@ IDE tool launch entries use `build/src/`; run make once to create that directory
 ```sh
 python -m unittest discover -s src -p 'test*.py'
 python src/test.py
-cmake -S rtl -B build/rtl
-cmake --build build/rtl
-ctest --test-dir build/rtl --output-on-failure
+cmake -S . -B build/sim
+cmake --build build/sim
+ctest --test-dir build/sim --output-on-failure
 ```
 
 Debugger regressions require `.[debug]`, otherwise they skip. Makefile checks
 require `make`. RTL tests require CMake, Verilator, Icarus Verilog and C++17.
 CTest does not rebuild the simulator; build before running it. Compare Python
 and RTL state after instruction completion, ignoring unused stack cells.
-`rtl/test_tokenforth.py` freshly compiles examples, checks serial output and
+`system/tests/test_tokenforth.py` freshly compiles examples, checks serial output and
 runs the Python regressions including debugger, Makefile and generated opcode-word checks.
 
 For opcode changes, update `src/prim/isa.py` and the active RTL implementation;
-`cmake --build build/rtl --target genopcodes` exports `rtl/opcodes.v`.
+`cmake --build build/sim --target genopcodes` exports `cpu/rtl/opcodes.v`.
 Keep helper modules free of argument parsing, builds and other import effects.

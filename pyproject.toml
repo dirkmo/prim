@@ -28,9 +28,12 @@ prim-disasm = "prim.disassembler:main"
 prim-debug = "prim.cli:debug_main"
 prim-opcodes = "prim.isa:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["prim", "prim.*"]
+[tool.setuptools]
+packages = ["prim", "prim_debug_uart"]
+
+[tool.setuptools.package-dir]
+prim = "src/prim"
+prim_debug_uart = "debug_uart/python/prim_debug_uart"
 
 [tool.setuptools.package-data]
 prim = ["live.html"]

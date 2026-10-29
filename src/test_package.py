@@ -23,6 +23,9 @@ import sys
 sys.argv = ['application', '--not-a-prim-option']
 sys.modules['toml'] = None  # The old parser must no longer be required.
 import prim
+from prim_debug_uart import DebugUART, Status
+from prim.debug_uart import DebugUART as LegacyDebugUART
+assert DebugUART is LegacyDebugUART
 from prim import Prim, MemoryIf, PrimAsm, Consts, PrimOpcodes
 from prim import cpu, isa, assembler, compiler, tokenizer, tokens, errors, exporter, disassembler, cli, artifacts
 assert Prim is cpu.Prim

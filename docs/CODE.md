@@ -53,8 +53,11 @@ ist daher kein direkt ausführbares CPU-Programm.
 | [src/base.cf](../src/base.cf) | In TokenForth geschriebene Basis- und Codeerzeugungswörter |
 | [src/interpreter.cf](../src/interpreter.cf) | Unvollständiger Token-Interpreter zur Ausführung auf der CPU |
 | [src/Makefile](../src/Makefile) | Basisbibliothek, Testprogramm und Interpreter bauen |
-| [rtl/](../rtl/) | Verilog-CPU, SRAM-Anbindung und UART-Sender |
-| [rtl/sim_support/](../rtl/sim_support/) | Simulations- und Vergleichsinfrastruktur; siehe Testdoku |
+| [cpu/](../cpu/README.md) | Eigenständige Verilog-CPU und CPU-Tests |
+| [debug_uart/](../debug_uart/README.md) | UART RX/TX, Debug-Protokoll und Hostbibliothek |
+| [system/](../system/README.md) | Bus-Multiplexer, SRAM/MMIO und Systemintegration |
+| [tests/support/](../tests/support/) | Gemeinsame Simulationshilfen |
+| [tests/support/](../tests/support/) | Simulations- und Vergleichsinfrastruktur; siehe Testdoku |
 | [hdl/](../hdl/) | Alternative Amaranth-Implementierung, außerhalb des aktuellen Arbeitsumfangs |
 
 Die Implementierungen leben im Paket `prim`; die alten Python-Skriptwrapper
@@ -554,7 +557,7 @@ keinen FIFO oder CPU-UART-Statusregister. Bit 7 trennt Debug-ASCII von der
 HALT, STEP, RESET-HALT und BREAK sind in der CPU implementiert. Das vollständige
 Protokoll und die Python-Hostbibliothek beschreibt [DRAFT.md](DRAFT.md).
 
-Details zu Signalen und Timing stehen in der [RTL-Dokumentation](../rtl/README.md).
+Details zu Signalen und Timing stehen in der [RTL-Dokumentation](../system/README.md).
 
 ## 13. CLI und Build-Abhängigkeiten
 

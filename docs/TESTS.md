@@ -2,7 +2,7 @@
 
 Diese Datei beschreibt Testaufbau, Ausführung, Prüfkriterien und Grenzen.
 Die eigentliche [Codearchitektur](CODE.md) steht in einem eigenen Dokument;
-[rtl/README.md](../rtl/README.md) enthält weitere Details zu den Hardwarefällen.
+[system/README.md](../system/README.md) enthält weitere Details zu den Hardwarefällen.
 
 ## 1. Welche Ebenen werden geprüft?
 
@@ -58,20 +58,20 @@ Für die vollständige CTest-Suite werden CMake, Verilator, Icarus Verilog
 (`iverilog`, `vvp`) und ein C++17-Compiler benötigt:
 
 ```sh
-cmake -S rtl -B build/rtl
-cmake --build build/rtl
-ctest --test-dir build/rtl --output-on-failure
+cmake -S . -B build/sim
+cmake --build build/sim
+ctest --test-dir build/sim --output-on-failure
 ```
 
 CMake bevorzugt `.venv/bin/python`, wenn diese Umgebung existiert. Bei Bedarf
 lässt sich der Interpreter explizit auswählen:
 
 ```sh
-cmake -S rtl -B build/rtl -DPython3_EXECUTABLE="$PWD/.venv/bin/python"
+cmake -S . -B build/sim -DPython3_EXECUTABLE="$PWD/.venv/bin/python"
 ```
 
 **CTest baut den Verilator-Simulator nicht neu.** Nach RTL-Änderungen vor CTest
-immer `cmake --build build/rtl` ausführen. Icarus-Harnesses werden dagegen von
+immer `cmake --build build/sim` ausführen. Icarus-Harnesses werden dagegen von
 ihren jeweiligen Tests aufgebaut.
 
 ## 3. Python-Testdateien
@@ -186,9 +186,9 @@ Stacks geprüft. Der erzeugte Einstieg muss ein kleines Programm aufrufen,
 das mit 42 auf dem Datenstack hält. CLI-Tests vergleichen TokenForth-Export,
 Standarddateinamen und den weiterhin voreingestellten Verilog-Export.
 
-## 4. Die acht CTest-Suites
+## 4. Die zwölf CTest-Suites
 
-Die Registrierung steht in [rtl/CMakeLists.txt](../rtl/CMakeLists.txt).
+Die Registrierung steht in [CMakeLists.txt](../CMakeLists.txt).
 
 | CTest-Name | Einstieg | Schwerpunkt |
 | --- | --- | --- |
@@ -199,16 +199,20 @@ Die Registrierung steht in [rtl/CMakeLists.txt](../rtl/CMakeLists.txt).
 | `sram_controller_checks` | `test_sram.py` | Physischer SRAM-Bus, Timing, Read-modify-write und CPU/SRAM-Integration |
 | `uart_io_checks` | `test_io.py` | UART-Einzelmodul, serielle Bytewerte, Grenzübertritte und SRAM/UART-Integration |
 | `tokenforth_end_to_end` | `test_tokenforth.py` | Frisch kompilierte TokenForth-Beispiele auf CPU/SRAM/UART sowie Python-Regressionsskripte |
+| `debug_uart_checks` | `system/tests/test_debug_uart.py` | Vollständige CPU/SRAM/Debug-Integration |
+| `debug_uart_host_checks` | `debug_uart/tests/test_host.py` | Hostprotokoll, BREAK, Kanaltrennung und Timeouts |
+| `cpu_debug_checks` | `cpu/tests/test_debug_cpu.py` | HALT/STEP mit Speicherwartezyklen und BREAK.RET |
+| `uart_component_checks` | `debug_uart/tests/test_rtl.py` | UART RX/TX, Parser ohne CPU/System und TX-Arbitrierung |
 | `test_harness_checks` | `test_support.py` | Importnebenwirkungen, Prozessfehler, Timeouts, Traces und unabhängige Optionen |
 
-Es handelt sich um Suites, nicht um acht einzelne Testfälle. Suites enthalten
+Es handelt sich um Suites, nicht um zwölf einzelne Testfälle. Suites enthalten
 mehrere Tests und teils viele Unterfälle. Mit `-N` lässt sich die Registrierung
 anzeigen; mit `-R` eine Auswahl ausführen:
 
 ```sh
-ctest --test-dir build/rtl -N
-ctest --test-dir build/rtl -R 'comparison_checks|memory_handshake_checks' --output-on-failure
-ctest --test-dir build/rtl -R tokenforth_end_to_end --output-on-failure
+ctest --test-dir build/sim -N
+ctest --test-dir build/sim -R 'comparison_checks|memory_handshake_checks' --output-on-failure
+ctest --test-dir build/sim -R tokenforth_end_to_end --output-on-failure
 ```
 
 ## 5. Was bedeutet „instruktionsweiser Vergleich“?
@@ -232,7 +236,7 @@ sequenceDiagram
     Check->>Check: Felder vergleichen oder Difference auslösen
 ```
 
-`sim_support/reference.py` prüft Instruktionsadresse und Opcode, PC,
+`tests/support/reference.py` prüft Instruktionsadresse und Opcode, PC,
 Stackzeiger, Carry sowie die geordneten Byte-Lese- und Schreibzugriffe.
 Auch belegte Stackwerte werden verglichen. Die Referenz verfolgt dafür eine
 belegte Tiefe, statt alle physischen Arrayzellen blind gleichzusetzen.
@@ -256,7 +260,7 @@ Python-Speicher nicht abbildet. Die Testbench überprüft unter anderem
 Busfreigabe, Steuerleitungen, Read-modify-write, Datenerhalt benachbarter Bytes
 und Adressüberlauf.
 
-Die gemeinsamen Timingvarianten stehen in `sim_support/paths.py`:
+Die gemeinsamen Timingvarianten stehen in `tests/support/paths.py`:
 
 | READ_CYCLES | WRITE_CYCLES | SRAM_DELAY_NS |
 | --- | --- | --- |
@@ -316,20 +320,20 @@ optionalen Voraussetzungen vorhanden sind.
 Direkter Aufruf ohne Verilator-Build:
 
 ```sh
-python rtl/test_tokenforth.py
-python rtl/test_tokenforth.py --compiler-python "$PWD/.venv/bin/python"
+python system/tests/test_tokenforth.py
+python system/tests/test_tokenforth.py --compiler-python "$PWD/.venv/bin/python"
 ```
 
 Die Suite baut ihre Icarus-Simulatoren selbst. Für einzelne Methoden können
 `unittest`-Argumente angehängt werden:
 
 ```sh
-python rtl/test_tokenforth.py TokenForthChecks.test_artifacts_and_reset_entry
+python system/tests/test_tokenforth.py TokenForthChecks.test_artifacts_and_reset_entry
 ```
 
 ## 8. Gemeinsame Testinfrastruktur
 
-| Modul unter `rtl/sim_support/` | Verantwortung |
+| Modul unter `tests/support/` | Verantwortung |
 | --- | --- |
 | `paths.py` | Repositorypfade, Standard-Simulator und Timingvarianten |
 | `config.py` | `Tools`-Konfiguration und Argumente am Skripteinstieg |
@@ -354,26 +358,26 @@ bleiben.
 Ein kleines Assemblerprogramm gegen einen bereits gebauten Simulator prüfen:
 
 ```sh
-python rtl/compare.py --simulator build/rtl/simulator --asm '1 2 +'
-python rtl/compare.py --simulator build/rtl/simulator --asm '1 2 +' --wait-cycles 8 --wait-seed 123
+python cpu/tests/compare.py --simulator build/sim/simulator --asm '1 2 +'
+python cpu/tests/compare.py --simulator build/sim/simulator --asm '1 2 +' --wait-cycles 8 --wait-seed 123
 ```
 
 Bei `--asm` hängt das Werkzeug BREAK an. Ein Binärprogramm benötigt dagegen
 bereits einen erreichbaren BREAK- oder SIMEND-Marker:
 
 ```sh
-python rtl/compare.py --simulator build/rtl/simulator --binary build/src/demo.bin --max-steps 1000
+python cpu/tests/compare.py --simulator build/sim/simulator --binary build/src/demo.bin --max-steps 1000
 ```
 
 Verilator-basierte `unittest`-Skripte verlangen beim direkten Einstieg einen
 Simulatorpfad, zum Beispiel:
 
 ```sh
-python rtl/test_compare.py --simulator build/rtl/simulator
-python rtl/test_memory.py --simulator build/rtl/simulator
-python rtl/test_sram.py
-python rtl/test_io.py
-python rtl/test_support.py
+python cpu/tests/test_compare.py --simulator build/sim/simulator
+python cpu/tests/test_memory.py --simulator build/sim/simulator
+python system/tests/test_sram.py
+python system/tests/test_io.py
+python tests/test_support.py
 ```
 
 Bei einer Abweichung nennt `Difference` Schritt, PC, Opcode und das betroffene
@@ -404,10 +408,11 @@ werden; die Dokumentation hält keine dauerhaft gültige Testanzahl fest.
 
 ## FPGA-Debug-UART
 
-`python rtl/test_debug_uart.py` prüft den vollständigen seriellen Debugpfad sowie
-CPU-Halt/Step bei Speicherwartezyklen und UART-RX.
-`python src/test_debug_uart.py` prüft die kleine Hostbibliothek. CTest integriert
-beide als `debug_uart_checks` und `debug_uart_host_checks`; damit gibt es zehn
-Suiten. Details zum Testumfang, dem implementierten Protokoll und dem
-`synth_ice40`-Vergleich stehen in [DRAFT.md](DRAFT.md). FPGA-CPU-Ausgaben werden
-als sieben Nutzbits verglichen; UTF-8 wird auf dieser Leitung nicht erhalten.
+`python system/tests/test_debug_uart.py` prüft den vollständigen seriellen Debugpfad.
+`python cpu/tests/test_debug_cpu.py` prüft CPU-Halt/Step bei Speicherwartezyklen.
+`python debug_uart/tests/test_rtl.py` prüft RX/TX, Parser und TX-Arbiter ohne
+CPU- oder Systeminstanzen. `python debug_uart/tests/test_host.py` prüft die
+Hostbibliothek. CTest integriert alle vier Einstiegspunkte; insgesamt gibt es
+zwölf Suiten. Details zum implementierten Protokoll und zum `synth_ice40`-Vergleich
+stehen in [DRAFT.md](DRAFT.md). FPGA-CPU-Ausgaben werden als sieben Nutzbits
+verglichen; UTF-8 wird auf dieser Leitung nicht erhalten.

@@ -40,7 +40,7 @@ additional cycles. Neighboring bytes must be preserved.
 ### D04 – Focus current work on Verilog and Python
 
 The user excluded `hdl/` from the current scope. Active implementation and
-comparisons are in `rtl/` and `src/prim/`. Amaranth dependencies remain optional.
+comparisons are in `cpu/`, `debug_uart/`, `system/` and `src/prim/`. Amaranth dependencies remain optional.
 
 ### D13 – Preserve CPU memory behavior across Python and RTL
 
@@ -88,7 +88,7 @@ Commit: `0c89525`.
 
 ### D09 – Test helpers without import side effects
 
-`rtl/sim_support/` groups build support, tool execution, the reference model,
+`tests/support/` groups build support, tool execution, the reference model,
 traces and simulation. Test modules do not import other test modules, parse
 arguments or start builds on import. Configuration is passed explicitly.
 This supports both direct script execution and test discovery.

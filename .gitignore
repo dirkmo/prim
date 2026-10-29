@@ -8,9 +8,10 @@ __pycache__
 build/
 .venv/
 hdl/prim.vcd
-prim.v
+/prim.v
 prim.vcd
 *.gtkw
+!cpu/tests/sim.gtkw
 *.vcd
 !pyproject.toml
 *.egg-info/
