@@ -75,6 +75,8 @@ add_test(NAME debug_uart_checks
         --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
 add_test(NAME debug_uart_host_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/debug_uart/tests/test_host.py)
+add_test(NAME uart_session_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/debug_uart/tests/test_session.py)
 add_test(NAME cpu_debug_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/cpu/tests/test_debug_cpu.py
         --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})

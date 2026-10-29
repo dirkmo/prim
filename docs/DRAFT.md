@@ -24,7 +24,8 @@ Bit 7 trennt die Kanäle:
 | 0xxxxxxx | normale CPU-Ausgabe, sieben Nutzbits |
 | 1xxxxxxx | Debug-ASCII-Zeichen, Bit 7 zusätzlich gesetzt |
 
-Empfangene Zeichen des normalen Ausgabekanals werden ignoriert. Im Folgenden
+Empfangene Zeichen des normalen Kanals aktualisieren ein separates CPU-RX-Register.
+Bit 7 wird ausschließlich zur Kanaltrennung verwendet; CPU-Daten haben sieben Bits. Im Folgenden
 stehen alle Debug-Zeichen ohne das zusätzliche Bit 7. Bit 6 hat keine separate
 Steuerbedeutung. CPU-MMIO-Ausgaben maskieren Bit 7; UTF-8 bleibt dadurch nicht
 unverändert erhalten. Die Python-CPU/der lokale Softwaredebugger können weiterhin
@@ -43,7 +44,8 @@ Das niedrigste Nibble kommt zuerst: `12` = 0x21, `1234` = 0x4321,
 | `S` | STEP, nur bei Halt, genau eine Instruktion | `K` nach erneutem Halt |
 | `Z` | RESET-HALT, ausschließlich CPU zurücksetzen | `K` nach Halt am Reset-PC |
 | `P` | READ-PC, nur bei Halt | `K` + vier Hexziffern |
-| `?` | Status und Neustart des Eingabeparsers | `T` + eine Hexziffer |
+| `?` | CPU-Status und Neustart des Eingabeparsers | `T` + eine Hexziffer |
+| `q` | UART-Status, auch bei laufender CPU und ohne Buszugriff | `K` + eine Hexziffer |
 | `A` + 1–4 Hexziffern | Adresspointer teilweise setzen | keine |
 | `r` | READ8 am Pointer | `K` + zwei Hexziffern |
 | `R` | READ16 am Pointer | `K` + vier Hexziffern |
@@ -132,17 +134,40 @@ BS und WE bleiben bis ACK stabil. Der Pointer ändert sich erst nach ACK.
 Byte-, Wort-, unaligned- und Wrapping-Semantik des vorhandenen Controllers
 bleiben erhalten. MMIO-Zugriffe haben ihre normalen Seiteneffekte.
 
-Schreiben auf Byteadresse FFFF erzeugt normale UART-Ausgabe; Lesen dort liest
-SRAM. Wortschreiben bei FFFE schreibt den niedrigen Teil in SRAM und den
-hohen Teil auf UART. Bei FFFF geht der niedrige Teil an UART und der hohe
-nach SRAM-Adresse 0000. Dies gilt auch für den Debug-Master.
+### CPU-UART und Puffer
 
-Der vorhandene TX hat valid/ready und keinen zusätzlichen FIFO. Debug-Antworten
-und BREAK haben an Bytegrenzen Vorrang. Ein bereits gestarteter Frame wird
-vollständig gesendet. CPU-MMIO wartet bei Bedarf im Bus-Handshake. Ein Debug-
-Schreibzugriff auf UART-MMIO wartet ebenfalls auf die Annahme des Ausgabebytes;
-erst dessen Bus-ACK erzeugt das `K`. Dadurch kann die Antwort nicht die eigene
-MMIO-Ausgabe blockieren. Eine unabhängige BREAK-Meldung darf vorher senden.
+| Adresse | Lesen | Schreiben |
+|---|---|---|
+| FFFE | Bit 0: RX empfangen; Bit 1: TX-Puffer frei; Bits 7:2: null | ignoriert |
+| FFFF | zuletzt empfangenes CPU-Zeichen, Bit 7 null | CPU-TX-Puffer übernehmen, sieben Nutzbits |
+
+CPU-Empfang besitzt ein Datenregister und ein Received-Flag. Lesen von FFFF
+löscht das Flag erst bei Bus-ACK, erhält aber den Datenwert. Ohne neuen Empfang
+wird weiter das zuletzt empfangene Byte geliefert. Neuer Empfang gewinnt gegen
+zeitgleiches Lesen. Bei Überlauf überschreibt das neue Byte den alten Inhalt;
+der korrekte Host vermeidet Überlauf über die UART-Statusabfrage `q`.
+
+CPU-TX besitzt einen Ein-Byte-Puffer zusätzlich zum UART-Schieberegister.
+Schreiben erhält ACK bei Pufferübernahme, bei vollem Puffer wartet der Bus.
+Statusbit 1 beschreibt den freien Puffer, nicht die physisch ruhende TX-Leitung.
+Systemreset initialisiert RX-Daten/Flags und TX-Puffer. RESET-HALT setzt nur
+die CPU zurück; UART-Puffer und letztes RX-Byte bleiben dabei erhalten.
+
+Wortzugriffe sind little-endian, auch über MMIO-Grenzen: Lesen bei FFFE liefert
+Status unten und RX-Daten oben und quittiert den RX-Verbrauch bei ACK. Bei FFFD
+wird SRAM unten mit Status oben kombiniert. Bei FFFF wird RX unten mit SRAM an
+0000 oben kombiniert. Schreiben bei FFFE ignoriert die Status-Lane und übernimmt
+die hohe Lane in TX; bei FFFF geht die niedrige Lane in TX und die hohe nach
+SRAM-Adresse 0000. Gemischte Zugriffe schließen zuerst die SRAM-Lane ab; RX-Verbrauch und TX-
+Übernahme erfolgen erst beim abschließenden Bus-ACK. Dies gilt auch für den
+Debug-Master. Andere Wortzugriffe
+bleiben unveränderte SRAM-Wortoperationen.
+
+Debug-Antworten und BREAK haben an Bytegrenzen Vorrang vor CPU-TX. Ein bereits
+begonnener Frame wird beendet. CPU-Empfang ist vom Debug-Parser unabhängig;
+ein volles RX-Register blockiert keine Debug-Kommandos. Ein Debug-MMIO-Schreiben
+quittiert die Übernahme in den CPU-TX-Puffer und erzeugt danach `K`. Der TX-Puffer
+kann während der Debug-Antwort warten; es entsteht kein gegenseitiger Deadlock.
 
 ## Python-Hostbibliothek
 
@@ -169,7 +194,8 @@ finally:
     uart.transport.close()
 ```
 
-Weitere Methoden: `run`, `reset_halt`, `set_address`, `read8`, `write_words`.
+Weitere Methoden: `run`, `reset_halt`, `set_address`, `read8`, `write_words`,
+`uart_status` (RX-Flag und TX-Puffer-frei).
 Adressargumente sind optional; ohne sie wird der aktuelle Hardwarepointer
 verwendet. `set_address` überträgt immer alle vier Nibbles. Schreibfolgen
 verwenden ein einziges Präfix und warten auf jedes `K`. Ein Aufrufer zur Zeit;
@@ -179,7 +205,8 @@ Kanal-0-Ausgabe wird in `output` gesammelt und optional an `on_output(bytes)`
 weitergereicht. BREAK erhöht `break_events` und ruft optional `on_break()` auf.
 Die Auswertung geschieht beim Lesen von Antworten. Ein `B` hinter dem letzten
 Antwortzeichen wird spätestens beim nächsten Aufruf, beispielsweise `status()`,
-verarbeitet. Es gibt keinen Hintergrundthread. Nach einem Hosttimeout muss der
+verarbeitet. Diese blockierende Basisklasse hat keinen Hintergrundthread;
+die unten beschriebene UARTSession der Konsole liest dagegen kontinuierlich. Nach einem Hosttimeout muss der
 Aufrufer den Zustand prüfen; ein Timeout bedeutet keinen Hardware-Abbruch.
 
 ## Bewusst ausgelassene Prüfungen
@@ -213,8 +240,9 @@ bestehenden SRAM-, ISA-, Compiler- und UART-Tests bleiben enthalten.
 Ergebnisprotokoll: `build/restructure/ctest.log`.
 
 Synthese mit Yosys 0.68+136, `synth_ice40 -top prim_system`, gleicher Standardtakt,
-Vergleich mit dem ursprünglichen Stand vor Einführung der Debug-UART und
-dem Stand direkt vor der Verzeichnis-/Komponententrennung:
+Historischer Vergleich vor der aktuellen RX/TX-Puffererweiterung: ursprünglicher
+Stand vor Einführung der Debug-UART, danach vor und nach der Komponententrennung.
+Die aktuellen Board-Ressourcen und das Timing stehen in der Board-README.
 
 | Ressource | Ohne Debug | Vor Trennung | Nach Trennung |
 |---|---:|---:|---:|
@@ -230,7 +258,7 @@ Logs: ursprüngliche Synthesen unter `build/debug-uart/`; aktuelle Synthese unte
 oder `yosys -s system/synth.ys` vom Projekt-Root aus.
 
 ```sh
-yosys -p 'read_verilog -Icpu/rtl cpu/rtl/prim.v system/rtl/memory.v debug_uart/rtl/uart_tx.v debug_uart/rtl/uart_rx.v debug_uart/rtl/debug_uart.v system/rtl/memory_io.v system/rtl/bus_mux.v debug_uart/rtl/uart_arbiter.v debug_uart/rtl/debug_uart_link.v system/rtl/prim_system.v; synth_ice40 -top prim_system; stat'
+yosys -p 'read_verilog -Icpu/rtl cpu/rtl/prim.v system/rtl/memory.v debug_uart/rtl/uart_tx.v debug_uart/rtl/uart_buffers.v debug_uart/rtl/uart_rx.v debug_uart/rtl/debug_uart.v system/rtl/memory_io.v system/rtl/bus_mux.v debug_uart/rtl/uart_arbiter.v debug_uart/rtl/debug_uart_link.v system/rtl/prim_system.v; synth_ice40 -top prim_system; stat'
 ```
 
 Dies ist ein Synthesevergleich, keine Platzierungs-, Routing- oder Frequenzzusage.
@@ -242,3 +270,29 @@ FPGA-PLL von 100 auf 25 MHz. CPU, UART und SRAM nutzen gemeinsam diesen globalen
 Systemtakt; der UART-Teiler ist dort 217. Die PLL-Ausnahme ist auf den Board-Wrapper
 beschränkt. Reset wird erst nach synchronisiertem PLL-Lock freigegeben.
 Siehe [Board-Flow](../boards/olimex_ice40hx8k_evb/README.md).
+
+Das Board-Hostskript stellt `halt`, `run`, `step`, `reset-halt`, `pc` und
+`uart-status` separat bereit. `step` und `pc` prüfen vorab den Haltstatus.
+Images, die FFFE oder FFFF enthalten, benötigen `load --skip-uart-mmio`.
+Jede enthaltene MMIO-Adresse wird gemeldet und beim Schreiben und Verifizieren
+ausgelassen. Ein vollständiges Image schreibt und prüft damit 65.534 SRAM-Bytes.
+`--run` startet ausschließlich nach erfolgreicher Verifikation.
+
+## Interaktive Konsole
+
+`host.py --port PORT console` hält den Port über Laden, RUN und den Dialog mit
+der CPU geöffnet. Ein zentraler Reader trennt Debug-Antworten, asynchrone BREAKs
+und CPU-Ausgabe; ein separater Sender nutzt `q` als RX-Flusskontrolle. Bei vollem
+CPU-RX-Register warten Tastatureingaben hostseitig, Debug-Steuerung bleibt möglich.
+Der Host sendet höchstens ein CPU-Byte je freiem Register. Statusabfragen werden
+nicht zwischen die Zeichen oder Werte einer laufenden Debug-Operation geschoben.
+SRAM-Debugzugriffe benötigen weiterhin CPU-Halt; Transport beider Kanäle bleibt
+auch dann aktiv. Nicht-ASCII/UTF-8-Eingaben werden als CPU-Daten abgewiesen.
+
+Ctrl+J öffnet den lokalen Debug-Prompt, Ctrl+D beendet die Konsole ohne HALT oder
+RESET. Ctrl+V überträgt das nächste Byte wörtlich, auch Ctrl+J oder Ctrl+D.
+Leeres Enter im Prompt kehrt in den CPU-Modus zurück. Im CPU-Modus wird Enter
+übertragen. `help`, `?` und `console --help` zeigen alle Befehle und Keybindings.
+Der Prompt bietet `halt`/`stop`, `step`, `reset-halt`, `run`, `pc`, `status`,
+`uart-status`, `sram-check`, `load DATEI [--skip-uart-mmio] [--run]` und `quit`. CPU-Ausgabe und
+BREAK bleiben auch während Hilfe, Eingabe und ausstehender Antworten aktiv.

@@ -6,6 +6,8 @@ needed unless connect() is used. One caller/operation at a time.
 """
 from dataclasses import dataclass
 import time
+import threading
+from functools import wraps
 
 
 class DebugTimeout(TimeoutError):
@@ -18,6 +20,20 @@ class Status:
     break_reason: bool
 
 
+@dataclass(frozen=True)
+class UARTStatus:
+    received: bool
+    tx_free: bool
+
+
+def transaction(method):
+    @wraps(method)
+    def locked(self, *args, **kwargs):
+        with self._operation_lock:
+            return method(self, *args, **kwargs)
+    return locked
+
+
 def encode_number(value: int, digits: int) -> str:
     if not 0 <= value < 1 << (4 * digits):
         raise ValueError(f'value must fit in {digits * 4} bits')
@@ -28,6 +44,7 @@ class DebugUART:
     def __init__(self, transport, *, timeout=2.0, on_output=None, on_break=None):
         if timeout <= 0:
             raise ValueError('timeout must be positive')
+        self._operation_lock = threading.RLock()
         self.transport = transport
         self.timeout = timeout
         if hasattr(transport, 'timeout'):
@@ -79,43 +96,59 @@ class DebugUART:
             raise RuntimeError(f'Invalid debug hex response: {text!r}')
         return int(text[::-1], 16) if digits else None
 
+    @transaction
     def halt(self):
         self._send('H')
         self._response()
 
+    @transaction
     def run(self):
         self._send('G')
         self._response()
 
+    @transaction
     def step(self):
         """Requires a halted CPU; BREAK notifications are handled while waiting."""
         self._send('S')
         self._response()
 
+    @transaction
     def reset_halt(self):
         self._send('Z')
         self._response()
 
+    @transaction
     def status(self):
         """Also resets an incomplete address/write input; does not abort a bus access."""
         self._send('?')
         value = self._response('T', 1)
         return Status(bool(value & 1), bool(value & 2))
 
+    @transaction
+    def uart_status(self):
+        """UART RX-valid and pending-TX-free flags; does not acquire the CPU bus."""
+        self._send('q')
+        value = self._response(digits=1)
+        return UARTStatus(bool(value & 1), bool(value & 2))
+
+    @transaction
     def read_pc(self):
         """Requires a halted CPU."""
         self._send('P')
         return self._response(digits=4)
 
+    @transaction
     def set_address(self, address):
         self._send('A' + encode_number(address, 4))
 
+    @transaction
     def read8(self, address=None):
         if address is not None:
             self.set_address(address)
         self._send('r')
         return self._response(digits=2)
 
+    @transaction
     def read16(self, address=None):
         if address is not None:
             self.set_address(address)
@@ -130,8 +163,10 @@ class DebugUART:
             self._send(encode_number(value, digits))
             self._response()  # never send the next value before its predecessor's ACK
 
+    @transaction
     def write_bytes(self, values, address=None):
         self._write(values, 2, address)
 
+    @transaction
     def write_words(self, values, address=None):
         self._write(values, 4, address)

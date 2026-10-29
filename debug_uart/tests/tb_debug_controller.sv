@@ -18,7 +18,7 @@ reg last_we;
 debug_uart dut(.i_clk(clk), .i_reset(reset), .i_rx_data(rx), .i_rx_valid(valid),
     .o_tx_data(tx), .o_tx_valid(tx_valid), .i_tx_ready(ready), .o_halt(halt_cpu),
     .o_run(run_cpu), .o_step(step_cpu), .o_reset_cpu(reset_cpu),
-    .i_halted(1'b1), .i_break_reason(1'b0), .i_break_event(break_event), .i_pc(16'h4321),
+    .i_uart_status(2'b10), .i_halted(1'b1), .i_break_reason(1'b0), .i_break_event(break_event), .i_pc(16'h4321),
     .o_addr(addr), .o_data(data), .o_bs(bs), .o_we(we), .i_ack(ack), .i_data(16'hba21));
 always @(negedge clk) begin
     ack=0;
@@ -62,6 +62,7 @@ initial begin
     repeat(5) @(negedge clk);
     if(received!=9) $fatal(1,"TX ignored backpressure");
     ready=1; wait(received==15); check(9,"K1234B");
+    send("q"); wait(received==17); check(15,"K2");
     $display("PASS debug controller"); $finish;
 end
 initial begin #20000; $fatal(1,"controller timeout"); end

@@ -8,6 +8,7 @@ module debug_uart(
     input i_tx_ready,
     output o_halt,
     output reg o_run, o_step, o_reset_cpu,
+    input [1:0] i_uart_status,
     input i_halted, i_break_reason, i_break_event,
     input [15:0] i_pc,
     output [15:0] o_addr, o_data,
@@ -43,7 +44,7 @@ wire [7:0] c = {1'b0, i_rx_data[6:0]};
 wire is_hex = (c >= "0" && c <= "9") || (c >= "a" && c <= "f");
 wire [3:0] hexvalue = c[6] ? c[3:0] + 4'd9 : c[3:0];
 wire command = c == "A" || c == "r" || c == "R" || c == "w" || c == "W" ||
-               c == "H" || c == "G" || c == "S" || c == "Z" || c == "P" || c == "?";
+               c == "H" || c == "G" || c == "S" || c == "Z" || c == "P" || c == "?" || c == "q";
 always @(posedge i_clk) begin
     o_run <= 0; o_step <= 0; o_reset_cpu <= 0;
     if (i_reset) begin
@@ -87,6 +88,10 @@ always @(posedge i_clk) begin
                         "S": begin o_step <= 1; state <= STEPPING; end
                         "Z": state <= RESET_WAIT;
                         "P": begin prefix <= 1; status_reply <= 0; remaining <= 4; reply <= i_pc; end
+                        "q": begin
+                            prefix <= 1; status_reply <= 0; remaining <= 1;
+                            reply <= {14'b0, i_uart_status};
+                        end
                         "?": begin
                             prefix <= 1; status_reply <= 1; remaining <= 1;
                             reply <= {14'b0, i_break_reason, i_halted};

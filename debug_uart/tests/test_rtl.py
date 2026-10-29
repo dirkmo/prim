@@ -29,6 +29,9 @@ class UartChecks(unittest.TestCase):
             with self.subTest(divider=divider):
                 self.simulate('tb_uart', ['tb_uart.sv', 'uart_tx.v'], {'CLKS_PER_BIT': divider})
 
+    def test_buffers(self):
+        self.simulate('tb_uart_buffers', ['tb_uart_buffers.sv', 'uart_buffers.v'])
+
     def test_controller(self):
         self.simulate('tb_debug_controller', ['tb_debug_controller.sv', 'debug_uart.v'])
 
