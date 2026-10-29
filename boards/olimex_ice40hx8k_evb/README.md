@@ -32,7 +32,7 @@ The UART pin assignment requested by the user is GPIO1 pin 33 for FPGA RX
 (ball G3) and GPIO1 pin 34 for FPGA TX (ball F3). Artifacts are in
 `build/olimex_ice40hx8k_evb/`, including the bitstream `prim.bin`. Utilization is
 3216/7680 logic cells (41.9%), one PLL, and no block RAM. The user has confirmed
-the running bitstream, LED2 heartbeat, working debug communication and successful
+the running bitstream, working debug communication and successful
 streaming loading on the board (29 October 2026).
 The build stops before icepack if timing fails; there is no timing override.
 
@@ -75,7 +75,9 @@ while the system clock is running; it is released through the same sequence.
 contents are assumed. UART/debug logic remain available after reset. BUT1 resets CPU, UART, debug controller and its
 pointer. UART `Z` resets only the CPU and retains the debug pointer.
 
-LED1 shows confirmed CPU halt, LED2 is a heartbeat (about 1.49 Hz at 25 MHz).
+LED1 (M12) and LED2 (R16) are controlled by bits 0 and 1 of the CPU register
+at `0xFFFD`: 1 turns the LED on. Both LEDs are off after system reset.
+For example, `3 0xfffd c!` turns both on; `0 0xfffd c!` turns both off.
 SRAM A17:A15 are held at zero: the CPU uses the first 64 KiB of the 512 KiB
 physical device. Both byte enables are wired low on the board; the existing
 whole-word controller preserves neighboring bytes. Read/write phases last
@@ -163,7 +165,7 @@ on the board. This is a functional check, not an external SRAM timing measuremen
 
 | Load option | Default | Meaning |
 |---|---|---|
-| `--skip-uart-mmio` | off | Explicitly omit included FFFE/FFFF bytes; required for the full compiler image |
+| `--skip-uart-mmio` | off | Explicitly omit included FFFD..FFFF LED/UART bytes; required for the full compiler image |
 | `--run` | off | Start only after the complete load and any requested verification succeed |
 | `--verify` | off | Read back words and an optional last byte, checking all loaded bytes |
 | `--write-delay SECONDS` | `0` | Pause after each transmitted word; e.g. `0.001` for 1 ms |
@@ -239,7 +241,7 @@ image. Wait for `Loaded ...` (or `Loaded and verified ...` with `--verify`)
 and, with `--run`, `CPU running`;
 the initial MMIO-skipping messages do not indicate completion.
 
-Images of 1..65534 bytes load directly. Compiler memory exports contain 65536
+Images of 1..65533 bytes load directly. Compiler memory exports contain 65536
 bytes; those require the explicit `--skip-uart-mmio` option:
 
 ```sh
@@ -249,21 +251,22 @@ python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapte
 ```
 
 With a full 64-KiB image, the script reports the omitted image bytes at
-`0xFFFE` and `0xFFFF`, writes only `0x0000..0xFFFD` (65534 bytes), optionally verifies them, and
-preserves the existing physical SRAM bytes behind both registers. The omitted
+`0xFFFD`, `0xFFFE` and `0xFFFF`, writes only `0x0000..0xFFFC` (65533 bytes), optionally verifies them, and
+preserves the existing physical SRAM bytes behind these registers. The omitted
 bytes are not verified. This avoids reading UART status/consuming RX during
-verification and avoids UART TX writes during loading. An image of 65535 bytes
-already covers FFFE and also requires the option, omitting/reporting only that
+verification and avoids UART TX writes during loading. An image of 65534 bytes
+already covers FFFD and also requires the option, omitting/reporting only that
 included MMIO address. No automatic trimming occurs without the option.
 Empty images and images larger than 65536 bytes remain errors. Invalid sizes
 and a missing skip option are rejected before connecting to the board.
 The base-library example demonstrates loading a compiler image; it does not
 install a runnable application entry at PC 0000.
 
-## CPU UART registers
+## CPU LED/UART registers
 
 | Address | Read | Write |
 |---|---|---|
+| FFFD | LED1 in bit 0, LED2 in bit 1; other bits zero | set LEDs from bits 0/1; ignore bits 7:2 |
 | FFFE | bit 0 received, bit 1 TX buffer free; other bits zero | ignored |
 | FFFF | last received seven-bit byte; clear received on final bus ACK | enqueue seven-bit CPU TX byte; wait when full |
 

@@ -17,6 +17,15 @@ from support.unittest_bridge import SramHarness
 class IoChecks(SramScenarios, SramHarness, unittest.TestCase):
     with_uart = True
 
+    def test_led_register_readback(self):
+        # Upper bits are ignored; byte and word accesses read back bits 1:0.
+        asm = ' '.join(f'{value} 0xfffd c! 0xfffd c@ 0xffff c!'
+                       for value in (0, 1, 2, 3, 0xfc, 0xff))
+        for timing in TIMINGS:
+            with self.subTest(timing=timing):
+                actual = self.compare_image(bytes(PrimAsm.assemble(asm) + [Op.BREAK]), timing)
+                self.assertEqual(actual, bytes((0, 1, 2, 3, 0, 3)))
+
     def test_serial_hello_world(self):
         message = b'Hello, World!\r\n'
         asm = ' '.join(f'{byte} 0xffff c!' for byte in message)

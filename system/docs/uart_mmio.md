@@ -1,4 +1,4 @@
-# Prim system UART memory map
+# Prim system LED/UART memory map
 
 This map belongs to [`memory_io.v`](../rtl/memory_io.v) in the Prim system.
 The reusable [`debug_uart_link`](../../debug_uart/rtl/debug_uart_link.v) exposes
@@ -10,11 +10,13 @@ semantics are described in the
 
 | CPU byte address | Read | Write |
 |---|---|---|
+| `0xFFFD` — LEDs | Bits 0/1: LED1/LED2; bits 7:2 zero | Set LED1/LED2 from bits 0/1; ignore bits 7:2 |
 | `0xFFFE` — STATUS | Bit 0: received; bit 1: pending TX buffer free; bits 7:2 zero | Acknowledge and ignore |
 | `0xFFFF` — RX/TX DATA | Last received seven-bit byte, bit 7 zero; clear received at final ACK | Enqueue bits 6:0 into CPU TX; ignore bit 7; wait if the buffer is full |
 
-There is no UART register at FFFD. FFFD and 0000 are ordinary SRAM byte
-addresses. SRAM cells behind FFFE/FFFF are not accessible through this map.
+LED1 (M12) and LED2 (R16) turn on when their respective bit is 1. Full system
+reset clears the LED register; CPU-only reset preserves it. 0000 remains SRAM.
+SRAM cells behind FFFD..FFFF are not accessible through this map.
 CPU and debug master see the same register side effects. A debug read of FFFF
 also consumes RX; debug command q instead reads UART status without consuming
 input or acquiring the CPU bus. STATUS is not write-one-to-clear.
@@ -33,7 +35,8 @@ The table below applies to BS=11:
 
 | Starting byte address of 16-bit access | Low byte, bits 7:0 | High byte, bits 15:8 | Write effect |
 |---|---|---|---|
-| `FFFD` | SRAM[FFFD] | STATUS at FFFE | Write low byte to SRAM[FFFD]; ignore high status byte |
+| `FFFC` | SRAM[FFFC] | LEDs at FFFD | Write low byte to SRAM[FFFC]; set LEDs from high bits 1:0 |
+| `FFFD` | LEDs at FFFD | STATUS at FFFE | Set LEDs from low bits 1:0; ignore high status byte |
 | `FFFE` | STATUS at FFFE | RX DATA at FFFF | Ignore low status byte; enqueue high byte's low seven bits |
 | `FFFF` | RX DATA at FFFF | SRAM[0000], due to wraparound | Enqueue low byte's low seven bits; write all eight high-byte bits to SRAM[0000] |
 
@@ -53,6 +56,8 @@ adapter behavior, not an inherent feature of the UART module.
 Use byte accesses for independent STATUS and DATA operations:
 
 ```text
+3 0xfffd c!          # turn both LEDs on (0: off, 1: LED1, 2: LED2)
+0xfffd c@             # read current LED bits
 0xfffe c@ 1 and       # test received
 0xffff c@             # read RX; clear received, retain byte
 0xfffe c@ 2 and       # test pending TX buffer free (not physical TX idle)
@@ -67,9 +72,9 @@ full system reset clears them.
 
 ## Image loading
 
-This system reserves both FFFE and FFFF. A full 64-KiB SRAM image therefore
+This system reserves FFFD, FFFE and FFFF. A full 64-KiB SRAM image therefore
 requires `load --skip-uart-mmio` in the board host tool. It reports each included
-MMIO address, writes/verifies only 0000..FFFD (65534 bytes for a full image),
+MMIO address, writes/verifies only 0000..FFFC (65533 bytes for a full image),
 and leaves the physical SRAM bytes behind the registers unchanged. Readback
 through the mapped registers does not verify those hidden SRAM cells.
 

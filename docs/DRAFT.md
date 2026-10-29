@@ -138,6 +138,7 @@ bleiben erhalten. MMIO-Zugriffe haben ihre normalen Seiteneffekte.
 
 | Adresse | Lesen | Schreiben |
 |---|---|---|
+| FFFD | LED1/LED2 in Bit 0/1; Bits 7:2 null | Bit 0/1 setzen LEDs (1 = an), Bits 7:2 ignoriert |
 | FFFE | Bit 0: RX empfangen; Bit 1: TX-Puffer frei; Bits 7:2: null | ignoriert |
 | FFFF | zuletzt empfangenes CPU-Zeichen, Bit 7 null | CPU-TX-Puffer übernehmen, sieben Nutzbits |
 
@@ -155,7 +156,8 @@ die CPU zurück; UART-Puffer und letztes RX-Byte bleiben dabei erhalten.
 
 Wortzugriffe sind little-endian, auch über MMIO-Grenzen: Lesen bei FFFE liefert
 Status unten und RX-Daten oben und quittiert den RX-Verbrauch bei ACK. Bei FFFD
-wird SRAM unten mit Status oben kombiniert. Bei FFFF wird RX unten mit SRAM an
+wird das LED-Register unten mit Status oben kombiniert; bei FFFC SRAM unten
+mit dem LED-Register oben. Systemreset schaltet die LEDs aus, CPU-Reset erhält sie. Bei FFFF wird RX unten mit SRAM an
 0000 oben kombiniert. Schreiben bei FFFE ignoriert die Status-Lane und übernimmt
 die hohe Lane in TX; bei FFFF geht die niedrige Lane in TX und die hohe nach
 SRAM-Adresse 0000. Gemischte Zugriffe schließen zuerst die SRAM-Lane ab; RX-Verbrauch und TX-
@@ -276,7 +278,7 @@ Siehe [Board-Flow](../boards/olimex_ice40hx8k_evb/README.md).
 
 Das Board-Hostskript stellt `halt`, `run`, `step`, `reset-halt`, `pc` und
 `uart-status` separat bereit. `step` und `pc` prüfen vorab den Haltstatus.
-Images, die FFFE oder FFFF enthalten, benötigen `load --skip-uart-mmio`.
+Images, die FFFD, FFFE oder FFFF enthalten, benötigen `load --skip-uart-mmio`.
 Jede enthaltene MMIO-Adresse wird gemeldet und beim Schreiben und Verifizieren
 ausgelassen. Ein vollständiges Image schreibt damit 65.534 SRAM-Bytes;
 die optionale Prüfung ist auf dieselben Bytes begrenzt.

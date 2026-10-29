@@ -4,8 +4,7 @@ module olimex_ice40hx8k_evb(
     input button_n,
     input uart_rx,
     output uart_tx,
-    output led_halted,
-    output led_heartbeat,
+    output [1:0] leds,
     output [17:0] sram_addr,
     inout [15:0] sram_data,
     output sram_cs_n, sram_oe_n, sram_we_n
@@ -31,16 +30,10 @@ always @(posedge clk_sys) begin
     if (!lock_sync[1]) reset_pipe <= 4'hf;
     else reset_pipe <= {reset_pipe[2:0], !button_sync[1]};
 end
-reg [23:0] heartbeat = 0;
-always @(posedge clk_sys) begin
-    if (reset) heartbeat <= 0;
-    else heartbeat <= heartbeat + 1'b1;
-end
-assign led_heartbeat = heartbeat[23];
 wire [15:0] ram_addr;
 assign sram_addr = {2'b00, ram_addr};
 prim_system #(.CLK_HZ(25000000), .READ_CYCLES(3), .WRITE_CYCLES(3), .START_HALTED(1)) system(
-    .i_clk(clk_sys), .i_reset(reset), .i_rx(uart_rx), .o_tx(uart_tx), .o_halted(led_halted),
+    .i_clk(clk_sys), .i_reset(reset), .i_rx(uart_rx), .o_tx(uart_tx), .o_leds(leds),
     .ram_addr(ram_addr), .ram_data(sram_data), .ram_cs_n(sram_cs_n),
     .ram_oe_n(sram_oe_n), .ram_we_n(sram_we_n));
 endmodule

@@ -4,7 +4,7 @@ from prim.assembler import PrimAsm
 from prim.isa import PrimOpcodes as Op
 
 class Memory(MemoryIf):
-    """64 KiB RAM; optionally map FFFE status and FFFF CPU UART data."""
+    """64 KiB RAM; optionally map FFFD LEDs, FFFE status and FFFF UART data."""
 
     def __init__(self, image, uart=False):
         self.data = bytearray([0xff]) * 65536
@@ -13,12 +13,15 @@ class Memory(MemoryIf):
         self.reads = []
         self.uart = uart
         self.tx = []
+        self.leds = 0
         self.status_samples = iter(())
 
     def read8(self, addr):
         addr &= 0xffff
         value = self.data[addr]
-        if self.uart and addr == 0xfffe:
+        if self.uart and addr == 0xfffd:
+            value = self.leds
+        elif self.uart and addr == 0xfffe:
             value = next(self.status_samples, 2) & 2
         elif self.uart and addr == 0xffff:
             value = 0
@@ -30,7 +33,9 @@ class Memory(MemoryIf):
 
     def write8(self, addr, value):
         addr, value = addr & 0xffff, value & 0xff
-        if self.uart and addr == 0xffff:
+        if self.uart and addr == 0xfffd:
+            self.leds = value & 3
+        elif self.uart and addr == 0xffff:
             self.tx.append(value & 0x7f)
         elif not (self.uart and addr == 0xfffe):
             self.data[addr] = value

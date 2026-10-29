@@ -75,7 +75,8 @@ remains stable until the acknowledging clock edge with `i_ack = 1`.
 `READ_CYCLES` and `WRITE_CYCLES` configure SRAM controller latency; their
 values must meet the requirements of the SRAM and board clock frequency.
 
-CPU writes to FFFF enqueue a seven-bit TX byte and stall only when the pending
+FFFD holds LED1/LED2 in bits 0/1 (1 = on, bits 7:2 read zero). System reset
+clears the LEDs; CPU-only reset preserves them. CPU writes to FFFF enqueue a seven-bit TX byte and stall only when the pending
 buffer is full. Reads return the last CPU RX byte and clear its received flag
 at final ACK, retaining the byte. FFFE reads bit 0 received/bit 1 TX-buffer-free;
 writes are ignored. Mixed word operations complete SRAM before MMIO ACK and
@@ -175,8 +176,8 @@ Ctrl+V quotes the next CPU byte; help/? and console --help list all commands.
 One continuous reader owns RX and dispatches CPU output, debug replies and BREAK.
 The input sender uses q credits and never holds the debug lock while RX is full.
 Full debug operations (including loads) exclude q polls. The loader requires
---skip-uart-mmio for any image covering FFFE/FFFF, reports/skips only included
-MMIO addresses and writes 65534 SRAM bytes for a full image using persistent
+--skip-uart-mmio for any image covering FFFD..FFFF, reports/skips only included
+MMIO addresses and writes 65533 SRAM bytes for a full image using persistent
 word writes (an odd tail uses a byte write). SRAM words are sent ahead with
 concurrent OK counting; --write-delay optionally paces them. Failure is reported
 without automatic retry or RUN, and invalidates the connection. The user can

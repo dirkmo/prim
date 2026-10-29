@@ -435,7 +435,7 @@ The board host now provides a duplex CPU/debug console:
 Ctrl+B opens local debug commands, Ctrl+D exits, Ctrl+V quotes the next CPU byte.
 Use `help` in the prompt or `console --help` for all controls. RX at FFFF retains
 the last byte; FFFE reports received/TX-buffer-free. Debug and CPU traffic share
-one continuously open connection. Images covering FFFE/FFFF require the explicit
+one continuously open connection. Images covering FFFD..FFFF require the explicit
 `load --skip-uart-mmio` option; both register addresses are omitted and reported.
 
 Build Hello with `make image PROGRAM=src/examples/hello.cf`, then enter

@@ -3,7 +3,7 @@
 `rtl/prim_system.v` composes the standalone CPU from `cpu/rtl/`, the serial
 subsystem from `debug_uart/rtl/`, and this component's bus mux and memory/MMIO
 controllers. `rtl/bus_mux.v` grants the debug bus only on confirmed CPU halt.
-`rtl/memory_io.v` owns the FFFE/FFFF address mapping and produces a seven-bit
+`rtl/memory_io.v` owns the FFFD..FFFF LED/UART address mapping and produces a seven-bit
 valid/ready output stream; it does not instantiate or configure a UART.
 `rtl/memory.v` implements the physical SRAM interface. The system wrapper adds
 no CPU instruction behavior.
@@ -244,6 +244,8 @@ UTF-8 output is therefore not preserved on this FPGA UART.
 The [system UART MMIO reference](docs/uart_mmio.md) defines the byte addresses,
 word accesses and loader exclusions.
 
+FFFD controls LED1/LED2 in bits 0/1 (1 = on); reads return these bits with
+bits 7:2 zero. System reset turns both off; CPU-only reset preserves them.
 FFFE reads UART status: bit 0 received, bit 1 pending TX buffer free. Writes
 there are ignored. FFFF reads the most recently received CPU byte and clears
 its received flag on ACK, retaining the byte; writes enqueue seven-bit TX data
@@ -254,7 +256,7 @@ taking the CPU bus, allowing input credit checks while the CPU runs.
 Word accesses combine MMIO and SRAM as little-endian lanes. Mixed operations
 finish their SRAM lane before the final MMIO phase. FFFE is status low/RX high
 on reads, ignored low/TX high on writes. FFFF combines RX or TX low with SRAM
-address zero high. FFFD combines SRAM low/status high. Normal RAM word operations
+address zero high. FFFC combines SRAM low/LEDs high; FFFD combines LEDs low/status high. Normal RAM word operations
 remain whole-word requests. All RX-consume/TX-enqueue effects occur once at the final bus ACK. Tests cover all byte masks,
 unaligned/wrapped words, TX stalls, CPU echo with concurrent debug traffic,
 RESET-HALT preservation and MMIO/OK deadlock freedom.

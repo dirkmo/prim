@@ -84,7 +84,7 @@ help:
 	 '  clean          Remove the four managed build trees; preserve .venv/source' \
 	 '' \
 	 'Variables: PYTHON BOARD PROGRAM ASM IMAGE ASM_IMAGE PORT TIMEOUT JOBS' \
-	 '  SKIP_UART_MMIO=1 explicitly omits/reports FFFE/FFFF while loading' \
+	 '  SKIP_UART_MMIO=1 explicitly omits/reports LED/UART MMIO at FFFD..FFFF while loading' \
 	 '  VERIFY=1 enables optional readback verification after loading' \
 	 '  WRITE_DELAY=0.001 inserts a 1-ms pause between streamed word writes' \
 	 '  ICEPROG_DEVICE and ICEPROG_INTERFACE select the programmer (not PORT)' \

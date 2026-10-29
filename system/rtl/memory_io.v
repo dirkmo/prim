@@ -1,4 +1,4 @@
-// FFFE: UART status (RO); FFFF: RX/last-byte read, buffered TX write.
+// FFFD: LEDs (bits 1:0); FFFE: UART status (RO); FFFF: RX/TX data.
 // Other lanes retain SRAM word/unaligned/wrapping semantics. Effects occur at ACK.
 module memory_io #(
     parameter integer READ_CYCLES = 2,
@@ -16,12 +16,13 @@ module memory_io #(
     input [6:0] i_input_data,
     input [1:0] i_uart_status,
     output o_input_read,
+    output reg [1:0] o_leds,
     output [15:0] ram_addr,
     inout [15:0] ram_data,
     output ram_cs_n, ram_oe_n, ram_we_n
 );
-wire mmio_low = i_bs[0] && (i_addr == 16'hfffe || i_addr == 16'hffff);
-wire mmio_high = i_bs[1] && (i_addr == 16'hfffd || i_addr == 16'hfffe);
+wire mmio_low = i_bs[0] && (i_addr >= 16'hfffd);
+wire mmio_high = i_bs[1] && (i_addr >= 16'hfffc && i_addr <= 16'hfffe);
 wire [1:0] ram_mask = {i_bs[1] && !mmio_high, i_bs[0] && !mmio_low};
 wire mmio_access = mmio_low || mmio_high;
 wire ram_access = |ram_mask;
@@ -32,6 +33,8 @@ wire mmio_turn = mmio_access && (!split || second);
 wire ram_turn = ram_access && !mmio_turn;
 wire rx_low = mmio_low && i_addr == 16'hffff;
 wire rx_high = mmio_high && i_addr == 16'hfffe;
+wire led_low = mmio_low && i_addr == 16'hfffd;
+wire led_high = mmio_high && i_addr == 16'hfffc;
 wire tx_access = i_we && (rx_low || rx_high);
 wire ram_ack;
 wire [15:0] ram_read, ram_result;
@@ -43,10 +46,15 @@ assign o_ack = !i_reset && complete && (!split || second);
 assign o_output_data = rx_low ? i_cpu_to_mem[6:0] : i_cpu_to_mem[14:8];
 assign o_output_valid = !i_reset && mmio_turn && tx_access;
 assign o_input_read = o_ack && !i_we && (rx_low || rx_high);
-wire [7:0] low_read = mmio_low ? (rx_low ? {1'b0,i_input_data} : {6'b0,i_uart_status}) : ram_read[7:0];
-wire [7:0] high_read = mmio_high ? (rx_high ? {1'b0,i_input_data} : {6'b0,i_uart_status}) : ram_read[15:8];
+wire [7:0] low_read = mmio_low ? (led_low ? {6'b0,o_leds} : rx_low ? {1'b0,i_input_data} : {6'b0,i_uart_status}) : ram_read[7:0];
+wire [7:0] high_read = mmio_high ? (led_high ? {6'b0,o_leds} : rx_high ? {1'b0,i_input_data} : {6'b0,i_uart_status}) : ram_read[15:8];
 assign o_mem_to_cpu = {i_bs[1] ? high_read : 8'b0, i_bs[0] ? low_read : 8'b0};
 always @(posedge i_clk) begin
+    if (i_reset) o_leds <= 0;
+    else if (o_ack && i_we) begin
+        if (led_low) o_leds <= i_cpu_to_mem[1:0];
+        else if (led_high) o_leds <= i_cpu_to_mem[9:8];
+    end
     if (i_reset) second <= 0;
     else if (complete) second <= split && !second;
 end

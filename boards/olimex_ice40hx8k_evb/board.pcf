@@ -4,8 +4,8 @@ set_io button_n K11
 # Debug UART on GPIO1: adapter TX -> pin 33; adapter RX <- pin 34.
 set_io -pullup yes uart_rx G3
 set_io uart_tx F3
-set_io led_halted M12
-set_io led_heartbeat R16
+set_io leds[0] M12
+set_io leds[1] R16
 set_io sram_cs_n T6
 set_io sram_oe_n L9
 set_io sram_we_n T7

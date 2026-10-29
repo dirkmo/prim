@@ -128,10 +128,10 @@ Konsole neu öffnen und das gesamte Abbild manuell erneut laden. Mit
 lassen sich 1 ms Pause nach jedem gesendeten Wort einfügen (Standard 0).
 Die Bestätigungszahl ersetzt keine Inhaltsprüfung; dafür dient `--verify`.
 
-Compilerabbilder umfassen auch die MMIO-Adressen `FFFE` und `FFFF`. Dafür ist
+Compilerabbilder umfassen auch die MMIO-Adressen `FFFD` (LEDs), `FFFE` und `FFFF`. Dafür ist
 `SKIP_UART_MMIO=1` ausdrücklich erforderlich: Der Loader überspringt und meldet
 diese Adressen. Ohne diese Einstellung lehnt er solche Abbilder vor dem Öffnen
-der Verbindung ab. Kleine Binärdateien bis 65534 Bytes benötigen sie nicht.
+der Verbindung ab. Kleine Binärdateien bis 65533 Bytes benötigen sie nicht.
 
 `uart-console` hält eine Verbindung für CPU-Daten und Debug-Kommandos offen.
 Ctrl+B öffnet den lokalen Debug-Prompt, Ctrl+D beendet die Konsole, Ctrl+V sendet

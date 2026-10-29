@@ -10,6 +10,7 @@ module prim_system #(
     input i_rx,
     output o_tx,
     output o_halted,
+    output [1:0] o_leds,
     output [15:0] ram_addr,
     inout [15:0] ram_data,
     output ram_cs_n,
@@ -43,6 +44,7 @@ debug_uart_link #(.CLK_HZ(CLK_HZ)) uart(.i_clk(i_clk), .i_reset(i_reset), .i_rx(
 memory_io #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) io(
     .i_clk(i_clk), .i_reset(i_reset), .i_addr(addr), .i_cpu_to_mem(to_mem),
     .i_input_data(input_data), .i_uart_status(uart_status), .o_input_read(input_read),
+    .o_leds(o_leds),
     .o_output_data(output_data), .o_output_valid(output_valid), .i_output_ready(output_ready),
     .i_bs(bs), .i_we(we), .o_mem_to_cpu(from_mem), .o_ack(ack),
     .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(ram_cs_n),

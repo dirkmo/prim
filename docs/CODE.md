@@ -549,7 +549,9 @@ Wort, ersetzen die betroffenen Bytes und schreiben das ganze Wort zurück.
 Busfreigabe, Umschaltphasen und konfigurierbare Wartezeiten verhindern dabei
 Konflikte auf dem bidirektionalen Datenbus.
 
-`memory_io.v` bildet FFFE auf UART-Status ab: Bit 0 zeigt ein ungelesenes
+`memory_io.v` bildet FFFD auf LED1/LED2 in Bit 0/1 ab (1 = an); die übrigen
+Bits werden als null gelesen und beim Schreiben ignoriert. Systemreset schaltet
+beide LEDs aus. FFFE bildet UART-Status ab: Bit 0 zeigt ein ungelesenes
 RX-Zeichen, Bit 1 einen freien CPU-TX-Puffer. Schreibzugriffe auf FFFE werden
 ignoriert. Lesen von FFFF liefert das letzte RX-Byte und löscht bei ACK nur
 das Received-Flag; Schreiben übernimmt sieben Nutzbits in den TX-Puffer und
