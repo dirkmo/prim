@@ -16,7 +16,9 @@ module memory_io #(
     output o_output_valid,
     input i_output_ready,
     input [6:0] i_input_data,
-    input [1:0] i_uart_status,
+    input [3:0] i_uart_csr,
+    output [7:0] o_uart_csr_data,
+    output o_uart_csr_write,
     output o_input_read,
     output reg [1:0] o_leds,
     output o_timer_irq,
@@ -42,6 +44,8 @@ wire mmio_turn = mmio_access && (!split || second);
 wire ram_turn = ram_access && !mmio_turn;
 wire rx_low = mmio_low && i_addr == 16'hffff;
 wire rx_high = mmio_high && i_addr == 16'hfffe;
+wire csr_low = mmio_low && i_addr == 16'hfffe;
+wire csr_high = mmio_high && next_addr == 16'hfffe;
 wire led_low = mmio_low && i_addr == 16'hfffd;
 wire led_high = mmio_high && i_addr == 16'hfffc;
 wire tx_access = i_we && (rx_low || rx_high);
@@ -54,22 +58,25 @@ wire complete = mmio_turn ? (timer_access ? timer_ack : (!tx_access || i_output_
 assign o_ack = !i_reset && complete && (!split || second);
 assign o_output_data = rx_low ? i_cpu_to_mem[6:0] : i_cpu_to_mem[14:8];
 assign o_output_valid = !i_reset && mmio_turn && tx_access;
+assign o_uart_csr_data = csr_low ? i_cpu_to_mem[7:0] : i_cpu_to_mem[15:8];
+assign o_uart_csr_write = o_ack && i_we && (csr_low || csr_high);
 assign o_input_read = o_ack && !i_we && (rx_low || rx_high);
 function [7:0] peripheral_read;
     input [3:0] address;
-    input [1:0] leds, status;
+    input [1:0] leds;
+    input [3:0] csr;
     input [6:0] data;
     begin
         case (address)
             4'hd: peripheral_read = {6'b0,leds};
-            4'he: peripheral_read = {6'b0,status};
+            4'he: peripheral_read = {4'b0,csr};
             4'hf: peripheral_read = {1'b0,data};
             default: peripheral_read = 0;
         endcase
     end
 endfunction
-wire [7:0] low_read = mmio_low ? (timer_low ? timer_read[7:0] : peripheral_read(i_addr[3:0], o_leds, i_uart_status, i_input_data)) : ram_read[7:0];
-wire [7:0] high_read = mmio_high ? (timer_high ? timer_read[15:8] : peripheral_read(next_addr[3:0], o_leds, i_uart_status, i_input_data)) : ram_read[15:8];
+wire [7:0] low_read = mmio_low ? (timer_low ? timer_read[7:0] : peripheral_read(i_addr[3:0], o_leds, i_uart_csr, i_input_data)) : ram_read[7:0];
+wire [7:0] high_read = mmio_high ? (timer_high ? timer_read[15:8] : peripheral_read(next_addr[3:0], o_leds, i_uart_csr, i_input_data)) : ram_read[15:8];
 assign o_mem_to_cpu = {i_bs[1] ? high_read : 8'b0, i_bs[0] ? low_read : 8'b0};
 always @(posedge i_clk) begin
     if (i_reset) o_leds <= 0;

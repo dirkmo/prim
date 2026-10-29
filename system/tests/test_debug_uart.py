@@ -27,6 +27,14 @@ class DebugChecks(unittest.TestCase):
                       'memory.v', 'memory_io.v', 'timer_mmio.v', 'timer.v', 'uart_tx.v', 'uart_rx.v', 'uart_buffers.v',
                       'debug_uart.v', 'bus_mux.v', 'uart_arbiter.v', 'debug_uart_link.v'])
 
+    def test_uart_interrupts(self):
+        for mode in (0, 1, 2, 3):
+            with self.subTest(mode=mode):
+                self.simulate('tb_uart_irq', ['tb_uart_irq.sv', 'prim_system.v', 'prim.v',
+                              'memory.v', 'memory_io.v', 'timer_mmio.v', 'timer.v',
+                              'uart_tx.v', 'uart_rx.v', 'uart_buffers.v', 'debug_uart.v',
+                              'bus_mux.v', 'uart_arbiter.v', 'debug_uart_link.v'], {'MODE': mode})
+
     def test_timer_mmio(self):
         self.simulate('tb_timer_mmio', ['tb_timer_mmio.sv', 'memory.v', 'memory_io.v',
                                       'timer_mmio.v', 'timer.v'])

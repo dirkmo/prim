@@ -246,24 +246,27 @@ The [system UART MMIO reference](docs/uart_mmio.md) defines the byte addresses,
 word accesses and loader exclusions.
 The [timer MMIO reference](docs/timer_mmio.md) describes COUNT at FFF0, COMPARE
 at FFF2, CSR at FFF4 and the `TIMER_DIVISOR` system parameter. FFF6..FFFC is
-reserved (read zero, writes ignored). The timer's one-clock IRQ is wired to
-the CPU; configure its ISR with INTAD before enabling interrupts with INTEI.
+reserved (read zero, writes ignored). The timer and UART one-clock IRQs are
+ORed into the CPU; configure its ISR with INTAD before enabling interrupts with INTEI.
 CPU halt/debug reset preserve the running timer; system reset clears it.
 
 FFFD controls LED1/LED2 in bits 0/1 (1 = on); reads return these bits with
 bits 7:2 zero. System reset turns both off; CPU-only reset preserves them.
-FFFE reads UART status: bit 0 received, bit 1 pending TX buffer free. Writes
-there are ignored. FFFF reads the most recently received CPU byte and clears
-its received flag on ACK, retaining the byte; writes enqueue seven-bit TX data
+FFFE is the UART CSR: bit 0 received, bit 1 pending TX buffer free, bit 2
+RXIE, bit 3 TXIE. Writes update only bits 2/3. RXIE enables interrupts for CPU
+receptions; TXIE enables interrupts when the CPU TX slot becomes free, before
+frame completion. Debug traffic generates no UART IRQ. FFFF reads the most
+recently received CPU byte and clears its received flag on ACK, retaining the byte; writes enqueue seven-bit TX data
 and wait only when the buffer is full. New RX wins over simultaneous ACK. CPU
-reset preserves both UART buffers. The debug command q returns status without
-taking the CPU bus, allowing input credit checks while the CPU runs.
+reset preserves both UART buffers and interrupt enables. The debug command q
+returns status without taking the CPU bus, allowing input credit checks while the CPU runs.
 
 Word accesses combine MMIO and SRAM as little-endian lanes. Mixed operations
-finish their SRAM lane before the final MMIO phase. FFFE is status low/RX high
-on reads, ignored low/TX high on writes. FFFF combines RX or TX low with SRAM
-address zero high. FFFC combines reserved low/LEDs high; FFFD combines LEDs low/status high. Normal RAM word operations
-remain whole-word requests. All RX-consume/TX-enqueue effects occur once at the final bus ACK. Tests cover all byte masks,
+finish their SRAM lane before the final MMIO phase. FFFE is CSR low/RX high
+on reads, CSR low/TX high on writes. FFFF combines RX or TX low with SRAM
+address zero high. FFFC combines reserved low/LEDs high; FFFD combines LEDs
+low/CSR high. Normal RAM word operations remain whole-word requests. All UART
+register effects occur once at the final bus ACK. Tests cover all byte masks,
 unaligned/wrapped words, TX stalls, CPU echo with concurrent debug traffic,
 RESET-HALT preservation and MMIO/OK deadlock freedom.
 

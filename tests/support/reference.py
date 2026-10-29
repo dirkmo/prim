@@ -14,6 +14,7 @@ class Memory(MemoryIf):
         self.uart = uart
         self.tx = []
         self.leds = 0
+        self.uart_ie = 0
         self.timer = bytearray(6)
         self.status_samples = iter(())
 
@@ -27,7 +28,7 @@ class Memory(MemoryIf):
         elif self.uart and addr == 0xfffd:
             value = self.leds
         elif self.uart and addr == 0xfffe:
-            value = next(self.status_samples, 2) & 2
+            value = (next(self.status_samples, 2) & 2) | self.uart_ie
         elif self.uart and addr == 0xffff:
             value = 0
         self.reads.append([addr, value])
@@ -47,7 +48,9 @@ class Memory(MemoryIf):
             self.leds = value & 3
         elif self.uart and addr == 0xffff:
             self.tx.append(value & 0x7f)
-        elif not (self.uart and addr == 0xfffe):
+        elif self.uart and addr == 0xfffe:
+            self.uart_ie = value & 12
+        else:
             self.data[addr] = value
         self.writes.append([addr, value])
 

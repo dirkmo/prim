@@ -13,7 +13,7 @@ reg [7:0] reference[0:65535];
 memory_io #(.TIMER_DIVISOR(1)) dut(
     .i_clk(clk), .i_reset(reset), .i_addr(addr), .i_cpu_to_mem(data),
     .i_bs(bs), .i_we(we), .o_mem_to_cpu(result), .o_ack(ack),
-    .i_output_ready(1'b1), .i_input_data(7'b0), .i_uart_status(2'b10),
+    .i_output_ready(1'b1), .i_input_data(7'b0), .i_uart_csr(4'b0010),
     .o_timer_irq(irq), .ram_addr(ram_addr), .ram_data(ram_data),
     .ram_cs_n(ram_cs), .ram_oe_n(ram_oe), .ram_we_n(ram_we));
 assign ram_data = !ram_cs && !ram_oe && ram_we ? memory[ram_addr[14:0]] : 16'hzzzz;

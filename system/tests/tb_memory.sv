@@ -20,8 +20,11 @@ wire serial_tx, uart_busy, controller_drive;
 wire [6:0] output_data;
 wire output_valid, output_ready, input_read, buffered_valid, tx_ready;
 wire [6:0] input_data, buffered_data;
-wire [1:0] uart_status, leds;
-reg [1:0] expected_leds = 0;
+wire [1:0] leds;
+wire [3:0] uart_csr;
+wire [7:0] csr_data;
+wire csr_write;
+reg [1:0] expected_leds = 0, expected_ie = 0;
 wire [15:0] request_addr = cpu_mode ? cpu_addr : addr;
 wire [15:0] request_data = cpu_mode ? cpu_data : data;
 wire [1:0] request_bs = cpu_mode ? cpu_bs : bs;
@@ -36,11 +39,11 @@ memory_io #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) dut(
     .o_mem_to_cpu(cpu_read), .i_bs(request_bs), .i_we(request_we), .o_ack(ack),
     .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(cs_n),
     .ram_oe_n(oe_n), .ram_we_n(we_n), .o_output_data(output_data), .o_output_valid(output_valid), .i_output_ready(output_ready),
-    .i_input_data(input_data), .i_uart_status(uart_status), .o_input_read(input_read), .o_leds(leds),
+    .i_input_data(input_data), .i_uart_csr(uart_csr), .o_uart_csr_data(csr_data), .o_uart_csr_write(csr_write), .o_input_read(input_read), .o_leds(leds),
     .o_timer_irq(timer_irq));
 assign controller_drive = dut.sram.drive;
 uart_buffers buffers(.i_clk(clk), .i_reset(reset), .i_rx_data(8'b0), .i_rx_valid(1'b0),
-    .i_input_read(input_read), .o_input_data(input_data), .o_status(uart_status),
+    .i_input_read(input_read), .o_input_data(input_data), .o_csr(uart_csr), .i_csr_data(csr_data), .i_csr_write(csr_write),
     .i_output_data(output_data), .i_output_valid(output_valid), .o_output_ready(output_ready),
     .o_tx_data(buffered_data), .o_tx_valid(buffered_valid), .i_tx_ready(tx_ready));
 uart_tx #(.CLKS_PER_BIT(CLKS_PER_BIT)) uart(.i_clk(clk), .i_reset(reset),
@@ -188,9 +191,9 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
             if (b[1] && a>=16'hfff5 && a<=16'hfffb) expected[15:8]=0;
             if(b[0] && a==16'hfffd) expected[7:0]={6'b0,expected_leds};
             if(b[1] && a==16'hfffc) expected[15:8]={6'b0,expected_leds};
-            if(b[0] && a==16'hfffe) expected[7:0]={6'b0,uart_status};
+            if(b[0] && a==16'hfffe) expected[7:0]={4'b0,expected_ie,uart_csr[1:0]};
             if(b[0] && a==16'hffff) expected[7:0]={1'b0,input_data};
-            if(b[1] && a==16'hfffd) expected[15:8]={6'b0,uart_status};
+            if(b[1] && a==16'hfffd) expected[15:8]={4'b0,expected_ie,uart_csr[1:0]};
             if(b[1] && a==16'hfffe) expected[15:8]={1'b0,input_data};
         end
         if (!wr && cpu_read !== expected)
@@ -198,8 +201,11 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
         if (WITH_UART && wr) begin
             if (b[0] && a==16'hfffd) expected_leds = d[1:0];
             if (b[1] && a==16'hfffc) expected_leds = d[9:8];
+            if (b[0] && a==16'hfffe) expected_ie = d[3:2];
+            if (b[1] && a==16'hfffd) expected_ie = d[11:10];
         end
         #1;
+        if (WITH_UART && uart_csr[3:2] !== expected_ie) $fatal(1, "CSR enable mismatch");
         if (WITH_UART && leds !== expected_leds) $fatal(1, "LED register mismatch");
         if (wr) begin
             if (b[0] && !(WITH_UART && a>=16'hfff0)) reference[a] = d[7:0];
@@ -310,7 +316,7 @@ initial begin
         if (!cs_n || !oe_n || !we_n || ack || ram_data !== 16'hzzzz)
             $fatal(1, "SRAM bus active during reset");
         repeat(2) @(negedge clk);
-        reset=0; expected_leds=0;
+        reset=0; expected_leds=0; expected_ie=0;
         if (WITH_UART && leds !== 0) $fatal(1, "LED reset");
         access(16'h1001, 0, 3, 0);
         // Abort a read before ACK, then issue a fresh request.

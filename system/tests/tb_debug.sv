@@ -75,7 +75,7 @@ task expect_reply(input string s);
 endtask
 task drain_cpu;
     begin
-        wait(dut.uart.buffers.o_status[1] && dut.uart.tx.o_ready);
+        wait(dut.uart.buffers.o_csr[1] && dut.uart.tx.o_ready);
         repeat(DIV*2) @(negedge clk);
         while(pos<n) begin
             if(captured[pos][7]) $fatal(1,"unexpected debug byte while draining");

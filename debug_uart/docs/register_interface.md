@@ -13,7 +13,9 @@ The UART RTL does **not** decode addresses. It exposes these synchronous signals
 | RX data | `o_input_data[6:0]` | Sample the current retained byte |
 | RX consume | `i_input_read` | Clear received flag; do not erase data |
 | TX enqueue | `i_output_data[6:0]`, `i_output_valid`, `o_output_ready` | Accept exactly one byte on valid AND ready |
-| Status | `o_uart_status[1:0]` | Read-only flags; observation has no side effect |
+| CSR read | `o_uart_csr[3:0]` | Status and interrupt enables; observation has no side effect |
+| CSR write | `i_csr_data[7:0]`, `i_csr_write` | Update RXIE/TXIE on a write edge |
+| Interrupt | `o_irq` | Registered synchronous event pulse |
 
 A surrounding MMIO adapter chooses addresses, pads these values to the CPU's
 register width, masks TX bit 7, generates the consume pulse, and turns ready
@@ -26,7 +28,7 @@ processor interface. Do not derive `i_input_read` from address decode alone;
 assert it only for a completed read. Keep TX valid and data stable until
 accepted, then deassert valid or present the next transfer.
 
-## Logical RX, TX and status interface
+## Logical RX, TX and CSR interface
 
 The logical functions are not assigned addresses by this module:
 
@@ -34,27 +36,32 @@ The logical functions are not assigned addresses by this module:
 |---|---|
 | RX read | Seven retained data bits; the adapter asserts consume at its read ACK |
 | TX write | Seven data bits; acceptance requires valid AND ready |
-| STATUS read | Two read-only status outputs; observing them consumes nothing |
+| CSR read | Status and interrupt enables; observing them consumes nothing |
+| CSR write | Update bits 2/3; ignore all other bits |
 
 A consuming system can map RX and TX to the same address for read/write, or
-choose separate addresses. A wider status register can zero-extend the two-bit
-output. There is no status-write input in the UART itself; acknowledgment or
-error handling for writes to a read-only bus register belongs to the adapter.
+choose separate addresses. Zero-extend the four-bit CSR output to a byte.
+Assert `i_csr_write` only at the completed bus write, with the selected byte
+on `i_csr_data`. For an integration without interrupts, tie `i_csr_write` and
+`i_csr_data` low and leave `o_irq` unconnected.
 
 The Prim system's address map and word accesses are documented separately in
 [system/docs/uart_mmio.md](../../system/docs/uart_mmio.md). Its addresses, adjacency and word-lane rules are properties of that system,
 not of the reusable UART module.
 
-### STATUS bits (zero-extended by a register adapter)
+### CSR bits (zero-extended by a register adapter)
 
 | Bit | Name | Meaning of 1 | Meaning of 0 |
 |---|---|---|---|
-| 0 | received | A CPU-channel byte arrived since the last consume | No unread CPU byte |
-| 1 | tx_free | Pending CPU TX buffer is empty | Pending CPU TX buffer is occupied |
-| 7:2 | reserved | — | Always zero |
+| 0 | RXAVAIL (received) | A CPU-channel byte arrived since the last consume | No unread CPU byte |
+| 1 | TXFREE (tx_free) | Pending CPU TX buffer is empty | Pending CPU TX buffer is occupied |
+| 2 | RXIE | Interrupt on CPU-channel reception enabled | Disabled |
+| 3 | TXIE | Interrupt on CPU TX slot becoming free enabled | Disabled |
+| 7:4 | reserved | — | Always zero |
 
-Possible byte values are 00, 01, 02 and 03. After a synchronous module-reset
-edge the status value is **02**: RX empty, TX slot free.
+Bits 0/1 are read-only. Writes replace RXIE/TXIE and ignore bits 0/1 and 7:4.
+After a synchronous module-reset edge CSR is **02**: RX empty, TX slot free,
+both interrupt enables cleared.
 
 `tx_free` is not physical transmitter idle. The current UART frame can be
 active while the pending slot is free. Conversely, debug priority can leave a
@@ -64,6 +71,28 @@ does not offer a separate frame-complete or physical-idle flag.
 `o_output_ready = !i_reset && tx_free`. During reset it is low even though the
 reset status says the pending TX slot is empty. Do not initiate bus accesses
 while the surrounding system is in reset.
+
+## Interrupt semantics
+
+`o_irq` is registered on the event edge and asserted for one clock per event:
+
+- RXIE enables an event for each received CPU-channel byte (wire bit 7 = 0),
+  including overwrites and simultaneous consumption/reception.
+- TXIE enables an event when a pending CPU byte is accepted by the transmitter.
+  The CPU TX slot becomes free at that edge, before the serial frame completes.
+- Debug reception, debug responses and BREAK frames do not generate events.
+  Debug priority can delay a pending CPU byte's acceptance and its TX interrupt.
+
+Enables are sampled from before the event edge. A simultaneous CSR write takes
+effect for subsequent edges. Enabling an interrupt does not replay an earlier
+event or generate an event merely because RX is full or TX is free. An empty
+TX slot does not continuously request interrupts. Simultaneous RX/TX events
+share one pulse; consecutive events may assert IRQ on consecutive clocks.
+There are no UART pending/acknowledge bits. Reading DATA consumes RX as before;
+reading CSR has no side effects. System reset clears enables and IRQ; CPU-only
+reset preserves the UART state. The surrounding interrupt receiver must latch
+pulses as needed while masked or halted. Prim already does this, coalescing
+multiple requests; its UART and timer IRQs are ORed together.
 
 ## RX semantics
 
@@ -77,19 +106,20 @@ while the surrounding system is in reset.
 - Another arrival while received = 1 overwrites the previous byte. There is no
   FIFO, overrun counter, overflow response, or automatic sender backpressure.
 - A received NUL is valid data: DATA = 00 with received = 1. DATA = 00 alone
-  cannot distinguish NUL from an empty/reset register. Check STATUS bit 0.
+  cannot distinguish NUL from an empty/reset register. Check CSR bit 0.
 - Reset initializes data to 00 and clears received. Neither CPU HALT nor
   CPU-only RESET-HALT clears this register.
 
 DATA is a live output, not a latched bus-response snapshot. The adapter must
 sample it at the acknowledging edge and consume once at that edge. Polling
-STATUS and subsequently reading DATA is not a reservation against an independent
+CSR and subsequently reading DATA is not a reservation against an independent
 sender; reliable delivery also needs the host pacing below.
 
 ### Host RX flow control
 
 The debug command `q` replies `K` plus one low-first hex digit containing the
-same STATUS bits. It is available at run or halt without a memory access.
+same low two CSR status bits (RXIE/TXIE are excluded). It is available at run
+or halt without a memory access.
 The host must serialize debug operations, query status, wait until received is
 zero, and send **one** CPU byte. Before sending the next byte it must obtain
 another free indication. Wire ordering places that query after the previous
@@ -126,10 +156,9 @@ exactly the same capacity and backpressure.
 
 ## Bus adapter and word accesses
 
-A bus adapter can complete reads without waiting for serial input. Its own
-bus contract defines whether writes to a read-only status address are ignored
-or rejected. An empty DATA read returns retained data immediately; it does not
-wait for another character. Only a full CPU TX buffer delays a DATA write.
+A bus adapter can complete reads without waiting for serial input. It forwards
+CSR writes at the final acknowledgment. An empty DATA read returns retained data
+immediately; it does not wait for another character. Only a full CPU TX buffer delays a DATA write.
 
 The UART has no bus byte lanes, word size or address-wrap rules. A system
 adapter defines which byte/word accesses select these logical functions and
@@ -141,20 +170,22 @@ be defined by that system; a stalled TX transfer must not repeat memory writes.
 The following fragment illustrates a **byte-only** adapter with address constants
 supplied by its surrounding system. It needs a lane adapter before it can be
 used on a word-capable bus. RX/TX share a logical DATA address in this example;
-that is an adapter choice, not a UART requirement. This example acknowledges
-and ignores writes to STATUS:
+that is an adapter choice, not a UART requirement. This example forwards writes
+to CSR:
 
 ```verilog
 // bus_valid/write/address/wdata remain stable through the uart_ack edge.
 // uart_* nets connect to debug_uart_link's CPU buffer ports.
 wire data_select = (bus_address == UART_DATA_ADDRESS);
-wire status_select = (bus_address == UART_STATUS_ADDRESS);
-wire selected = !system_reset && bus_valid && (data_select || status_select);
+wire csr_select = (bus_address == UART_CSR_ADDRESS);
+wire selected = !system_reset && bus_valid && (data_select || csr_select);
 assign uart_tx_data = bus_wdata[6:0];
 assign uart_tx_valid = selected && bus_write && data_select;
-assign uart_ack = selected && (!bus_write || status_select || uart_tx_ready);
+assign uart_ack = selected && (!bus_write || csr_select || uart_tx_ready);
 assign uart_rx_consume = uart_ack && !bus_write && data_select;
-assign uart_rdata = data_select ? {1'b0, uart_rx_data} : {6'b0, uart_status};
+assign uart_csr_write = uart_ack && bus_write && csr_select;
+assign uart_csr_data = bus_wdata[7:0];
+assign uart_rdata = data_select ? {1'b0, uart_rx_data} : {4'b0, uart_csr};
 ```
 
 Mux `uart_ack`/`uart_rdata` with other target responses in the surrounding bus.
@@ -167,12 +198,12 @@ Typical byte-register pseudocode:
 
 ```text
 receive_nonblocking():
-    if (read8(STATUS) & 1) == 0:
+    if (read8(CSR) & 1) == 0:
         return NO_BYTE
     return read8(DATA)              # NUL is a valid result
 
 send(byte):
-    while (read8(STATUS) & 2) == 0:
+    while (read8(CSR) & 2) == 0:
         wait_or_do_other_work()
     write8(DATA, byte & 0x7f)
 ```
@@ -187,3 +218,7 @@ For the Prim-specific addresses, word lanes, assembly examples and image-loader
 exclusions, see the [system MMIO reference](../../system/docs/uart_mmio.md).
 A consuming project's loader must exclude whatever addresses its own adapter
 reserves for MMIO from ordinary RAM initialization and verification.
+
+To enable RX and TX interrupts, write `0x0c` to CSR after installing the ISR.
+For an interrupt-driven transmitter, enqueue the first byte explicitly to start
+the stream; enabling TXIE on an already-empty slot does not create an interrupt.

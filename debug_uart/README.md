@@ -34,8 +34,8 @@ Verilog files below in synthesis/simulation:
 | [`uart_arbiter`](rtl/uart_arbiter.v) | Debug priority when the transmitter accepts its next byte |
 
 For a smaller application without the debug protocol, these building blocks
-can be instantiated separately. `uart_buffers.o_status` has the same bit layout
-as `debug_uart_link.o_uart_status`. The low-level `uart_tx` accepts eight data
+can be instantiated separately. `uart_buffers.o_csr` has the same bit layout
+as `debug_uart_link.o_uart_csr`. The low-level `uart_tx` accepts eight data
 bits and has no channel encoding; the arbiter adds bit 7 = 0 to CPU output.
 Do not also instantiate another receiver/transmitter on the same physical line.
 
@@ -80,7 +80,10 @@ All directions below are relative to `debug_uart_link`.
 | `o_output_ready` | output, 1 | CPU TX slot can accept a byte; low during reset |
 | `o_input_data` | output, 7 | Most recently received CPU byte, retained after consumption |
 | `i_input_read` | input, 1 | Consume RX on this edge: clear received flag, keep data |
-| `o_uart_status` | output, 2 | Bit 0 received; bit 1 pending CPU TX slot free |
+| `o_uart_csr` | output, 4 | Bit 0 RXAVAIL; bit 1 TXFREE; bit 2 RXIE; bit 3 TXIE |
+| `i_csr_data` | input, 8 | CSR write byte; only bits 2/3 are writable |
+| `i_csr_write` | input, 1 | Update interrupt enables at the completed CSR write |
+| `o_irq` | output, 1 | Synchronous pulse on enabled CPU RX / TX slot release events |
 | `o_halt` | output, 1 | Halt request held until CPU confirms halt |
 | `o_run` | output, 1 | One-clock resume pulse |
 | `o_step` | output, 1 | One-clock single-instruction request |
@@ -97,8 +100,9 @@ All directions below are relative to `debug_uart_link`.
 | `i_data` | input, 16 | Debug read result, valid at ACK |
 
 The [register reference](docs/register_interface.md) specifies the exact buffer
-edge cases. `o_uart_status[1]` is **not** physical TX idle. No physical-idle
-status output, interrupt output, overflow flag or FIFO depth parameter exists.
+edge cases. `o_uart_csr[1]` is **not** physical TX idle. No physical-idle
+status output, overflow flag or FIFO depth parameter exists. RXIE/TXIE enable
+event pulses on `o_irq`; see the register reference for timing and reset rules.
 
 ## Integration
 
@@ -123,7 +127,8 @@ debug_uart_link #(.CLK_HZ(25000000)) uart (
     .i_output_data(uart_tx_data), .i_output_valid(uart_tx_valid),
     .o_output_ready(uart_tx_ready),
     .o_input_data(uart_rx_data), .i_input_read(uart_rx_consume),
-    .o_uart_status(uart_status),
+    .o_uart_csr(uart_csr),
+    .i_csr_data(uart_csr_data), .i_csr_write(uart_csr_write), .o_irq(uart_irq),
     .o_halt(cpu_halt_request), .o_run(cpu_run), .o_step(cpu_step),
     .o_reset_cpu(cpu_reset_halt), .i_halted(cpu_halted),
     .i_pc(cpu_next_pc), .i_break_reason(cpu_break_reason),

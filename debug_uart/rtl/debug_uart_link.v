@@ -8,7 +8,10 @@ module debug_uart_link #(
     input i_output_valid,
     output o_output_ready,
     output [6:0] o_input_data,
-    output [1:0] o_uart_status,
+    output [3:0] o_uart_csr,
+    input [7:0] i_csr_data,
+    input i_csr_write,
+    output o_irq,
     input i_input_read,
     output o_halt, o_run, o_step, o_reset_cpu,
     input i_halted, i_break_reason, i_break_event,
@@ -25,7 +28,8 @@ wire rx_valid, debug_valid, debug_ready, tx_valid, tx_ready;
 wire [6:0] buffered_data;
 wire buffered_valid, buffered_ready;
 uart_buffers buffers(.i_clk(i_clk), .i_reset(i_reset), .i_rx_data(rx_data), .i_rx_valid(rx_valid),
-    .i_input_read(i_input_read), .o_input_data(o_input_data), .o_status(o_uart_status),
+    .i_input_read(i_input_read), .o_input_data(o_input_data), .o_csr(o_uart_csr),
+    .i_csr_data(i_csr_data), .i_csr_write(i_csr_write), .o_irq(o_irq),
     .i_output_data(i_output_data), .i_output_valid(i_output_valid), .o_output_ready(o_output_ready),
     .o_tx_data(buffered_data), .o_tx_valid(buffered_valid), .i_tx_ready(buffered_ready));
 uart_rx #(.CLKS_PER_BIT(CLKS_PER_BIT)) rx(
@@ -33,7 +37,7 @@ uart_rx #(.CLKS_PER_BIT(CLKS_PER_BIT)) rx(
 debug_uart debug(.i_clk(i_clk), .i_reset(i_reset), .i_rx_data(rx_data), .i_rx_valid(rx_valid),
     .o_tx_data(debug_data), .o_tx_valid(debug_valid), .i_tx_ready(debug_ready),
     .o_halt(o_halt), .o_run(o_run), .o_step(o_step), .o_reset_cpu(o_reset_cpu),
-    .i_uart_status(o_uart_status), .i_halted(i_halted), .i_break_reason(i_break_reason), .i_break_event(i_break_event), .i_pc(i_pc),
+    .i_uart_status(o_uart_csr[1:0]), .i_halted(i_halted), .i_break_reason(i_break_reason), .i_break_event(i_break_event), .i_pc(i_pc),
     .o_addr(o_addr), .o_data(o_data), .o_bs(o_bs), .o_we(o_we), .i_ack(i_ack), .i_data(i_data));
 uart_arbiter arbiter(.i_debug_data(debug_data), .i_debug_valid(debug_valid), .o_debug_ready(debug_ready),
     .i_output_data(buffered_data), .i_output_valid(buffered_valid), .o_output_ready(buffered_ready),
