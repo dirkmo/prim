@@ -25,13 +25,13 @@ See the [Lattice primitive reference](https://www.latticesemi.com/view_document?
 FILTER_RANGE=5: PFD=100 MHz, VCO=800 MHz, output=25 MHz. nextpnr explicitly
 constrains the oscillator to 100 MHz and derives the PLL output constraint as
 25 MHz. The fixed seed-1 build passes after routing with a reported maximum
-system clock of **54.72 MHz**. This is an internal timing report, not a supported
+system clock of **50.12 MHz**. This is an internal timing report, not a supported
 operating-frequency claim above the selected 25 MHz.
 
 The UART pin assignment requested by the user is GPIO1 pin 33 for FPGA RX
 (ball G3) and GPIO1 pin 34 for FPGA TX (ball F3). Artifacts are in
 `build/olimex_ice40hx8k_evb/`, including the bitstream `prim.bin`. Utilization is
-3145/7680 logic cells, one PLL, and no block RAM. No image has been programmed.
+3216/7680 logic cells (41.9%), one PLL, and no block RAM. No image has been programmed.
 The build stops before icepack if timing fails; there is no timing override.
 
 For comparison, the original direct-100-MHz attempt failed at about 52–54 MHz;
@@ -118,11 +118,15 @@ iceprog setup. Use the separate UART adapter's stable `/dev/serial/by-id/` path.
 
 Outputs include `synth.log`, `nextpnr.log`, `timing.json`, `prim.json`,
 `prim.asc` and, only after passed timing, `prim.bin`. A failed rebuild removes a
-stale binary. The board test is included in CTest as `olimex_board_checks`. All 13 CTest
-suites passed; the board-specific tests additionally check PLL startup, reset
+stale binary. CTest registers 15 suites. The board test is included as
+`olimex_board_checks` and checks PLL startup, reset
 release, loss of LOCK, recovery and UART at 25 MHz. `pll_sim.v` is a test-only
 ideal frequency/LOCK model and is never included in production synthesis;
-analog PLL acquisition/jitter is outside the simulation. Logs: `build/olimex-validation/ctest.log`.
+analog PLL acquisition/jitter is outside the simulation. The additional
+`olimex_host_checks` suite checks CLI controls, load boundaries, explicit MMIO
+skipping, verification failures and transport cleanup without USB hardware.
+The UART session/PTY suite additionally checks continuous output/BREAK,
+RX-credit backpressure, uninterrupted debug write modes and terminal restoration. Logs: `build/olimex-validation/ctest.log`.
 
 ## First contact and loading
 
@@ -138,12 +142,136 @@ python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapte
 
 Expect halted=true, break=false, PC=0000 after configuration. `sram-check`
 halts first, preserves/restores eight scratch bytes at 2000, and checks byte
-and unaligned word transfers. `load` performs RESET-HALT, loads a raw CPU binary
-at zero, verifies every byte and leaves the CPU halted; add `--run` to execute.
-Token streams are not CPU binaries. The current simple loader rejects 65536-byte
-images because address FFFF has a UART write side effect and cannot be loaded
-as SRAM through this memory map. A raw program of at most 65535 bytes is accepted.
+and unaligned word transfers.
 
-UART and flash operations require the user's actual hardware and have not been
-performed from this workspace. The host helper runs synchronously; output from
-a running program is handled by the underlying library during later commands.
+The host script also exposes the CPU controls as individual commands:
+
+```sh
+python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapter> halt
+python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapter> pc
+python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapter> step
+python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapter> run
+python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapter> reset-halt
+```
+
+`halt` waits for confirmed halt, `step` waits for retirement and renewed halt,
+and `reset-halt` resets only the CPU. `step` and `pc` first query status and
+reject a running CPU with a clear message; they do not silently halt it.
+The debug library continues to handle CPU output and asynchronous BREAK
+notifications while waiting for replies. Each CLI invocation closes its port.
+
+`load` performs RESET-HALT, loads a raw CPU binary at zero, verifies every byte
+written and leaves the CPU halted. `--run` resumes only after successful
+verification. A failed verification does not start the CPU. Token streams are
+not CPU binaries.
+
+Images of 1..65534 bytes load directly. Compiler memory exports contain 65536
+bytes; those require the explicit `--skip-uart-mmio` option:
+
+```sh
+python -m prim export -i build/src/base.tf.toml -s memory -o build/base.bin
+python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapter> load build/base.bin --skip-uart-mmio
+# With an image that has executable entry code at PC 0000, optionally add --run.
+```
+
+With a full 64-KiB image, the script reports the omitted image bytes at
+`0xFFFE` and `0xFFFF`, writes/verifies only `0x0000..0xFFFD` (65534 bytes), and
+preserves the existing physical SRAM bytes behind both registers. The omitted
+bytes are not verified. This avoids reading UART status/consuming RX during
+verification and avoids UART TX writes during loading. An image of 65535 bytes
+already covers FFFE and also requires the option, omitting/reporting only that
+included MMIO address. No automatic trimming occurs without the option.
+Empty images and images larger than 65536 bytes remain errors. Invalid sizes
+and a missing skip option are rejected before connecting to the board.
+The base-library example demonstrates loading a compiler image; it does not
+install a runnable application entry at PC 0000.
+
+## CPU UART registers
+
+| Address | Read | Write |
+|---|---|---|
+| FFFE | bit 0 received, bit 1 TX buffer free; other bits zero | ignored |
+| FFFF | last received seven-bit byte; clear received on final bus ACK | enqueue seven-bit CPU TX byte; wait when full |
+
+Reading an empty RX register returns the last byte, initially zero. New reception
+wins over simultaneous consumption. TX buffer free does not imply an idle UART
+wire: the previous frame can still be active. Debug replies/BREAK have priority
+at byte boundaries. RESET-HALT preserves both UART buffers; full system reset
+clears them. Word operations combine the selected MMIO/SRAM lanes little-endian,
+including wrapping to address zero. A full RX register never blocks debug RX.
+
+## Interactive console (POSIX / Arch Linux)
+
+Rebuild and flash the matching FPGA image before using the new q/status/input
+protocol. Install the root Python package and pyserial in the active environment:
+
+```sh
+.venv/bin/python -m pip install -e . pyserial
+.venv/bin/python boards/olimex_ice40hx8k_evb/host.py console --help
+.venv/bin/python boards/olimex_ice40hx8k_evb/host.py --port "$PORT" console
+```
+
+Set PORT to the separate UART adapter's `/dev/serial/by-id/...` path. One process
+owns the port. Do not open another serial terminal or CLI session alongside it.
+CPU data are seven-bit; UTF-8 input is rejected instead of becoming debug bytes.
+
+| Key | Action |
+|---|---|
+| Ctrl+J | Open local debug prompt (not sent to CPU) |
+| Ctrl+D | Quit either mode without HALT/RESET |
+| Ctrl+V, then a byte | Send that byte literally to CPU, including Ctrl+J/Ctrl+D |
+| Empty Enter in debug prompt | Return to CPU mode |
+| Enter in CPU mode | Send Enter to CPU |
+
+The console uses raw input so Enter (CR) and Ctrl+J (LF) are distinct. `help` or
+`?` prints every command/keybinding; `console --help` works without opening USB.
+The local prompt accepts these commands (no port argument is needed there):
+
+```text
+help
+halt                     # stop is an alias
+step
+reset-halt
+run
+pc
+status
+uart-status
+sram-check
+load build/example.bin
+load build/program.bin --skip-uart-mmio --run
+quit
+```
+
+CPU output and asynchronous BREAK continue while entering commands, displaying
+help, loading/verifying an image, or awaiting replies. Loading and RUN use the
+same open connection, preserving the program's first output. One reader routes
+all incoming bytes; a separate input sender uses q status to send at most one
+CPU byte per free RX register. Queued keyboard input waits when the CPU is halted
+or its RX register is full, while debug controls remain available. Credit polls
+cannot interrupt a persistent debug write sequence. Memory debug operations
+still require confirmed CPU halt. CPU-only reset does not clear queued UART data.
+
+Ctrl+D/quit closes the session, discards unsent local input/commands and restores
+terminal settings; it does not abort an already-started FPGA bus operation.
+A protocol timeout, invalid reply or disconnected adapter terminates the session
+instead of misinterpreting late replies. Regular one-shot CLI commands still
+close their port on completion; use console for continuous output monitoring.
+No physical UART/flash operation has been performed from this workspace.
+
+## Resource comparison for the duplex extension
+
+Same Rev.B board target, 25 MHz PLL and seed 1, GPIO1.33/34 UART:
+
+| Resource | Before duplex | After duplex | Delta |
+|---|---:|---:|---:|
+| Placed logic cells | 3145 | 3216 | +71 |
+| Synthesis LUT4 | 2712 | 2766 | +54 |
+| Flip-flops | 779 | 795 | +16 |
+| Carry cells | 203 | 224 | +21 |
+| PLLs | 1 | 1 | 0 |
+| Block RAM | 0 | 0 | 0 |
+
+The extra 16 flip-flops implement the two seven-bit buffers and their flags.
+Reported routed maximum changes from 54.72 to 50.12 MHz; timing passes at 25 MHz.
+Baseline reports: `build/uart-duplex-before/`; current reports/bitstream:
+`build/olimex_ice40hx8k_evb/`. No board hardware/timing measurement is implied.

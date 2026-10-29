@@ -75,14 +75,15 @@ remains stable until the acknowledging clock edge with `i_ack = 1`.
 `READ_CYCLES` and `WRITE_CYCLES` configure SRAM controller latency; their
 values must meet the requirements of the SRAM and board clock frequency.
 
-Writes to byte address `0xffff` go to UART TX. Reads there access SRAM. Word
-accesses crossing this boundary are split by byte between SRAM and UART,
-including wraparound to `0x0000`. UART uses fixed 115200 baud, 8N1, with a
-CLK_HZ-derived divider. Bit 7 separates seven-bit CPU output from debug ASCII.
-RX uses two synchronizer flops and bit-centre sampling; no FIFO or CPU RX/status
-register is added. CPU writes wait while the transmitter is busy. The debug
-master takes the bus only at confirmed CPU halt. Hardware HALT/STEP/RESET-HALT
-and BREAK plus the Python host API are specified in [DRAFT.md](DRAFT.md).
+CPU writes to FFFF enqueue a seven-bit TX byte and stall only when the pending
+buffer is full. Reads return the last CPU RX byte and clear its received flag
+at final ACK, retaining the byte. FFFE reads bit 0 received/bit 1 TX-buffer-free;
+writes are ignored. Mixed word operations complete SRAM before MMIO ACK and
+wrap from FFFF to zero. RX and TX each have one byte plus one flag. CPU-only
+reset preserves them; full system reset clears them. UART uses 115200/8N1 with
+synchronized bit-centre RX. Debug ASCII uses bit 7 and has TX priority. q reads
+UART status while CPU runs, without taking the CPU bus. SRAM debug ownership
+still requires confirmed CPU halt. Details are in [DRAFT.md](DRAFT.md).
 External interrupts are tied inactive in the integrated system.
 
 ## Development and verification
@@ -110,7 +111,9 @@ Debugger inspection is side-effect-free; `uart <text>` queues UTF-8 bytes.
 Reset replays the initial UART file, discards interactive additions and
 temporary breakpoints, and retains user breakpoints. Without `-u`, RX starts
 empty. Its CPU-visible RX status/data at `0xfffe`/`0xffff` are separate from
-the FPGA debug receiver; the RTL still maps CPU MMIO only to TX.
+the FPGA debug receiver. The FPGA also has CPU UART input, but only seven-bit
+data, retained last-byte semantics and TX-free in status bit 1; the software
+debugger keeps its independent eight-bit FIFO model.
 See the root README for a standalone example and debugger keys.
 
 Run Python checks with `python -m unittest discover -s src -p 'test*.py'`.
@@ -138,12 +141,13 @@ The end-to-end TokenForth test freshly builds bootstrap, opcode words and
 timing configurations. Results are stored under `build/tokenforth/`.
 The Python regressions are included in this CTest suite.
 
-Last verified: all thirteen CTest suites passed, including debug RTL and host checks.
+CTest registers fifteen suites. The debug-host, board and board-host suites
+passed after the board host CLI extension.
 This establishes simulation behavior; SRAM can now be loaded through debug
 writes. Rev.B board pins and build/program targets are prepared under
 `boards/olimex_ice40hx8k_evb/`. The initial 100 MHz board timing failed (about
 52–54 MHz achieved); the user-approved board PLL now supplies a 25 MHz global
-system clock. The routed build passes at 25 MHz (54.72 MHz reported maximum);
+system clock. The routed build passes at 25 MHz (50.12 MHz reported maximum);
 The debug UART uses GPIO1.33 (FPGA RX/G3) and GPIO1.34 (FPGA TX/F3).
 Physical UART/SRAM verification remains open. Default clock and timing parameters are not a verified board configuration.
 
@@ -162,3 +166,14 @@ The following items have been proposed and are not yet implemented:
 8. Set up Ruff and automated quality checks.
 
 These proposals do not authorize implementation.
+
+The Olimex host.py provides halt/run/step/reset-halt/pc/uart-status and a POSIX
+console. Ctrl+J opens local commands, Ctrl+D exits without changing CPU state,
+Ctrl+V quotes the next CPU byte; help/? and console --help list all commands.
+One continuous reader owns RX and dispatches CPU output, debug replies and BREAK.
+The input sender uses q credits and never holds the debug lock while RX is full.
+Full debug operations (including loads) exclude q polls. The loader requires
+--skip-uart-mmio for any image covering FFFE/FFFF, reports/skips only included
+MMIO addresses and verifies 65534 SRAM bytes for a full image. --run follows
+successful verification only. The board rebuild passes 25 MHz timing and uses
+3216/7680 logic cells, one PLL and no block RAM. Physical hardware is unverified.

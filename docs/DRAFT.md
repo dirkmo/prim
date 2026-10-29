@@ -235,9 +235,10 @@ Die Tests sind ihren Komponenten zugeordnet:
 - `python debug_uart/tests/test_host.py`: Hostkodierung, Antwortwartebedingungen,
   Kanaltrennung, BREAK-Verarbeitung und Fehler-/Timeoutmeldungen.
 
-Alle zwölf CTest-Suiten bestanden nach der Trennung der Komponenten. Die
+Die aktuelle Regression umfasst 15 CTest-Suiten, einschließlich UART-Puffern,
+CPU-Echo mit Debugverkehr, Session-/PTY-Konsole und Board-Host-CLI. Die
 bestehenden SRAM-, ISA-, Compiler- und UART-Tests bleiben enthalten.
-Ergebnisprotokoll: `build/restructure/ctest.log`.
+Aktuelles Ergebnisprotokoll: `build/uart-duplex-validation/ctest.log`.
 
 Synthese mit Yosys 0.68+136, `synth_ice40 -top prim_system`, gleicher Standardtakt,
 Historischer Vergleich vor der aktuellen RX/TX-Puffererweiterung: ursprünglicher

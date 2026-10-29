@@ -186,7 +186,7 @@ Stacks geprüft. Der erzeugte Einstieg muss ein kleines Programm aufrufen,
 das mit 42 auf dem Datenstack hält. CLI-Tests vergleichen TokenForth-Export,
 Standarddateinamen und den weiterhin voreingestellten Verilog-Export.
 
-## 4. Die dreizehn CTest-Suites
+## 4. Die fünfzehn CTest-Suites
 
 Die Registrierung steht in [CMakeLists.txt](../CMakeLists.txt).
 
@@ -202,11 +202,13 @@ Die Registrierung steht in [CMakeLists.txt](../CMakeLists.txt).
 | `debug_uart_checks` | `system/tests/test_debug_uart.py` | Vollständige CPU/SRAM/Debug-Integration |
 | `debug_uart_host_checks` | `debug_uart/tests/test_host.py` | Hostprotokoll, BREAK, Kanaltrennung und Timeouts |
 | `cpu_debug_checks` | `cpu/tests/test_debug_cpu.py` | HALT/STEP mit Speicherwartezyklen und BREAK.RET |
+| `uart_session_checks` | `debug_uart/tests/test_session.py` | Gleichzeitige Kanäle, RX-Flusskontrolle, ununterbrochener Schreibmodus, PTY-Keybindings und Terminal-Restore |
 | `uart_component_checks` | `debug_uart/tests/test_rtl.py` | UART RX/TX, Parser ohne CPU/System und TX-Arbitrierung |
+| `olimex_host_checks` | `boards/olimex_ice40hx8k_evb/test_host.py` | CPU-Steuerkommandos, 64-KiB-Loader, explizites Überspringen von FFFE/FFFF, Verifikationsfehler und Portfreigabe |
 | `olimex_board_checks` | `boards/olimex_ice40hx8k_evb/test_board.py` | Power-up-Halt, Tasterreset und Build-Abbruch bei Timingfehlern |
 | `test_harness_checks` | `test_support.py` | Importnebenwirkungen, Prozessfehler, Timeouts, Traces und unabhängige Optionen |
 
-Es handelt sich um Suites, nicht um dreizehn einzelne Testfälle. Suites enthalten
+Es handelt sich um Suites, nicht um fünfzehn einzelne Testfälle. Suites enthalten
 mehrere Tests und teils viele Unterfälle. Mit `-N` lässt sich die Registrierung
 anzeigen; mit `-R` eine Auswahl ausführen:
 
@@ -414,6 +416,6 @@ werden; die Dokumentation hält keine dauerhaft gültige Testanzahl fest.
 `python debug_uart/tests/test_rtl.py` prüft RX/TX, Parser und TX-Arbiter ohne
 CPU- oder Systeminstanzen. `python debug_uart/tests/test_host.py` prüft die
 Hostbibliothek. CTest integriert alle vier Einstiegspunkte; insgesamt gibt es
-dreizehn Suiten einschließlich des Olimex-Boardtests. Details zum implementierten Protokoll und zum `synth_ice40`-Vergleich
+fünfzehn Suiten einschließlich der Olimex-Board- und Host-CLI-Tests. Details zum implementierten Protokoll und zum `synth_ice40`-Vergleich
 stehen in [DRAFT.md](DRAFT.md). FPGA-CPU-Ausgaben werden als sieben Nutzbits
 verglichen; UTF-8 wird auf dieser Leitung nicht erhalten.

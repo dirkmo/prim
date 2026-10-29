@@ -418,3 +418,15 @@ cmake --build build/olimex_ice40hx8k_evb --target fpga_bitstream
 The bitstream is `build/olimex_ice40hx8k_evb/prim.bin`; `build/sim` remains the
 simulator build directory. Programming is a separate `fpga_program` target
 described in the board README.
+
+The board host now provides a duplex CPU/debug console:
+
+```sh
+.venv/bin/python boards/olimex_ice40hx8k_evb/host.py --port "$PORT" console
+```
+
+Ctrl+J opens local debug commands, Ctrl+D exits, Ctrl+V quotes the next CPU byte.
+Use `help` in the prompt or `console --help` for all controls. RX at FFFF retains
+the last byte; FFFE reports received/TX-buffer-free. Debug and CPU traffic share
+one continuously open connection. Images covering FFFE/FFFF require the explicit
+`load --skip-uart-mmio` option; both register addresses are omitted and reported.

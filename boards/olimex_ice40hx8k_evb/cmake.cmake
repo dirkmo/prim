@@ -36,3 +36,5 @@ endif()
 add_test(NAME olimex_board_checks
     COMMAND ${Python3_EXECUTABLE} "${OLIMEX_BOARD_DIR}/test_board.py"
         --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
+add_test(NAME olimex_host_checks
+    COMMAND ${Python3_EXECUTABLE} "${OLIMEX_BOARD_DIR}/test_host.py")
