@@ -13,6 +13,12 @@ from support.process import run
 class DebugCpuChecks(unittest.TestCase):
     tools = Tools()
 
+    def test_uart_bus_program(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = build.icarus(Path(directory) / 'uart-cpu', tools=self.tools,
+                                  top='tb_uart_cpu', sources=['tb_uart_cpu.sv', 'prim.v'])
+            self.assertIn('PASS', run([self.tools.vvp, binary], timeout=30).stdout)
+
     def test_waits(self):
         with tempfile.TemporaryDirectory() as directory:
             binary = build.icarus(Path(directory) / 'cpu', tools=self.tools,

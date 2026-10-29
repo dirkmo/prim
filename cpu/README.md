@@ -28,3 +28,8 @@ python cpu/tests/test_debug_cpu.py
 
 The standalone Verilator simulator links only the CPU. The top-level system
 and all UART RTL are independent sources and are not part of that simulator.
+
+The CPU UART-bus regression models status and retained RX data at FFFE/FFFF,
+a full TX buffer with delayed ACK, HALT during that write, and STEP afterwards.
+No peripheral logic belongs in the CPU: ordinary byte/word memory instructions
+and the stable-until-ACK bus already support buffered UART MMIO.
