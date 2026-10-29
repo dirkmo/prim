@@ -490,8 +490,10 @@ Darstellung, Eingaben, Breakpoints und Ausführung. Das Zusatzpaket `blessed`
 
 Alle Code-/Speicheransichten, Disassemblierung und der Befehl `r` nutzen Peek.
 RX-Status bei `0xfffe` zeigt, ob Daten vorhanden sind; `0xffff` liefert das
-nächste Byte. Diese Register sind eine Debugger-Erweiterung, keine derzeitige
-RTL-RX-Hardware. `uart <text>` codiert UTF-8 ohne automatischen Zeilenumbruch.
+nächste Byte der Software-FIFO oder null bei leerer FIFO. Der FPGA-UART nutzt
+dieselben Adressen, aber ein einzelnes RX-Register mit zuletzt empfangenem Byte
+und zusätzlich TX-Puffer-frei in Statusbit 1. Der Softwaredebugger bleibt ein
+8-Bit-/FIFO-Modell: `uart <text>` codiert UTF-8 ohne automatischen Zeilenumbruch.
 
 Rechts führt eine Instruktion aus. Unten setzt bei einem CALL einen temporären
 Breakpoint hinter den Aufruf und startet die Ausführung. `run` läuft bis BREAK,
@@ -547,15 +549,20 @@ Wort, ersetzen die betroffenen Bytes und schreiben das ganze Wort zurück.
 Busfreigabe, Umschaltphasen und konfigurierbare Wartezeiten verhindern dabei
 Konflikte auf dem bidirektionalen Datenbus.
 
-`memory_io.v` leitet Schreibzugriffe auf `0xffff` an UART TX. Lesezugriffe
-bleiben SRAM-Zugriffe. Wortschreibzugriffe über die Grenze zu UART oder über
-das Adressraumende werden in Bytereihenfolge aufgeteilt. UART-ACK bestätigt
-die Annahme des Bytes, nicht das Ende des seriellen Frames. Aktuell gibt es
-einen Debug-RX mit zweistufiger Synchronisierung und Bitmittenabtastung, aber
-keinen FIFO oder CPU-UART-Statusregister. Bit 7 trennt Debug-ASCII von der
-7-Bit-CPU-Ausgabe. `debug_uart.v` übernimmt den Bus nur bei bestätigtem Halt;
-HALT, STEP, RESET-HALT und BREAK sind in der CPU implementiert. Das vollständige
-Protokoll und die Python-Hostbibliothek beschreibt [DRAFT.md](DRAFT.md).
+`memory_io.v` bildet FFFE auf UART-Status ab: Bit 0 zeigt ein ungelesenes
+RX-Zeichen, Bit 1 einen freien CPU-TX-Puffer. Schreibzugriffe auf FFFE werden
+ignoriert. Lesen von FFFF liefert das letzte RX-Byte und löscht bei ACK nur
+das Received-Flag; Schreiben übernimmt sieben Nutzbits in den TX-Puffer und
+wartet bei vollem Puffer. Neuer Empfang gewinnt gegen gleichzeitiges Lesen.
+Wortzugriffe kombinieren Register und SRAM little-endian, auch über Adresse
+FFFF nach 0000. Gemischte Zugriffe erledigen zunächst den SRAM-Teil; die UART-
+Seiteneffekte folgen beim abschließenden ACK. CPU-only Reset erhält die Puffer.
+
+`debug_uart_link.v` besitzt RX-/TX-Puffer, den synchronisierten UART-RX und die
+TX-Arbitrierung mit Debug-Vorrang. Der neue Debug-Befehl q liefert UART-Status
+ohne Busübernahme und funktioniert bei laufender CPU. `debug_uart.v` übernimmt
+den Speicherbus weiterhin ausschließlich bei bestätigtem Halt. Das vollständige
+Protokoll und die Konsole beschreibt [DRAFT.md](DRAFT.md).
 
 Details zu Signalen und Timing stehen in der [RTL-Dokumentation](../system/README.md).
 

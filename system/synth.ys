@@ -1,4 +1,4 @@
 # Run from the repository root (or use the root CMake target yosys).
-read_verilog -Icpu/rtl cpu/rtl/prim.v system/rtl/memory.v system/rtl/memory_io.v system/rtl/bus_mux.v debug_uart/rtl/uart_rx.v debug_uart/rtl/uart_tx.v debug_uart/rtl/uart_arbiter.v debug_uart/rtl/debug_uart.v debug_uart/rtl/debug_uart_link.v system/rtl/prim_system.v
+read_verilog -Icpu/rtl cpu/rtl/prim.v system/rtl/memory.v system/rtl/memory_io.v system/rtl/bus_mux.v debug_uart/rtl/uart_rx.v debug_uart/rtl/uart_tx.v debug_uart/rtl/uart_buffers.v debug_uart/rtl/uart_arbiter.v debug_uart/rtl/debug_uart.v debug_uart/rtl/debug_uart_link.v system/rtl/prim_system.v
 synth_ice40 -top prim_system
 stat

@@ -5,7 +5,7 @@ from pathlib import Path
 from . import build
 from .paths import TIMINGS
 from .process import run
-from .reference import Memory, Prim, Op, compare_records
+from .reference import Memory, compare_records
 from .traces import load_records
 
 
@@ -34,7 +34,7 @@ class SramSimulation:
             self.simulators[read, write, delay] = build.icarus(output, tools=self.tools, top='tb_memory',
                 parameters={'READ_CYCLES': read, 'WRITE_CYCLES': write, 'SRAM_DELAY_NS': delay,
                             'WITH_UART': int(self.with_uart)},
-                sources=('tb_memory.sv', 'memory.v', 'prim.v', 'uart_tx.v', 'memory_io.v'))
+                sources=('tb_memory.sv', 'memory.v', 'prim.v', 'uart_tx.v', 'uart_buffers.v', 'memory_io.v'))
 
     def run(self, timing, *options):
         return run([self.tools.vvp, self.simulators[timing], *options], cwd=self.directory).stdout
@@ -53,18 +53,11 @@ class SramSimulation:
         if 'PASS CPU SRAM integration' not in output:
             raise RuntimeError(f'CPU/SRAM simulation did not finish\n{output}')
         records = load_records(trace_path)
-        steps = compare_records(image, records, max_steps=max_steps, uart=self.with_uart)
+        reference = Memory(image, uart=self.with_uart)
+        steps = compare_records(image, records, max_steps=max_steps, uart=self.with_uart, memory=reference)
         actual = None
         if self.with_uart:
-            memory = Memory(image, uart=True)
-            cpu = Prim(memory)
-            for _ in range(max_steps):
-                if memory.read8(cpu._pc) in (Op.BREAK, Op.SIMEND):
-                    break
-                cpu.step()
-            else:
-                raise RuntimeError('Python UART reference did not halt')
             actual = bytes(int(line, 16) for line in uart_path.read_text().splitlines())
-            if actual != bytes(memory.tx):
-                raise AssertionError(f'UART output differs: RTL={actual!r}, Python={bytes(memory.tx)!r}')
+            if actual != bytes(reference.tx):
+                raise AssertionError(f'UART output differs: RTL={actual!r}, Python={bytes(reference.tx)!r}')
         return SimulationResult(actual, steps, records)

@@ -4,7 +4,7 @@ from prim.assembler import PrimAsm
 from prim.isa import PrimOpcodes as Op
 
 class Memory(MemoryIf):
-    """64 KiB little-endian RAM; optionally map writes at FFFF to UART."""
+    """64 KiB RAM; optionally map FFFE status and FFFF CPU UART data."""
 
     def __init__(self, image, uart=False):
         self.data = bytearray([0xff]) * 65536
@@ -13,10 +13,15 @@ class Memory(MemoryIf):
         self.reads = []
         self.uart = uart
         self.tx = []
+        self.status_samples = iter(())
 
     def read8(self, addr):
         addr &= 0xffff
         value = self.data[addr]
+        if self.uart and addr == 0xfffe:
+            value = next(self.status_samples, 2) & 2
+        elif self.uart and addr == 0xffff:
+            value = 0
         self.reads.append([addr, value])
         return value
 
@@ -27,7 +32,7 @@ class Memory(MemoryIf):
         addr, value = addr & 0xffff, value & 0xff
         if self.uart and addr == 0xffff:
             self.tx.append(value & 0x7f)
-        else:
+        elif not (self.uart and addr == 0xfffe):
             self.data[addr] = value
         self.writes.append([addr, value])
 
@@ -40,9 +45,9 @@ class Difference(AssertionError):
     pass
 
 
-def compare_records(image, records, max_steps=1000, exit_code=0, uart=False):
+def compare_records(image, records, max_steps=1000, exit_code=0, uart=False, memory=None):
     """Check retirement records from either the C++ or the SRAM simulation."""
-    memory = Memory(image, uart=uart)
+    memory = memory if memory is not None else Memory(image, uart=uart)
     cpu = Prim(memory)
     ds_depth = rs_depth = 0
 
@@ -69,6 +74,9 @@ def compare_records(image, records, max_steps=1000, exit_code=0, uart=False):
             raise RuntimeError(f'Instruction limit exceeded ({max_steps})')
         memory.writes.clear()
         memory.reads.clear()
+        # TX-free is a timing-dependent peripheral input, checked separately in
+        # RTL tests. Feed it into the ISA reference like other external input.
+        memory.status_samples = iter(v for a, v in record['reads'] if a == 0xfffe)
         cpu.step()
         op = ir & 0x7f
         ds_delta = (1 if op in (Op.PUSH, Op.PUSH8, Op.DUP, Op.OVER, Op.CARRY, Op.FROM_R)

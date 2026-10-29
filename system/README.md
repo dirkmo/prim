@@ -3,7 +3,7 @@
 `rtl/prim_system.v` composes the standalone CPU from `cpu/rtl/`, the serial
 subsystem from `debug_uart/rtl/`, and this component's bus mux and memory/MMIO
 controllers. `rtl/bus_mux.v` grants the debug bus only on confirmed CPU halt.
-`rtl/memory_io.v` owns the FFFF address mapping and produces a seven-bit
+`rtl/memory_io.v` owns the FFFE/FFFF address mapping and produces a seven-bit
 valid/ready output stream; it does not instantiate or configure a UART.
 `rtl/memory.v` implements the physical SRAM interface. The system wrapper adds
 no CPU instruction behavior.
@@ -236,14 +236,25 @@ are reported as mismatches rather than silently treated as zero.
 `prim_system.v` instantiates `Prim`, `bus_mux`, `memory_io` and `debug_uart_link`.
 It has serial RX/TX and uses fixed 115200 baud, 8N1, with a constant divider
 rounded from CLK_HZ. RX uses two synchronizer flops and bit-centre samples.
-The existing unbuffered TX arbitrates at byte boundaries with debug priority.
+A one-byte CPU TX buffer feeds the existing UART transmitter; debug wins
+at byte boundaries. A retained CPU RX register operates independently.
 CPU output has seven useful bits (bit 7 is cleared); debug ASCII has bit 7 set.
 UTF-8 output is therefore not preserved on this FPGA UART.
 
-The write-only UART mapping remains at FFFF; reads still access SRAM. A word
-write at FFFE sends its high byte, and a word write at FFFF sends its low byte
-and writes its high byte to SRAM address zero. UART ACK means acceptance of
-the frame, not completed serial transmission. Debug MMIO uses the same path.
+FFFE reads UART status: bit 0 received, bit 1 pending TX buffer free. Writes
+there are ignored. FFFF reads the most recently received CPU byte and clears
+its received flag on ACK, retaining the byte; writes enqueue seven-bit TX data
+and wait only when the buffer is full. New RX wins over simultaneous ACK. CPU
+reset preserves both UART buffers. The debug command q returns status without
+taking the CPU bus, allowing input credit checks while the CPU runs.
+
+Word accesses combine MMIO and SRAM as little-endian lanes. Mixed operations
+finish their SRAM lane before the final MMIO phase. FFFE is status low/RX high
+on reads, ignored low/TX high on writes. FFFF combines RX or TX low with SRAM
+address zero high. FFFD combines SRAM low/status high. Normal RAM word operations
+remain whole-word requests. All RX-consume/TX-enqueue effects occur once at the final bus ACK. Tests cover all byte masks,
+unaligned/wrapped words, TX stalls, CPU echo with concurrent debug traffic,
+RESET-HALT preservation and MMIO/OK deadlock freedom.
 
 The complete command table, low-nibble-first numbers, persistent write modes,
 CPU HALT/STEP/RESET-HALT/BREAK semantics, host API, intentionally omitted error
@@ -466,3 +477,9 @@ system reset, before its first fetch. `o_halted` exposes confirmed CPU halt to
 board-level indicators. The [Olimex Rev.B wrapper](../boards/olimex_ice40hx8k_evb/README.md)
 sets START_HALTED=1 and supplies power-up/button reset; default pin-independent
 system behavior remains unchanged.
+
+Mapped-UART instruction comparison feeds timing-dependent TX-free samples from
+the simulated peripheral into the ISA reference (other UART status bits still
+have fixed expected values when no CPU input is injected). Serial output is
+checked against that same reference run, including programs branching on status.
+Independent RTL tests verify the actual status/buffer and ACK semantics.

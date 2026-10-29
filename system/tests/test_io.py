@@ -36,6 +36,14 @@ class IoChecks(SramScenarios, SramHarness, unittest.TestCase):
                 actual = self.compare_image(bytes(PrimAsm.assemble(asm) + [Op.BREAK]), (3, 4, 19))
                 self.assertEqual(actual, bytes(b & 0x7f for b in chunk))
 
+    def test_output_depends_on_tx_free_status(self):
+        asm = '65 0xffff c! 66 0xffff c! 0xfffe c@ 48 + 0xffff c!'
+        for timing in TIMINGS:
+            with self.subTest(timing=timing):
+                actual = self.compare_image(bytes(PrimAsm.assemble(asm) + [Op.BREAK]), timing)
+                self.assertEqual(actual[:2], b'AB')
+                self.assertIn(actual[2:], (b'0', b'2'))
+
     def test_serial_word_crossings(self):
         for timing in TIMINGS:
             with self.subTest(timing=timing):

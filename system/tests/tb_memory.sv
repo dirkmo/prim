@@ -17,7 +17,9 @@ wire cpu_we, ack, cs_n, oe_n, we_n;
 wire [15:0] ram_data;
 wire serial_tx, uart_busy, controller_drive;
 wire [6:0] output_data;
-wire output_valid, output_ready;
+wire output_valid, output_ready, input_read, buffered_valid, tx_ready;
+wire [6:0] input_data, buffered_data;
+wire [1:0] uart_status;
 wire [15:0] request_addr = cpu_mode ? cpu_addr : addr;
 wire [15:0] request_data = cpu_mode ? cpu_data : data;
 wire [1:0] request_bs = cpu_mode ? cpu_bs : bs;
@@ -31,11 +33,16 @@ memory_io #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) dut(
     .i_clk(clk), .i_reset(reset), .i_addr(request_addr), .i_cpu_to_mem(request_data),
     .o_mem_to_cpu(cpu_read), .i_bs(request_bs), .i_we(request_we), .o_ack(ack),
     .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(cs_n),
-    .ram_oe_n(oe_n), .ram_we_n(we_n), .o_output_data(output_data), .o_output_valid(output_valid), .i_output_ready(output_ready));
+    .ram_oe_n(oe_n), .ram_we_n(we_n), .o_output_data(output_data), .o_output_valid(output_valid), .i_output_ready(output_ready),
+    .i_input_data(input_data), .i_uart_status(uart_status), .o_input_read(input_read));
 assign controller_drive = dut.sram.drive;
+uart_buffers buffers(.i_clk(clk), .i_reset(reset), .i_rx_data(8'b0), .i_rx_valid(1'b0),
+    .i_input_read(input_read), .o_input_data(input_data), .o_status(uart_status),
+    .i_output_data(output_data), .i_output_valid(output_valid), .o_output_ready(output_ready),
+    .o_tx_data(buffered_data), .o_tx_valid(buffered_valid), .i_tx_ready(tx_ready));
 uart_tx #(.CLKS_PER_BIT(CLKS_PER_BIT)) uart(.i_clk(clk), .i_reset(reset),
-    .i_data({1'b0, output_data}), .i_valid(output_valid), .o_ready(output_ready), .o_tx(serial_tx));
-assign uart_busy = !output_ready;
+    .i_data({1'b0, buffered_data}), .i_valid(buffered_valid), .o_ready(tx_ready), .o_tx(serial_tx));
+assign uart_busy = !tx_ready || buffered_valid;
 end else begin: flat
 memory #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) dut(
     .i_clk(clk), .i_reset(reset), .i_addr(request_addr), .i_cpu_to_mem(request_data),
@@ -99,6 +106,8 @@ always @(posedge we_n) begin
     end
 end
 always @(posedge clk) begin
+    if (!reset && WITH_UART && ((input_read && !ack) || (output_valid && output_ready && !ack)))
+        $fatal(1, "UART effect occurred before final bus ACK");
     if (!reset && !cs_n && !oe_n && (^ram_data) === 1'bx)
         $fatal(1, "Unknown read data or SRAM/FPGA bus contention");
     #1;
@@ -139,6 +148,7 @@ end
 
 task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
     reg [15:0] expected;
+    reg [1:0] ram_mask;
     integer before_reads, before_writes, n, read_count, write_count;
     begin
         @(negedge clk);
@@ -149,11 +159,16 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
         read_count = (b == 3 && a[0]) ? 2 : 1;
         write_count = wr ? read_count : 0;
         if (wr && b == 3 && !a[0]) read_count = 0;
-        if (WITH_UART && wr && ((b[0] && a==16'hffff) || (b[1] && a==16'hfffe))) begin
-            expected_tx[expected_count] = a==16'hffff ? {1'b0,d[6:0]} : {1'b0,d[14:8]};
-            expected_count = expected_count + 1;
-            read_count = b==3 ? 1 : 0;
-            write_count = read_count;
+        if (WITH_UART) begin
+            ram_mask = {b[1] && (((a+1)&65535) < 65534), b[0] && (a < 65534)};
+            if (ram_mask != b) begin
+                read_count = ram_mask!=0 ? 1 : 0;
+                write_count = wr ? read_count : 0;
+            end
+            if (wr && ((b[0] && a==16'hffff) || (b[1] && a==16'hfffe))) begin
+                expected_tx[expected_count] = a==16'hffff ? {1'b0,d[6:0]} : {1'b0,d[14:8]};
+                expected_count = expected_count + 1;
+            end
         end
         n = 0;
         do begin
@@ -164,11 +179,17 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
         if (reads - before_reads != read_count || writes - before_writes != write_count)
             $fatal(1, "Wrong SRAM access count addr=%h bs=%b we=%b reads=%0d expected=%0d writes=%0d expected=%0d",
                    a, b, wr, reads-before_reads, read_count, writes-before_writes, write_count);
+        if (WITH_UART && !wr) begin
+            if(b[0] && a==16'hfffe) expected[7:0]={6'b0,uart_status};
+            if(b[0] && a==16'hffff) expected[7:0]={1'b0,input_data};
+            if(b[1] && a==16'hfffd) expected[15:8]={6'b0,uart_status};
+            if(b[1] && a==16'hfffe) expected[15:8]={1'b0,input_data};
+        end
         if (!wr && cpu_read !== expected)
             $fatal(1, "Read mismatch addr=%h bs=%b actual=%h expected=%h", a, b, cpu_read, expected);
         if (wr) begin
-            if (b[0] && !(WITH_UART && a==16'hffff)) reference[a] = d[7:0];
-            if (b[1] && !(WITH_UART && a==16'hfffe)) reference[(a+1)&65535] = d[15:8];
+            if (b[0] && !(WITH_UART && a>=16'hfffe)) reference[a] = d[7:0];
+            if (b[1] && !(WITH_UART && ((a+1)&65535)>=65534)) reference[(a+1)&65535] = d[15:8];
         end
         if (sram[a>>1] !== expected_word(a>>1) ||
             sram[((a+1)&65535)>>1] !== expected_word(((a+1)&65535)>>1))

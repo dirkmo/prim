@@ -67,6 +67,16 @@ task expect_reply(input string s);
         end
     end
 endtask
+task drain_cpu;
+    begin
+        wait(dut.uart.buffers.o_status[1] && dut.uart.tx.o_ready);
+        repeat(DIV*2) @(negedge clk);
+        while(pos<n) begin
+            if(captured[pos][7]) $fatal(1,"unexpected debug byte while draining");
+            outputs=outputs+1;pos=pos+1;
+        end
+    end
+endtask
 task command(input string s, input string reply);
     begin $display("COMMAND %s -> %s pointer=%h",s,reply,dut.uart.debug.pointer); send(s); expect_reply(reply); end
 endtask
@@ -90,6 +100,10 @@ initial begin
     send("X"); sendbyte("a");
     if(n!=j || dut.bs!=0 || dut.uart.debug.pointer!=16'hba21)
         $fatal(1,"address pause/unknown/channel zero caused side effect");
+    command("q", "K3");
+    command("Affffr", "K16"); // newest CPU byte 'a', then clear received
+    command("q", "K2");
+    command("Affffr", "K16"); // retain last byte with received=0
     command("A12abw12", "K"); // BA21 = 21
     command("34", "K"); command("ab", "K");
     command("A12abr", "K12"); command("r", "K34"); command("r", "Kab");
@@ -107,11 +121,14 @@ initial begin
     send("A0002w1W"); command("1234", "K");
     command("A0002R", "K1234");
     // Debug writes to UART and split word MMIO must ACK before sending OK.
+    sendbyte(0);
     command("Affffwff", "K");
+    drain_cpu();
     if(outputs!=1) $fatal(1,"MMIO output missing");
     if(dut.uart.debug.pointer!=0) $fatal(1,"byte wrap");
-    command("AefffW1c24", "K"); // FFFE: C1 to RAM, 42 to UART
+    command("AefffW1c24", "K"); // FFFE: status write ignored, 42 to UART
     command("AffffW3445", "K"); // FFFF: 43 to UART, 54 to RAM zero
+    drain_cpu();
     if(dut.uart.debug.pointer!=1 || outputs!=3 || mem[0][7:0]!=8'h54) $fatal(1,"word wrap/MMIO");
     command("AffffR", "K0045");
     if(dut.uart.debug.pointer!=1) $fatal(1,"read word wrap");
@@ -120,6 +137,7 @@ initial begin
     command("A1001Z", "K");
     if(dut.uart.debug.pointer!=16'h1001) $fatal(1,"reset pointer");
     command("R", "K1234"); // SRAM survived CPU reset
+    command("q", "K2"); // RX last byte retained across CPU reset
     // Restore BREAK and STEP through it; busy TX must retain notification.
     command("A0000w2a", "K");
     command("Z", "K"); command("S", "K"); command("P", "K1000");

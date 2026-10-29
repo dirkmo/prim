@@ -20,7 +20,9 @@ wire [15:0] addr, to_mem, from_mem, cpu_addr, cpu_data, debug_addr, debug_data, 
 wire [1:0] bs, cpu_bs, debug_bs;
 wire we, ack, cpu_we, debug_we, halted, halt_request, run_request, step_request, reset_cpu;
 wire break_reason, break_event, cpu_ack, debug_ack, output_valid, output_ready;
-wire [6:0] output_data;
+wire [6:0] output_data, input_data;
+wire [1:0] uart_status;
+wire input_read;
 assign o_halted = halted;
 bus_mux bus(.i_halted(halted), .i_cpu_addr(cpu_addr), .i_cpu_data(cpu_data),
     .i_cpu_bs(cpu_bs), .i_cpu_we(cpu_we), .i_debug_addr(debug_addr), .i_debug_data(debug_data),
@@ -32,6 +34,7 @@ Prim cpu(.i_clk(i_clk), .i_reset(i_reset), .o_addr(cpu_addr), .o_dat(cpu_data),
          .i_debug_reset(reset_cpu || (i_reset && START_HALTED)), .o_halted(halted), .o_pc(pc),
          .o_break_reason(break_reason), .o_break_event(break_event));
 debug_uart_link #(.CLK_HZ(CLK_HZ)) uart(.i_clk(i_clk), .i_reset(i_reset), .i_rx(i_rx), .o_tx(o_tx),
+    .o_input_data(input_data), .o_uart_status(uart_status), .i_input_read(input_read),
     .i_output_data(output_data), .i_output_valid(output_valid), .o_output_ready(output_ready),
     .o_halt(halt_request), .o_run(run_request), .o_step(step_request), .o_reset_cpu(reset_cpu),
     .i_halted(halted), .i_break_reason(break_reason), .i_break_event(break_event), .i_pc(pc),
@@ -39,6 +42,7 @@ debug_uart_link #(.CLK_HZ(CLK_HZ)) uart(.i_clk(i_clk), .i_reset(i_reset), .i_rx(
     .i_ack(debug_ack), .i_data(from_mem));
 memory_io #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) io(
     .i_clk(i_clk), .i_reset(i_reset), .i_addr(addr), .i_cpu_to_mem(to_mem),
+    .i_input_data(input_data), .i_uart_status(uart_status), .o_input_read(input_read),
     .o_output_data(output_data), .o_output_valid(output_valid), .i_output_ready(output_ready),
     .i_bs(bs), .i_we(we), .o_mem_to_cpu(from_mem), .o_ack(ack),
     .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(ram_cs_n),

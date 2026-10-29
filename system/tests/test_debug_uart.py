@@ -22,11 +22,16 @@ class DebugChecks(unittest.TestCase):
             result = run([self.tools.vvp, binary], timeout=30).stdout
             self.assertIn('PASS', result)
 
+    def test_duplex_cpu_echo(self):
+        self.simulate('tb_uart_duplex', ['tb_uart_duplex.sv', 'prim_system.v', 'prim.v',
+                      'memory.v', 'memory_io.v', 'uart_tx.v', 'uart_rx.v', 'uart_buffers.v',
+                      'debug_uart.v', 'bus_mux.v', 'uart_arbiter.v', 'debug_uart_link.v'])
+
     def test_system(self):
         for divider in (8, 9, 17):
             with self.subTest(divider=divider):
                 self.simulate('tb_debug', ['tb_debug.sv', 'prim_system.v', 'prim.v',
-                              'memory.v', 'memory_io.v', 'uart_tx.v', 'uart_rx.v',
+                              'memory.v', 'memory_io.v', 'uart_tx.v', 'uart_rx.v', 'uart_buffers.v',
                               'debug_uart.v', 'bus_mux.v', 'uart_arbiter.v', 'debug_uart_link.v'], {'DIV': divider})
 
 
