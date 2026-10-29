@@ -241,6 +241,9 @@ at byte boundaries. A retained CPU RX register operates independently.
 CPU output has seven useful bits (bit 7 is cleared); debug ASCII has bit 7 set.
 UTF-8 output is therefore not preserved on this FPGA UART.
 
+The [system UART MMIO reference](docs/uart_mmio.md) defines the byte addresses,
+word accesses and loader exclusions.
+
 FFFE reads UART status: bit 0 received, bit 1 pending TX buffer free. Writes
 there are ignored. FFFF reads the most recently received CPU byte and clears
 its received flag on ACK, retaining the byte; writes enqueue seven-bit TX data
