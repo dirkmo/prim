@@ -197,6 +197,71 @@ class SessionChecks(unittest.TestCase):
         for command in ('halt', 'stop', 'step', 'reset-halt', 'run', 'pc', 'status', 'load', 'quit'):
             self.assertIn(command, HELP)
 
+    def test_history_navigation_restores_draft_and_stops_at_oldest(self):
+        ui = Console(lambda text: None, output=io.StringIO())
+        ui.session = Mock()
+
+        def keys(data):
+            for byte in data:
+                ui.key(byte)
+
+        keys(b'\x02\x1b[A\x1b[B')  # Empty history.
+        self.assertEqual(ui.line, b'')
+        keys(b'help\rstatus\rread 0x2000 16\rwrite 0x2000 ')
+        keys(b'\x1b[B')  # Down at the draft is a no-op.
+        self.assertEqual(ui.line, b'write 0x2000 ')
+        keys(b'\x1b[A')
+        self.assertEqual(ui.line, b'read 0x2000 16')
+        keys(b'\x1b[A')
+        self.assertEqual(ui.line, b'status')
+        keys(b'\x1b[A\x1b[A')
+        self.assertEqual(ui.line, b'help')
+        keys(b'\x1b[B\x1b[B\x1b[B\x1b[B')
+        self.assertEqual(ui.line, b'write 0x2000 ')
+        self.assertTrue(ui.output.getvalue().endswith('\r\x1b[2Kdebug> write 0x2000 '))
+        ui.session.queue_cpu.assert_not_called()
+
+    def test_recalled_command_can_be_edited_submitted_and_recalled_after_cpu_mode(self):
+        ui = Console(lambda text: None, output=io.StringIO())
+        ui.session = Mock()
+        for byte in b'\x02read 32 16\r\x1bOA\x7f\x7f1\r':
+            ui.key(byte)
+        self.assertEqual(ui._commands.get_nowait(), 'read 32 16')
+        self.assertEqual(ui._commands.get_nowait(), 'read 32 1')
+        self.assertTrue(ui._commands.empty())
+        for byte in b'\r\x1b[A':  # Arrow keys pass through in CPU mode.
+            ui.key(byte)
+        self.assertFalse(ui.debug_mode)
+        self.assertEqual(ui.session.queue_cpu.call_args_list,
+                         [unittest.mock.call(bytes([byte])) for byte in b'\x1b[A'])
+        for byte in b'\x02\x1bOA':
+            ui.key(byte)
+        self.assertEqual(ui.line, b'read 32 1')
+        ui.cpu_output(b'CPU output\n')
+        self.assertTrue(ui.output.getvalue().endswith('debug> read 32 1'))
+        for byte in b'\x1bOB':
+            ui.key(byte)
+        self.assertEqual(ui.line, b'')
+
+    def test_debug_escape_sequences_do_not_pollute_command_or_swallow_controls(self):
+        ui = Console(lambda text: None, output=io.StringIO())
+        ui.session = Mock()
+        for byte in b'\x02status\x1b[C\x1b[D\x1b[3~\x1b[1;5A':
+            ui.key(byte)
+        self.assertEqual(ui.line, b'status')
+        for byte in b'\x1b\r':  # An unfinished escape must not swallow Enter.
+            ui.key(byte)
+        self.assertEqual(ui._commands.get_nowait(), 'status')
+        for byte in b'\x1b[\x16\x02':
+            ui.key(byte)
+        ui.session.queue_cpu.assert_called_once_with(b'\x02')
+        for byte in b'\x1b[A':
+            ui.key(byte)
+        self.assertEqual(ui.line, b'status')
+        for byte in b'\x1b[\x04':
+            ui.key(byte)
+        self.assertFalse(ui.running)
+
     def test_progress_replaces_line_and_preserves_prompt_and_cpu_output(self):
         ui = Console(lambda text: None, output=io.StringIO())
         ui.session = Mock()
@@ -235,6 +300,10 @@ class SessionChecks(unittest.TestCase):
             os.write(master, b'pc\r')
             until(lambda: 'PC=17185' in ui.output.getvalue())
             self.assertIn('live CPU', ui.output.getvalue())
+            os.write(master, b'\x1b[A')
+            until(lambda: ui.line == b'pc')
+            os.write(master, b'\r')
+            until(lambda: ui.output.getvalue().count('PC=17185') == 2)
             os.write(master, b'\x04')
             thread.join(timeout=2)
             self.assertFalse(thread.is_alive())

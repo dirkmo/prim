@@ -319,11 +319,22 @@ python boards/olimex_ice40hx8k_evb/host.py --port "$PORT" console
 
 Ctrl+B opens local commands, Ctrl+D quits either mode without HALT/RESET, Ctrl+V
 quotes the next CPU byte, and empty Enter in the prompt returns to CPU mode.
+Up/Down browses submitted commands in the debug prompt. Moving down past the
+newest entry restores the unfinished input. History lasts for the console session.
 Normal Enter goes to the CPU. Raw terminal input distinguishes Enter (CR) from
 Ctrl+B (STX); terminal attributes are restored on exit. `help` or `?` lists
 all commands. CPU output and BREAK remain active while entering commands,
 displaying help, loading images, or waiting for replies. The command adapter
 can be replaced for another project's image format and CPU controls.
+
+The debug prompt supports `read <addr> [len]` for a hex dump with addresses,
+16 bytes per line and an ASCII column (nonprintable bytes appear as `.`).
+Omitting `len` reads one byte. `write <addr> <bytes...>` writes consecutive
+bytes. All numbers are decimal unless prefixed with `0x`; for example,
+`read 0x2000 32` and `write 0x2000 65 0x42 255`. Addresses must fit in
+16 bits, bytes in 8 bits, and ranges must not wrap past `0xFFFF`.
+These commands also work as host CLI subcommands and access the specified
+addresses directly, including MMIO, without changing the CPU run/halt state.
 
 ## Validation and limits
 

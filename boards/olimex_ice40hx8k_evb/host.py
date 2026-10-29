@@ -54,10 +54,24 @@ def write_delay(value):
     return delay
 
 
+def memory_number(value):
+    """Prompt numbers are decimal unless explicitly prefixed with 0x."""
+    try:
+        return int(value, 16 if value.lower().startswith('0x') else 10)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'invalid number: {value!r}; use decimal or 0x-prefixed hex') from None
+
+
 def add_commands(parser, *, console=False):
     commands = parser.add_subparsers(dest='command', required=True)
     for command in ('status', 'uart-status', 'sram-check', 'halt', 'run', 'step', 'reset-halt', 'pc'):
         commands.add_parser(command)
+    read = commands.add_parser('read', help='Read bytes as a hex/ASCII dump')
+    read.add_argument('address', metavar='addr', type=memory_number)
+    read.add_argument('length', metavar='len', type=memory_number, nargs='?', default=1)
+    write = commands.add_parser('write', help='Write consecutive bytes')
+    write.add_argument('address', metavar='addr', type=memory_number)
+    write.add_argument('values', metavar='byte', type=memory_number, nargs='+')
     load = commands.add_parser('load')
     load.add_argument('image', type=Path, help='Raw CPU machine-code image, not token bytes')
     load.add_argument('--run', action='store_true', help='Run after loading (and verification if requested)')
@@ -72,7 +86,25 @@ def add_commands(parser, *, console=False):
 
 
 def dispatch(client, args, *, image=None, report=print, progress_report=None):
-    if args.command == 'status':
+    if args.command in ('read', 'write'):
+        length = args.length if args.command == 'read' else len(args.values)
+        if not 0 <= args.address <= 0xffff:
+            raise ValueError('Address must be in 0..65535 (0xFFFF)')
+        if length < 1 or args.address + length > 0x10000:
+            raise ValueError('Memory range must contain at least one byte and fit in 0..65535 (0xFFFF)')
+        if args.command == 'write':
+            if any(not 0 <= value <= 255 for value in args.values):
+                raise ValueError('Each byte must be in 0..255 (0xFF)')
+            client.write_bytes(args.values, address=args.address)
+            report(f'Wrote {length} bytes at 0x{args.address:04x}')
+        else:
+            client.set_address(args.address)
+            for offset in range(0, length, 16):
+                data = bytes(client.read8() for _ in range(min(16, length - offset)))
+                hex_bytes = ' '.join(f'{byte:02x}' for byte in data)
+                ascii_bytes = ''.join(chr(byte) if 32 <= byte < 127 else '.' for byte in data)
+                report(f'{args.address + offset:04x}: {hex_bytes:47}  |{ascii_bytes}|')
+    elif args.command == 'status':
         status = client.status()
         report(f'halted={status.halted} break={status.break_reason}')
         if status.halted:

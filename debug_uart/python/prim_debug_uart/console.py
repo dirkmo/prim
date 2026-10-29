@@ -11,6 +11,7 @@ Ctrl+B       Open local debug prompt
 Ctrl+D       Quit the console in either mode; CPU state is unchanged
 Ctrl+V key   Send the next byte literally (including Ctrl+B or Ctrl+D)
 Debug mode: Enter submits a command; empty Enter returns to CPU mode.
+Up / Down                Browse command history; Down restores the draft
 help / ?                 Show all commands and keybindings
 halt / stop              Halt CPU at an instruction boundary
 step                     Execute one instruction (CPU must be halted)
@@ -20,6 +21,9 @@ pc                       Read halted CPU's PC
 status                   Show CPU halt/BREAK status
 uart-status              Show RX received / TX buffer free
 sram-check               Halt CPU and test/restore the scratch SRAM region
+read <addr> [len]        Hex/ASCII dump (default: one byte)
+write <addr> <bytes...>  Write consecutive bytes (0..255)
+                         Numbers: decimal, or hex with 0x prefix
 load FILE [--skip-mmio] [--verify] [--write-delay SECONDS] [--run]
                          Stream CPU image; optional readback/pacing; no automatic retry
 quit                     Close console; CPU state is unchanged
@@ -35,6 +39,10 @@ class Console:
         self.debug_mode = False
         self.quoted = False
         self.line = bytearray()
+        self._history = []
+        self._history_index = None
+        self._history_draft = b''
+        self._escape = bytearray()
         self._partial = ''
         self._shown_partial = False
         self._progress_active = False
@@ -92,6 +100,48 @@ class Console:
                 self._prompt()
             self.output.flush()
 
+    def _browse_history(self, direction):
+        if not self._history:
+            return
+        if self._history_index is None:
+            if direction > 0:
+                return
+            self._history_draft = bytes(self.line)
+            self._history_index = len(self._history)
+        self._history_index = max(0, min(len(self._history), self._history_index + direction))
+        if self._history_index == len(self._history):
+            self.line[:] = self._history_draft
+            self._history_index = None
+        else:
+            self.line[:] = self._history[self._history_index].encode('ascii')
+        self.output.write('\r\x1b[2K')
+        self._prompt()
+
+    def _escape_key(self, byte):
+        """Consume terminal CSI/SS3 sequences, including split arrow-key input."""
+        if byte == 27:
+            self._escape[:] = b'\x1b'
+            return True
+        if not self._escape:
+            return False
+        if self._escape == b'\x1b':
+            if byte in (ord('['), ord('O')):
+                self._escape.append(byte)
+                return True
+        elif 0x40 <= byte <= 0x7e:
+            sequence = bytes(self._escape) + bytes([byte])
+            self._escape.clear()
+            if sequence in (b'\x1b[A', b'\x1bOA'):
+                self._browse_history(-1)
+            elif sequence in (b'\x1b[B', b'\x1bOB'):
+                self._browse_history(1)
+            return True
+        elif 0x20 <= byte <= 0x3f and len(self._escape) < 32:
+            self._escape.append(byte)
+            return True
+        self._escape.clear()
+        return False
+
     def key(self, byte):
         with self._lock:
             if self._progress_active:
@@ -102,8 +152,10 @@ class Console:
                 self.quoted = False
                 self.session.queue_cpu(bytes([byte]))
             elif byte == 4:
+                self._escape.clear()
                 self.running = False
             elif byte == 22:
+                self._escape.clear()
                 self.quoted = True
             elif byte == 2 and not self.debug_mode:
                 self.debug_mode = True
@@ -111,11 +163,17 @@ class Console:
                 self._prompt()
             elif not self.debug_mode:
                 self.session.queue_cpu(bytes([byte]))
+            elif self._escape_key(byte):
+                pass
             elif byte in (10, 13):
                 self._partial = ''
                 self._shown_partial = False
                 command = self.line.decode('ascii').strip()
                 self.line.clear()
+                if command:
+                    self._history.append(command)
+                self._history_index = None
+                self._history_draft = b''
                 self.output.write('\r\n')
                 if not command:
                     self.debug_mode = False

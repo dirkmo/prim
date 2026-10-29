@@ -101,6 +101,66 @@ class Client:
 
 
 class HostChecks(unittest.TestCase):
+    def test_memory_read_default_and_hex_ascii_rows(self):
+        client = Client(halted=False)
+        output, errors = self.invoke(client, 'read', '010')
+        self.assertEqual(output, f'000a: {"5a":47}  |Z|\n')
+        self.assertEqual(client.reads, [10])
+        self.assertEqual(client.calls, [('set_address', 10)])
+        self.assertFalse(errors)
+
+        client = Client()
+        client.memory[0x123:0x135] = b'A\x00\x1f ~\x7f\x80\xffBCDEFGHIJK'
+        output, errors = self.invoke(client, 'read', '0x123', '0x12')
+        self.assertEqual(output.splitlines(), [
+            '0123: 41 00 1f 20 7e 7f 80 ff 42 43 44 45 46 47 48 49  |A.. ~...BCDEFGHI|',
+            f'0133: {"4a 4b":47}  |JK|',
+        ])
+        self.assertEqual(client.reads, list(range(0x123, 0x135)))
+        self.assertFalse(errors)
+
+    def test_memory_write_mixed_numbers(self):
+        client = Client(halted=False)
+        output, errors = self.invoke(client, 'write', '0X2000', '65', '0x42', '0255', '0')
+        self.assertEqual(client.calls, [('write_bytes', 0x2000, b'AB\xff\x00')])
+        self.assertEqual(client.memory[0x2000:0x2004], b'AB\xff\x00')
+        self.assertIn('Wrote 4 bytes at 0x2000', output)
+        self.assertFalse(errors)
+
+    def test_invalid_memory_commands_do_not_access_device(self):
+        parser = host.ConsoleParser()
+        host.add_commands(parser)
+        cases = [
+            ['read'], ['read', '0', '1', '2'], ['write', '0'],
+            ['read', '0b10'], ['read', 'ff'], ['write', '0', '0xGG'],
+            ['read', '-1'], ['read', '65536'], ['read', '0', '0'],
+            ['read', '0', '-1'], ['read', '0xffff', '2'],
+            ['write', '65536', '1'], ['write', '-1', '1'],
+            ['write', '0xffff', '1', '2'],
+            ['write', '0', '1', '256'], ['write', '0', '1', '-1'],
+        ]
+        for tokens in cases:
+            with self.subTest(tokens=tokens):
+                client = Mock()
+                with self.assertRaises(ValueError):
+                    host.dispatch(client, parser.parse_args(tokens))
+                self.assertEqual(client.mock_calls, [])
+
+    def test_memory_access_last_address_including_mmio(self):
+        parser = host.ConsoleParser()
+        host.add_commands(parser)
+        client = Mock()
+        client.read8.return_value = 0xff
+        output = []
+        host.dispatch(client, parser.parse_args(['read', '0xffff']), report=output.append)
+        client.set_address.assert_called_once_with(0xffff)
+        client.read8.assert_called_once_with()
+        self.assertEqual(output, [f'ffff: {"ff":47}  |.|'])
+        host.dispatch(client, parser.parse_args(['write', '0xffff', '255']), report=output.append)
+        client.write_bytes.assert_called_once_with([255], address=0xffff)
+        client.halt.assert_not_called()
+        client.reset_halt.assert_not_called()
+
     def invoke(self, client, *arguments):
         output, errors = io.StringIO(), io.StringIO()
         with patch.object(host.DebugUART, 'connect', return_value=client) as connect, \
@@ -225,7 +285,8 @@ class HostChecks(unittest.TestCase):
                 host.main(['console', '--help'])
         self.assertEqual(raised.exception.code, 0)
         connect.assert_not_called()
-        for text in ('Ctrl+B', 'Ctrl+D', 'Ctrl+V', 'uart-status', 'reset-halt', 'load', '--skip-mmio', '--verify'):
+        for text in ('Ctrl+B', 'Ctrl+D', 'Ctrl+V', 'uart-status', 'reset-halt', 'load', '--skip-mmio', '--verify',
+                     'read <addr> [len]', 'write <addr> <bytes...>', '0x prefix'):
             self.assertIn(text, output.getvalue())
 
     def test_invalid_sizes_rejected_even_with_skip(self):
