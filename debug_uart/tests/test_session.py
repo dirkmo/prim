@@ -191,6 +191,8 @@ class SessionChecks(unittest.TestCase):
         ui.session.queue_cpu.assert_called_once_with(b'\x04')
         self.assertTrue(ui.running)
         ui.key(13)
+        self.assertTrue(ui.debug_mode)
+        ui.key(2)
         self.assertFalse(ui.debug_mode)
         ui.key(2); ui.key(4)
         self.assertFalse(ui.running)
@@ -229,7 +231,7 @@ class SessionChecks(unittest.TestCase):
         self.assertEqual(ui._commands.get_nowait(), 'read 32 16')
         self.assertEqual(ui._commands.get_nowait(), 'read 32 1')
         self.assertTrue(ui._commands.empty())
-        for byte in b'\r\x1b[A':  # Arrow keys pass through in CPU mode.
+        for byte in b'\x02\x1b[A':  # Arrow keys pass through in CPU mode.
             ui.key(byte)
         self.assertFalse(ui.debug_mode)
         self.assertEqual(ui.session.queue_cpu.call_args_list,
@@ -242,6 +244,26 @@ class SessionChecks(unittest.TestCase):
         for byte in b'\x1bOB':
             ui.key(byte)
         self.assertEqual(ui.line, b'')
+
+    def test_empty_enter_keeps_debug_prompt_responsive(self):
+        for ending in (b'\r', b'\n', b'\r\n', b'   \r'):
+            with self.subTest(ending=ending):
+                ui = Console(lambda text: None, output=io.StringIO())
+                ui.session = Mock()
+                for byte in b'\x02' + ending:
+                    ui.key(byte)
+                self.assertTrue(ui.debug_mode)
+                self.assertTrue(ui.output.getvalue().endswith('debug> '))
+                self.assertEqual(ui._history, [])
+                self.assertTrue(ui._commands.empty())
+                ui.session.queue_cpu.assert_not_called()
+                for byte in b'status\r':
+                    ui.key(byte)
+                self.assertEqual(ui._commands.get_nowait(), 'status')
+                ui.key(2)
+                self.assertFalse(ui.debug_mode)
+                ui.key(13)
+                ui.session.queue_cpu.assert_called_once_with(b'\r')
 
     def test_debug_escape_sequences_do_not_pollute_command_or_swallow_controls(self):
         ui = Console(lambda text: None, output=io.StringIO())
@@ -297,6 +319,10 @@ class SessionChecks(unittest.TestCase):
             until(lambda: ui.debug_mode)
             transport.emit(b'live CPU\r\n' + wire('B'))
             until(lambda: '[BREAK]' in ui.output.getvalue())
+            prompts = ui.output.getvalue().count('debug> ')
+            os.write(master, b'\r')
+            until(lambda: ui.output.getvalue().count('debug> ') > prompts)
+            self.assertTrue(ui.debug_mode)
             os.write(master, b'pc\r')
             until(lambda: 'PC=17185' in ui.output.getvalue())
             self.assertIn('live CPU', ui.output.getvalue())

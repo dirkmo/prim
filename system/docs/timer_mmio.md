@@ -2,8 +2,10 @@
 
 `prim_system` connects the standalone [`timer`](../../timer/README.md) through
 `timer_mmio.v` and `memory_io.v` to the shared CPU/debug bus. Timer IRQ is wired
-directly to `Prim.i_irq`. The CPU does not yet implement interrupt handling;
-the wiring does not change instruction execution.
+to `Prim.i_irq` ORed with the UART IRQ. The CPU latches requests even while
+masked or halted; configure the ISR with INTAD before enabling interrupts with
+INTEI. See the [CPU interrupt reference](../../cpu/README.md#interrupts) and
+the [complete register overview](registers.md).
 
 ## Register map
 

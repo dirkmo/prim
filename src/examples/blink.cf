@@ -1,0 +1,21 @@
+:TCOMPARE 0xFFF2 ;
+:TCSR 0xFFF4 ;
+:LEDS 0xFFFD ;
+
+:toggle_led LEDS c@ 1+ LEDS c! ;
+
+:isr INTDI toggle_led INTEI ;
+
+:setup_and_enable_intr
+    'isr INTAD INTEI ;
+
+:enable_timer_1s
+    999 TCOMPARE ! 7 TCSR ! ;
+
+:main
+    setup_and_enable_intr
+    enable_timer_1s
+    1 [ while ] 1 [ repeat ]
+    ;
+
+[ 'main boot! ]

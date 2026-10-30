@@ -1,5 +1,7 @@
 # Prim system LED/UART memory map
 
+For all MMIO and CPU registers, see the [complete register overview](registers.md).
+
 This map belongs to [`memory_io.v`](../rtl/memory_io.v) in the Prim system.
 The reusable [`debug_uart_link`](../../debug_uart/rtl/debug_uart_link.v) exposes
 RX, TX and status signals without address decoding. Their buffer/handshake

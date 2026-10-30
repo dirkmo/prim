@@ -2,14 +2,17 @@
 
 ## Project knowledge and decisions
 
-- [Code und Architektur](docs/CODE.md): Zusammenhänge, Scanner/Tokenizer,
-  Tokenformat, Compiler, CPU, Debugger und RTL mit Diagrammen.
-- [Tests und Verifikation](docs/TESTS.md): Testdateien, Aufrufe, Prüfkriterien
-  und Grenzen der Abdeckung.
-- [Build und Board-Workflow](docs/BUILD.md): Toplevel-Makefile, Programme,
-  Bitstream, Flashen, UART-Konsole und lokale Einstellungen.
-- [Project knowledge](docs/PROJECT_KNOWLEDGE.md): kompakter Projektüberblick.
-- [Decisions](docs/DECISIONS.md): Anforderungen und technische Entscheidungen.
+- [Compile and load programs](docs/BUILD.md): central guide for source builds,
+  dependencies, CPU image loading, UART control and FPGA configuration.
+- [Register reference](system/docs/registers.md): complete MMIO map, bit fields,
+  reset values, access side effects and CPU registers.
+- [Code and architecture](docs/CODE.md): scanner/tokenizer, token format,
+  compiler, CPU, debugger and RTL diagrams.
+- [Tests and verification](docs/TESTS.md): test commands, checks and coverage limits.
+- [Project knowledge](docs/PROJECT_KNOWLEDGE.md): compact project overview.
+- [Decisions](docs/DECISIONS.md): requirements and technical decisions.
+
+Write repository documentation in English.
 
 ## Python development setup
 
@@ -46,11 +49,15 @@ prim/
     cli.py             Command-line dispatch
 ```
 
-Use `prim asm`, `prim tokenize`, `prim compile`, `prim export`, `prim disasm`,
+Use `prim build`, `prim asm`, `prim tokenize`, `prim compile`, `prim export`, `prim disasm`,
 `prim opcodes`, or `prim debug`. Separate `prim-asm`, `prim-tokenize`,
 `prim-compile`, `prim-export`, `prim-disasm`, `prim-opcodes`, and `prim-debug`
 commands are also available. `python -m prim` exposes the same subcommands.
 Each command accepts `--help`.
+
+For single or multiple `.cf` files, use `prim build` or `tools/build_cf.py`.
+See [Compile and load programs](docs/BUILD.md) for the complete workflow,
+including base-library selection, image formats, and loading onto the CPU.
 
 The old `src/*.py` tool wrappers have been removed. Use, for example,
 `python -m prim compile ...` instead of `python src/tokenforth.py ...`.

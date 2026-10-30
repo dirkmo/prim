@@ -7,10 +7,10 @@ import sys
 import threading
 
 HELP = """CPU mode: keys go to the seven-bit CPU channel (no local echo).
-Ctrl+B       Open local debug prompt
+Ctrl+B       Switch between CPU mode and local debug prompt
 Ctrl+D       Quit the console in either mode; CPU state is unchanged
 Ctrl+V key   Send the next byte literally (including Ctrl+B or Ctrl+D)
-Debug mode: Enter submits a command; empty Enter returns to CPU mode.
+Debug mode: Enter submits a command; empty Enter shows a fresh prompt.
 Up / Down                Browse command history; Down restores the draft
 help / ?                 Show all commands and keybindings
 halt / stop              Halt CPU at an instruction boundary
@@ -157,8 +157,9 @@ class Console:
             elif byte == 22:
                 self._escape.clear()
                 self.quoted = True
-            elif byte == 2 and not self.debug_mode:
-                self.debug_mode = True
+            elif byte == 2:
+                self._escape.clear()
+                self.debug_mode = not self.debug_mode
                 self.output.write('\r\n')
                 self._prompt()
             elif not self.debug_mode:
@@ -176,7 +177,7 @@ class Console:
                 self._history_draft = b''
                 self.output.write('\r\n')
                 if not command:
-                    self.debug_mode = False
+                    self._prompt()
                 elif command == 'quit':
                     self.running = False
                 elif command in ('help', '?'):
@@ -226,7 +227,7 @@ class Console:
             settings[1] = previous[1]  # Preserve normal terminal output processing.
             termios.tcsetattr(fd, termios.TCSANOW, settings)
             worker.start()
-            self.message('Prim UART console: Ctrl+B debug, Ctrl+D quit; Ctrl+B then help for commands')
+            self.message('Prim UART console: Ctrl+B CPU/debug, Ctrl+D quit; Ctrl+B then help for commands')
             while self.running:
                 if session.error:
                     raise OSError(f'UART session failed: {session.error}')

@@ -317,11 +317,12 @@ python boards/olimex_ice40hx8k_evb/host.py console --help
 python boards/olimex_ice40hx8k_evb/host.py --port "$PORT" console
 ```
 
-Ctrl+B opens local commands, Ctrl+D quits either mode without HALT/RESET, Ctrl+V
-quotes the next CPU byte, and empty Enter in the prompt returns to CPU mode.
+Ctrl+B switches between CPU mode and local commands, Ctrl+D quits either mode
+without HALT/RESET, and Ctrl+V quotes the next CPU byte. Empty Enter keeps the
+debug prompt open and shows a fresh prompt.
 Up/Down browses submitted commands in the debug prompt. Moving down past the
 newest entry restores the unfinished input. History lasts for the console session.
-Normal Enter goes to the CPU. Raw terminal input distinguishes Enter (CR) from
+In CPU mode, normal Enter goes to the CPU. Raw terminal input distinguishes Enter (CR) from
 Ctrl+B (STX); terminal attributes are restored on exit. `help` or `?` lists
 all commands. CPU output and BREAK remain active while entering commands,
 displaying help, loading images, or waiting for replies. The command adapter

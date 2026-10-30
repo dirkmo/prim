@@ -1,5 +1,8 @@
 # System integration and simulation
 
+The [complete register overview](docs/registers.md) collects the MMIO map,
+bit fields, reset values, access side effects and CPU registers.
+
 `rtl/prim_system.v` composes the standalone CPU from `cpu/rtl/`, the serial
 subsystem from `debug_uart/rtl/`, and this component's bus mux and memory/MMIO
 controllers. `rtl/bus_mux.v` grants the debug bus only on confirmed CPU halt.

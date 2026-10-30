@@ -302,10 +302,10 @@ CPU data are seven-bit; UTF-8 input is rejected instead of becoming debug bytes.
 
 | Key | Action |
 |---|---|
-| Ctrl+B | Open local debug prompt (not sent to CPU) |
+| Ctrl+B | Switch between CPU mode and local debug prompt (not sent to CPU) |
 | Ctrl+D | Quit either mode without HALT/RESET |
 | Ctrl+V, then a byte | Send that byte literally to CPU, including Ctrl+B/Ctrl+D |
-| Empty Enter in debug prompt | Return to CPU mode |
+| Empty Enter in debug prompt | Show a fresh debug prompt |
 | Enter in CPU mode | Send Enter to CPU |
 
 The console uses raw input so Enter (CR) and Ctrl+B (STX) are distinct. `help` or
