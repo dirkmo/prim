@@ -81,6 +81,50 @@ class Transport:
 
 
 class SessionChecks(unittest.TestCase):
+    def test_read_words_keeps_reader_live_and_blocks_credit_polls(self):
+        transport = Transport()
+        with UARTSession(transport) as session:
+            result = []
+            thread = threading.Thread(target=lambda: result.extend(session.read_words(2)))
+            thread.start()
+            until(lambda: 'R' in transport.commands)
+            session.queue_cpu(b'x')
+            transport.emit(b'live' + wire('B'))
+            until(lambda: session.output == b'live' and session.break_events == 1)
+            self.assertEqual(transport.commands, ['R'])
+            transport.emit(wire('123'))
+            until(lambda: transport.commands.count('R') == 2)
+            self.assertEqual(transport.commands, ['R', 'R'])
+            transport.emit(wire('4abcd'))
+            thread.join(timeout=2)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(result, [0x4321, 0xdcba])
+
+    def test_read_words_timeout_invalidates_session(self):
+        transport = Transport()
+        with UARTSession(transport, timeout=0.02) as session:
+            with self.assertRaises(DebugTimeout):
+                session.read_words(2)
+            self.assertIsNotNone(session.error)
+            with self.assertRaises(OSError):
+                session.status()
+
+    def test_read_words_callback_failure_invalidates_session(self):
+        class ReadTransport(Transport):
+            def write(self, data):
+                self.commands.append(data)
+                self.emit(wire('1234'))
+                return len(data)
+        transport = ReadTransport()
+        with UARTSession(transport) as session:
+            def fail(done):
+                raise RuntimeError('progress failed')
+            with self.assertRaisesRegex(RuntimeError, 'progress failed'):
+                session.read_words(2, on_progress=fail)
+            self.assertIsNotNone(session.error)
+            with self.assertRaises(OSError):
+                session.status()
+
     def test_stream_keeps_reader_live_and_blocks_credit_polls(self):
         transport = Transport()
         with UARTSession(transport) as session:

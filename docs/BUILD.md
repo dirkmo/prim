@@ -167,6 +167,23 @@ final byte is written separately. Readback is disabled by default; use `--verify
 or `VERIFY=1` to check contents. A verification failure prevents automatic RUN.
 Progress updates replace the same line.
 
+Verification sends one `R` per word, sending the next request after receiving
+the third of four hex digits while the fourth digit is still arriving.
+Memory reads (`r`/`R`) return hex digits without a `K` prefix. Rebuild and upload
+the FPGA bitstream together with the host update; older bitstreams use a
+different read response format. No read-request queue is needed in the FPGA.
+For 65520 SRAM bytes at 115200 baud, reply transmission alone takes about
+11.4 seconds; USB and host latency add to that time for each word.
+
+The host requests low-latency serial mode when opening the port. On Linux FTDI
+adapters this selects a 1-ms receive timer instead of potentially buffering a
+short reply for 16 ms. `VERIFY=1` reports whether the request succeeded, plus
+verification time and throughput after completion. Unsupported or denied
+low-latency requests leave the connection usable and print the reason.
+See the [FTDI driver](https://github.com/torvalds/linux/blob/master/drivers/usb/serial/ftdi_sio.c)
+for `ASYNC_LOW_LATENCY` handling. Even with the shorter timer, each word still
+requires a host/USB round trip, so 11.4 seconds is a wire-time lower bound.
+
 Missing or incorrect acknowledgments produce an error without automatic retries
 or automatic RUN. After a streaming failure, reopen the console and reload the
 complete image. If needed, add `--write-delay 0.001` to console `load`, or

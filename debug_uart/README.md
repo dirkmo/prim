@@ -195,8 +195,8 @@ fixed width. In this table characters are shown without the extra channel bit:
 | `?` | CPU status; terminate previous parser mode | `T` + 1 hex digit |
 | `q` | UART status, including while CPU runs; no bus access | `K` + 1 hex digit |
 | `A` + 1..4 hex digits | Replace only the specified low pointer nibbles | none |
-| `r` | CPU halted; read byte at pointer | `K` + 2 hex digits |
-| `R` | CPU halted; read word at pointer | `K` + 4 hex digits |
+| `r` | CPU halted; read byte at pointer | 2 hex digits, no prefix |
+| `R` | CPU halted; read word at pointer | 4 hex digits, no prefix |
 | `w` | CPU halted; enter persistent byte-write mode | `K` after each completed value |
 | `W` | CPU halted; enter persistent word-write mode | `K` after each completed value |
 
@@ -220,7 +220,14 @@ Every new command ends the previous address/write mode and discards incomplete
 input. In particular, `q` must not be interleaved into a persistent write burst;
 resume with a fresh `w`/`W` after switching commands. A started bus access cannot
 be aborted. The host must not send new debug commands or write values until the
-outstanding reply has completed. `?` is parser synchronization, not cancellation
+outstanding reply has completed, with one exception: after receiving the third
+hex digit of an `R` reply, the host may send the next `R` while receiving the
+fourth digit. At the same baud rate in both directions, the fourth digit has
+been latched into the UART TX frame before the next request arrives. This needs
+no command queue. Consume the fourth digit before parsing the next word, and
+send no extra request after the final word. This overlap requires a UART sender
+that latches the complete byte on its valid/ready handshake, as `uart_tx` does.
+`?` is parser synchronization, not cancellation
 of a stuck bus transfer. CPU-channel bytes may still arrive during a debug
 operation and are handled independently by the RX register.
 
@@ -251,6 +258,11 @@ PYTHONPATH=/path/to/debug_uart/python python your_host.py
 
 The implementation uses the standard library; `connect()` additionally needs
 pyserial. The compatibility import `prim.debug_uart` belongs to the Prim package.
+`connect()` requests `set_low_latency_mode(True)` when the transport supports
+it, before starting any session threads. On Linux FTDI adapters this requests
+a 1-ms receive timer. Unsupported or denied requests do not prevent connection;
+`low_latency` records success and `low_latency_error` records the reason on
+failure. The board loader prints this information when verification is enabled.
 
 `prim_debug_uart.DebugUART` is blocking. It demultiplexes CPU output and BREAK
 only while awaiting debug replies; it does not monitor an idle connection.
@@ -258,6 +270,18 @@ It offers `halt`, `run`, `step`, `reset_halt`, `status`, `uart_status`, `read_pc
 `set_address`, `read8`, `read16`, `write_bytes` and `write_words`. It does not
 check all CPU-state preconditions. Its transport needs bounded reads. A positive
 response timeout uses a monotonic clock. Timeout is not a hardware bus abort.
+
+`read_words(count, address=None, on_progress=None)` reads consecutive words
+under one transaction lock. It sends the next `R` after receiving the third
+hex digit, then consumes the fourth digit of the current word. Progress counts
+complete received words. The final reply is fully consumed before return.
+`UARTSession` stops on failure, including exceptions from progress callbacks,
+because a following read may already be in flight.
+
+Host and FPGA bitstream must both use this protocol: memory reads no longer
+return `K`. Older bitstreams returning prefixed reads are incompatible; rebuild
+and upload the FPGA bitstream when updating the host. PC reads, status queries,
+CPU controls and writes retain their existing response formats.
 
 `write_words_stream(values, address=None, write_delay=0, on_progress=None)` is a
 separate SRAM-loading operation: a sender writes ahead while replies are counted

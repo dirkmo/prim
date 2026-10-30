@@ -87,6 +87,15 @@ class UARTSession(DebugUART):
                 self._fail(exc)
                 raise
 
+    def read_words(self, *args, **kwargs):
+        with self._operation_lock:
+            try:
+                return super().read_words(*args, **kwargs)
+            except Exception as exc:
+                # A callback failure can leave the following read's reply pending.
+                self._fail(exc)
+                raise
+
     def queue_cpu(self, data):
         data = bytes(data)
         if any(byte & 128 for byte in data):

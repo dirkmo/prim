@@ -220,6 +220,13 @@ a concurrent reader counts one OK per word. Words are little-endian; an odd
 final byte uses a byte write without changing its neighbor. Readback is disabled
 by default. `--verify` enables word reads plus an optional final byte read,
 setting the read pointer once and then using its automatic increment.
+`r` returns two hex digits and `R` four, without a `K` prefix. Verification sends
+the next `R` after receiving digit three, overlapping its transmission with the
+fourth reply digit. No FPGA read-request queue is used. The final reply is fully
+consumed before an optional byte read or any subsequent command. Update the FPGA
+bitstream along with the host: older bitstreams return prefixed memory reads
+and are incompatible. Reply transmission alone takes about 11.4 seconds for
+65520 bytes at 115200 baud, plus USB/host latency for each word.
 `--run` resumes after successful loading and, when requested, verification.
 A failed verification does not start the CPU. Token streams are not CPU binaries.
 

@@ -90,6 +90,14 @@ class Client:
         self.word_reads.append(self.pointer)
         return self.read8() | (self.read8() << 8)
 
+    def read_words(self, count, *, on_progress=None):
+        words = []
+        for _ in range(count):
+            words.append(self.read16())
+            if on_progress:
+                on_progress(len(words))
+        return words
+
     def read8(self, address=None):
         if address is None:
             address = self.pointer
@@ -221,6 +229,7 @@ class HostChecks(unittest.TestCase):
             self.assertEqual(client.calls, ['reset_halt', ('write_words', 0, words), ('set_address', 0), 'read_pc', 'run'])
             self.assertEqual(client.word_reads, list(range(0, 0xfff0, 2)))
             self.assertIn('65520 bytes', output)
+            self.assertRegex(output, r'Verify completed in [0-9.]+ s \([0-9]+ bytes/s\)')
             self.assertIn('Writing: 0/65520 bytes (0%)', output)
             self.assertIn('Writing: 65520/65520 bytes (100%)', output)
             self.assertIn('Verifying: 0/65520 bytes (0%)', output)
@@ -312,6 +321,21 @@ class HostChecks(unittest.TestCase):
             self.assertNotIn('run', client.calls)
             self.assertTrue(client.halted)
             client.transport.close.assert_called_once()
+
+    def test_verify_reports_latency_configuration_and_duration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / 'image.bin'
+            image.write_bytes(b'ab')
+            for enabled in (True, False):
+                with self.subTest(enabled=enabled):
+                    client = Client()
+                    client.low_latency = enabled
+                    client.low_latency_error = None if enabled else 'permission denied'
+                    output, _ = self.invoke(client, 'load', str(image), '--verify')
+                    self.assertIn('UART low-latency mode ' + (
+                        'enabled' if enabled else 'unavailable: permission denied'), output)
+                    self.assertIn('Verify completed in ', output)
+                    self.assertIn('Loaded and verified 2 bytes', output)
 
     def test_word_order_odd_tail_and_optional_verification(self):
         with tempfile.TemporaryDirectory() as directory:

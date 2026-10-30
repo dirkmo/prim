@@ -1,4 +1,5 @@
 // One operation at a time; a cooperative host waits for every response.
+// For R, the next request may be sent after receiving the third hex digit.
 module debug_uart(
     input i_clk, i_reset,
     input [7:0] i_rx_data,
@@ -24,7 +25,7 @@ reg [1:0] mode;
 reg [1:0] nibble;
 reg [15:0] pointer, value;
 reg word_access, writing;
-// Response serializer: prefix plus zero, one, two or four low-first nibbles.
+// Response serializer: optional prefix and zero, one, two or four low-first nibbles.
 reg [2:0] remaining;
 reg prefix;
 reg status_reply;
@@ -64,7 +65,7 @@ always @(posedge i_clk) begin
         case (state)
             BUS: if (i_ack) begin
                 pointer <= pointer + (word_access ? 16'd2 : 16'd1);
-                prefix <= 1; status_reply <= 0;
+                prefix <= writing; status_reply <= 0;
                 remaining <= writing ? 0 : (word_access ? 4 : 2);
                 reply <= i_data;
                 state <= IDLE;

@@ -127,6 +127,11 @@ def dispatch(client, args, *, image=None, report=print, progress_report=None):
     elif args.command == 'load':
         if image is None:
             image = prepare_image(args.image, args.skip_mmio, report)
+        if args.verify and hasattr(client, 'low_latency'):
+            if client.low_latency:
+                report('UART low-latency mode enabled')
+            else:
+                report(f'UART low-latency mode unavailable: {client.low_latency_error}')
         report('Resetting CPU and waiting for halt...')
         client.reset_halt()
         total = len(image)
@@ -165,16 +170,18 @@ def dispatch(client, args, *, image=None, report=print, progress_report=None):
                 client.write_bytes(image[word_bytes:], address=word_bytes)
                 progress('Writing', total)
             if args.verify:
+                verify_started = time.monotonic()
                 progress('Verifying', 0)
                 client.set_address(0)
-                for address in range(0, word_bytes, 2):
-                    actual = client.read16()
+                words = client.read_words(word_bytes // 2,
+                                          on_progress=lambda done: progress('Verifying', done * 2))
+                for index, actual in enumerate(words):
+                    address = index * 2
                     for offset in range(2):
                         expected = image[address + offset]
                         byte = (actual >> (8 * offset)) & 255
                         if byte != expected:
                             raise RuntimeError(f'Verify failed at 0x{address + offset:04x}: {byte:02x} != {expected:02x}')
-                    progress('Verifying', address + 2)
                 if total != word_bytes:
                     actual = client.read8()
                     if actual != image[-1]:
@@ -182,6 +189,9 @@ def dispatch(client, args, *, image=None, report=print, progress_report=None):
                     progress('Verifying', total)
         finally:
             progress_report('')
+        if args.verify:
+            elapsed = time.monotonic() - verify_started
+            report(f'Verify completed in {elapsed:.2f} s ({total / max(elapsed, 1e-9):.0f} bytes/s)')
         label = 'Loaded and verified' if args.verify else 'Loaded'
         report(f'{label} {total} bytes; PC=0x{client.read_pc():04x}')
         if args.run:

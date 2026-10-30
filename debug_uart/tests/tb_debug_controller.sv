@@ -47,22 +47,22 @@ initial begin
     repeat(3) @(negedge clk); reset=0;
     send("A12ab"); repeat(20) @(negedge clk);
     if(accesses!=0 || received!=0 || addr!=16'hba21) $fatal(1,"A side effects");
-    send("R"); wait(received==5); check(0,"K12ab");
+    send("R"); wait(received==4); check(0,"12ab");
     if(last_addr!=16'hba21 || addr!=16'hba23) $fatal(1,"read pointer");
-    send("AaW1234"); wait(received==6); check(5,"K");
+    send("AaW1234"); wait(received==5); check(4,"K");
     if(last_addr!=16'hba2a || last_data!=16'h4321 || !last_we) $fatal(1,"write value");
-    send("abcd"); wait(received==7);
+    send("abcd"); wait(received==6);
     if(last_addr!=16'hba2c || last_data!=16'hdcba) $fatal(1,"persistent mode");
-    send("w1?"); wait(received==9); check(7,"T1");
+    send("w1?"); wait(received==8); check(6,"T1");
     if(accesses!=3) $fatal(1,"partial write was committed");
     @(negedge clk); ready=0;
     send("P"); wait(tx_valid);
     @(negedge clk); break_event=1;
     @(negedge clk); break_event=0;
     repeat(5) @(negedge clk);
-    if(received!=9) $fatal(1,"TX ignored backpressure");
-    ready=1; wait(received==15); check(9,"K1234B");
-    send("q"); wait(received==17); check(15,"K2");
+    if(received!=8) $fatal(1,"TX ignored backpressure");
+    ready=1; wait(received==14); check(8,"K1234B");
+    send("q"); wait(received==16); check(14,"K2");
     $display("PASS debug controller"); $finish;
 end
 initial begin #20000; $fatal(1,"controller timeout"); end

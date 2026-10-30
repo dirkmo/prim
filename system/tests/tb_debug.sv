@@ -107,25 +107,39 @@ initial begin
     if(n!=j || dut.bs!=0 || dut.uart.debug.pointer!=16'hba21)
         $fatal(1,"address pause/unknown/channel zero caused side effect");
     command("q", "K3");
-    command("Affffr", "K16"); // newest CPU byte 'a', then clear received
+    command("Affffr", "16"); // newest CPU byte 'a', then clear received
     command("q", "K2");
-    command("Affffr", "K16"); // retain last byte with received=0
+    command("Affffr", "16"); // retain last byte with received=0
     command("A12abw12", "K"); // BA21 = 21
     command("34", "K"); command("ab", "K");
-    command("A12abr", "K12"); command("r", "K34"); command("r", "Kab");
+    command("A12abr", "12"); command("r", "34"); command("r", "ab");
     send("A12abAa");
     if(dut.uart.debug.pointer!=16'hba2a) $fatal(1,"partial nibble");
     send("A4c");
     if(dut.uart.debug.pointer!=16'hbac4) $fatal(1,"partial byte");
-    command("w56", "K"); command("A4cr", "K56");
+    command("w56", "K"); command("A4cr", "56");
     command("A1001W1234", "K"); command("abcd", "K");
-    command("A1001R", "K1234"); command("R", "Kabcd");
+    command("A1001R", "1234"); command("R", "abcd");
+    // Issue the next request immediately after digit three. The fourth digit
+    // must survive in the UART TX frame while the next bus access completes.
+    send("A1001R"); expect_reply("123");
+    fork
+        send("R");
+        begin
+            wait(dut.uart.rx_valid);
+            if(dut.uart.debug.remaining!=0 || dut.uart.tx.o_ready)
+                $fatal(1,"last digit was not latched before next R arrived");
+        end
+    join
+    expect_reply("4abcd");
+    if(dut.uart.debug.pointer!=16'h1005) $fatal(1,"read-ahead pointer");
+    command("r", "00"); // No extra read request after the final word.
     // New commands discard partial values and terminate the old mode.
     command("A0002w1?", "T1");
     command("W123?", "T1");
-    command("w1A0002r", "K00");
+    command("w1A0002r", "00");
     send("A0002w1W"); command("1234", "K");
-    command("A0002R", "K1234");
+    command("A0002R", "1234");
     // Debug writes to UART and split word MMIO must ACK before sending OK.
     sendbyte(0);
     command("Affffwff", "K");
@@ -136,13 +150,13 @@ initial begin
     command("AffffW3445", "K"); // FFFF: 43 to UART, 54 to RAM zero
     drain_cpu();
     if(dut.uart.debug.pointer!=1 || outputs!=3 || mem[0][7:0]!=8'h54) $fatal(1,"word wrap/MMIO");
-    command("AffffR", "K0045");
+    command("AffffR", "0045");
     if(dut.uart.debug.pointer!=1) $fatal(1,"read word wrap");
-    command("Affffr", "K00");
+    command("Affffr", "00");
     if(dut.uart.debug.pointer!=0) $fatal(1,"read byte wrap");
     command("A1001Z", "K");
     if(dut.uart.debug.pointer!=16'h1001) $fatal(1,"reset pointer");
-    command("R", "K1234"); // SRAM survived CPU reset
+    command("R", "1234"); // SRAM survived CPU reset
     command("q", "K2"); // RX last byte retained across CPU reset
     // Restore BREAK and STEP through it; busy TX must retain notification.
     command("A0000w2a", "K");
@@ -175,19 +189,19 @@ initial begin
     command("00", "K"); command("00", "K"); command("20", "K");
     command("Z", "K"); command("G", "K"); command("Z", "K");
     command("P", "K0000"); command("?", "T1");
-    command("A1001R", "K1234");
+    command("A1001R", "1234");
     // Timer configuration through the real debug bus, while the CPU is halted.
     command("A2fffW3000", "K");
     command("A0fffW0000", "K");
     command("A4fffW5000", "K");
-    command("A0fffR", "K3000"); command("A4fffR", "K5000");
+    command("A0fffR", "3000"); command("A4fffR", "5000");
     if(timer_irqs!=1 || !dut.halted) $fatal(1,"timer one-shot while halted");
     command("Z", "K");
-    command("A0fffR", "K3000"); command("A2fffR", "K3000");
-    command("A4fffR", "K5000");
+    command("A0fffR", "3000"); command("A2fffR", "3000");
+    command("A4fffR", "5000");
     if(timer_irqs!=1) $fatal(1,"CPU reset changed timer");
     command("A0fffW0000", "K");
-    command("A0fffR", "K3000");
+    command("A0fffR", "3000");
     if(timer_irqs!=2) $fatal(1,"timer rearm");
     command("A4fffW7000", "K");
     saved_irqs=timer_irqs;

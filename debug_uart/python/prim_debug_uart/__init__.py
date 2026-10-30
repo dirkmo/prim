@@ -55,11 +55,31 @@ class DebugUART:
 
     @classmethod
     def connect(cls, port, **kwargs):
-        """Open pyserial at fixed 115200 baud, 8N1; caller closes transport."""
+        """Open at 115200/8N1 and request low USB latency where supported."""
         import serial
-        return cls(serial.Serial(port, baudrate=115200, bytesize=8,
-                                 parity='N', stopbits=1, timeout=0.1,
-                                 write_timeout=kwargs.get('timeout', 2.0)), **kwargs)
+        transport = serial.Serial(port, baudrate=115200, bytesize=8,
+                                  parity='N', stopbits=1, timeout=0.1,
+                                  write_timeout=kwargs.get('timeout', 2.0))
+        low_latency = False
+        latency_error = 'not supported by this transport'
+        try:
+            configure = getattr(transport, 'set_low_latency_mode', None)
+            if configure is not None:
+                try:
+                    # Linux FTDI: ASYNC_LOW_LATENCY selects a 1-ms timer.
+                    # Configure before UARTSession starts its reader/sender.
+                    configure(True)
+                    low_latency = True
+                    latency_error = None
+                except (OSError, ValueError) as exc:
+                    latency_error = str(exc)
+            client = cls(transport, **kwargs)
+        except Exception:
+            transport.close()
+            raise
+        client.low_latency = low_latency
+        client.low_latency_error = latency_error
+        return client
 
     def _send(self, text):
         data = bytes(ord(c) | 0x80 for c in text)
@@ -89,9 +109,10 @@ class DebugUART:
 
     def _response(self, prefix='K', digits=0):
         deadline = time.monotonic() + self.timeout
-        char = self._debug_char(deadline)
-        if char != prefix:
-            raise RuntimeError(f'Expected debug response {prefix!r}, received {char!r}')
+        if prefix is not None:
+            char = self._debug_char(deadline)
+            if char != prefix:
+                raise RuntimeError(f'Expected debug response {prefix!r}, received {char!r}')
         text = ''.join(self._debug_char(deadline) for _ in range(digits))
         if any(c not in '0123456789abcdef' for c in text):
             raise RuntimeError(f'Invalid debug hex response: {text!r}')
@@ -147,14 +168,39 @@ class DebugUART:
         if address is not None:
             self.set_address(address)
         self._send('r')
-        return self._response(digits=2)
+        return self._response(prefix=None, digits=2)
 
     @transaction
     def read16(self, address=None):
         if address is not None:
             self.set_address(address)
         self._send('R')
-        return self._response(digits=4)
+        return self._response(prefix=None, digits=4)
+
+    @transaction
+    def read_words(self, count, address=None, *, on_progress=None):
+        """Read consecutive words, sending the next R after the third hex digit.
+
+        At most one following read is in flight. The last word is fully drained
+        before return. Progress counts complete words received.
+        """
+        if not isinstance(count, int) or count < 0:
+            raise ValueError('count must be a nonnegative integer')
+        if not count:
+            return []
+        if address is not None:
+            self.set_address(address)
+        words = []
+        self._send('R')
+        for index in range(count):
+            low = self._response(prefix=None, digits=3)
+            if index + 1 < count:
+                self._send('R')
+            high = self._response(prefix=None, digits=1)
+            words.append(low | (high << 12))
+            if on_progress:
+                on_progress(len(words))
+        return words
 
     def _write(self, values, digits, address):
         if address is not None:

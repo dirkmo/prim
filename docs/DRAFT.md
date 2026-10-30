@@ -47,8 +47,8 @@ Das niedrigste Nibble kommt zuerst: `12` = 0x21, `1234` = 0x4321,
 | `?` | CPU-Status und Neustart des Eingabeparsers | `T` + eine Hexziffer |
 | `q` | UART-Status, auch bei laufender CPU und ohne Buszugriff | `K` + eine Hexziffer |
 | `A` + 1–4 Hexziffern | Adresspointer teilweise setzen | keine |
-| `r` | READ8 am Pointer | `K` + zwei Hexziffern |
-| `R` | READ16 am Pointer | `K` + vier Hexziffern |
+| `r` | READ8 am Pointer | zwei Hexziffern ohne Präfix |
+| `R` | READ16 am Pointer | vier Hexziffern ohne Präfix |
 | `w` | dauerhaften Byte-Schreibmodus beginnen | keine für das Präfix |
 | `W` | dauerhaften Wort-Schreibmodus beginnen | keine für das Präfix |
 
@@ -99,6 +99,14 @@ Ein bereits gestarteter Buszugriff wird nicht abgebrochen. Während ausstehender
 Operationen werden keine weiteren Kommandos angenommen. Insbesondere ist `?`
 kein Abbruch eines hängenden Buszugriffs. Der korrekte Host sendet während
 solcher Operationen keine neuen Kommandos.
+
+Für aufeinanderfolgende Wort-Lesezugriffe darf der Host das nächste `R` nach
+Empfang der dritten Hexziffer senden und parallel die vierte Ziffer empfangen.
+Bei gleicher Baudrate in beiden Richtungen hat der UART-Sender die vierte
+Ziffer bereits in sein Senderegister übernommen, bevor das nächste `R` am
+Controller ankommt. Eine Kommandowarteschlange ist dafür nicht erforderlich.
+Vor anderen Kommandos muss die letzte Antwort vollständig gelesen werden;
+nach dem letzten Wort darf kein weiteres `R` gesendet werden.
 
 ## CPU und Bus
 
@@ -288,6 +296,13 @@ einen Bytezugriff für ein ungerades Restbyte. Rücklesen ist standardmäßig au
 gegebenenfalls einen letzten Bytezugriff. `--run` startet nach erfolgreichem
 Laden und, falls angefordert, erfolgreicher Verifikation. Das vollständige
 Speicherabbild wird weiterhin übertragen; eine Verkleinerung ist noch offen.
+
+Beim Verify sendet der Host das nächste `R` nach der dritten von vier
+Antwortziffern. `r` und `R` senden kein `K` mehr; Host und FPGA-Bitstream müssen
+gemeinsam aktualisiert werden. Die reine Antwortübertragung benötigt für
+65520 SRAM-Bytes bei 115200 Baud etwa 11,4 Sekunden, zuzüglich USB-/Host-Latenz
+pro Wort. `P`, Statusabfragen, CPU-Steuerung und Schreibbestätigungen behalten
+ihr bisheriges Format.
 
 Auf Wunsch wird beim SRAM-Laden die Wartebedingung pro Wert bewusst gelockert:
 Der Host sendet Wörter fortlaufend und zählt OKs parallel. Der Controller erhält
