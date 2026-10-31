@@ -9,6 +9,7 @@ from forth.kernel.compiler import emit_compiler
 from forth.kernel.control import emit_control
 from forth.kernel.data import emit_data
 from forth.kernel.io import IO_VARIABLES, emit_io
+from forth.kernel.interrupts import IRQ_VARIABLES, emit_interrupts
 
 # Private RAM cells; public Forth words will expose selected cells later.
 VARIABLES = {
@@ -38,7 +39,7 @@ def emit_kernel(image):
     for name, address in VARIABLES.items():
         image.define(name, address)
     if dual:
-        for name, address in IO_VARIABLES.items():
+        for name, address in {**IO_VARIABLES, **IRQ_VARIABLES}.items():
             image.define(name, address)
     for name, address in {
         'input_buffer': 0x0200, 'string_buffer': 0x0280,
@@ -73,10 +74,12 @@ def emit_kernel(image):
         image.op(Op.BYTE_STORE)
 
     if dual:
-        for name in IO_VARIABLES:
+        for name in (*IO_VARIABLES, *IRQ_VARIABLES):
             image.push(0)
             image.push(Ref(name))
             image.op(Op.STORE)
+        image.push(Ref('irq_init'))
+        image.op(Op.CALL)
 
     # Non-returning entry also used after errors/ABORT; no stale frames resumed.
     image.define('idle')
@@ -84,6 +87,7 @@ def emit_kernel(image):
     image.op(Op.JP)
     if dual:
         emit_io(image)
+        emit_interrupts(image)
     emit_primitives(image)
     emit_parser(image)
     emit_console(image)
