@@ -86,6 +86,9 @@ add_test(NAME uart_component_checks
 add_test(NAME timer_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/timer/tests/test_timer.py
         --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
+add_test(NAME ps2_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/ps2/tests/test_ps2.py
+        --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
 add_test(NAME vga_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/vga/tests/test_vga.py
         --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})

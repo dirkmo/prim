@@ -410,6 +410,7 @@ Stop the server with Ctrl+C.
 - [debug_uart/](debug_uart/README.md): UART RX/TX, debug protocol, host library and component tests.
 - [system/](system/README.md): bus mux, SRAM/MMIO and complete system integration.
 - [vga/](vga/README.md): 80x30 monochrome VGA text, banked video RAM, cursor and scrolling.
+- [ps2/](ps2/README.md): receive-only keyboard interface, raw scan-code FIFO and shared interrupt source identification.
 - `tests/support/`: shared simulation helpers.
 
 Build and run all suites from the repository root:

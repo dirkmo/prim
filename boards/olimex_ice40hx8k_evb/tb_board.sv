@@ -8,6 +8,7 @@ wire halted = dut.system.halted;
 wire [17:0] addr;
 wire [15:0] data;
 olimex_ice40hx8k_evb dut(.clk_100mhz(clk), .button_n(button_n), .uart_rx(rx), .uart_tx(tx),
+    .ps2_clk(1'b1), .ps2_data(1'b1),
     .leds(leds), .sram_addr(addr), .sram_data(data),
     .sram_cs_n(cs), .sram_oe_n(oe), .sram_we_n(we));
 reg [15:0] mem[0:32767];

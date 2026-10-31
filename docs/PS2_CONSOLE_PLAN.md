@@ -1,11 +1,15 @@
 # PS/2 keyboard and two console transports
 
-Planning baseline: 2026-10-31. This document proposes work packages; it does
-not claim an implemented PS/2 controller or dual-console Forth.
+Planning baseline: 2026-10-31. AP1–AP3 are complete: the PS/2 receiver, FIFO,
+MMIO and shared interrupt source identification are implemented. The software
+dispatcher and dual-console Forth remain AP4–AP7; physical acceptance is AP8.
 
 AP1 is complete: see [the board and interface contract](PS2_AP1_CONTRACT.md)
 and [the measured resource baseline](PS2_AP1_BASELINE.json). The AP1 contract
 resolves the provisional register/dispatch choices below and governs AP2 onward.
+AP2/AP3 implementation and checks: [PS/2 guide](../ps2/README.md),
+[shared IRQ registers](../system/docs/interrupts_mmio.md),
+[resource comparison](PS2_AP3_RESOURCES.json).
 
 ## Required behavior
 

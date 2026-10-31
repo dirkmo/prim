@@ -6,7 +6,7 @@ CPU_RTL = ROOT / 'cpu' / 'rtl'
 DEBUG_RTL = ROOT / 'debug_uart' / 'rtl'
 SYSTEM_RTL = ROOT / 'system' / 'rtl'
 SOURCE_DIRS = tuple(ROOT / component / kind
-                    for component in ('cpu', 'debug_uart', 'system', 'timer')
+                    for component in ('cpu', 'debug_uart', 'system', 'timer', 'ps2')
                     for kind in ('rtl', 'tests'))
 BUILD = ROOT / 'build' / 'sim'
 SIMULATOR = BUILD / 'simulator'

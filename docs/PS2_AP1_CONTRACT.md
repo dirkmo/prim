@@ -3,6 +3,9 @@
 Completed design work: 2026-10-31. This is the implementation contract for
 AP2 onward, not a description of new implemented registers. Current RTL is
 unchanged. The parent plan is [PS2_CONSOLE_PLAN.md](PS2_CONSOLE_PLAN.md).
+AP2/AP3 have since implemented this contract; current operation and verification
+are documented in [the PS/2 guide](../ps2/README.md) and
+[shared IRQ reference](../system/docs/interrupts_mmio.md).
 
 ## Board wiring and electrical path
 

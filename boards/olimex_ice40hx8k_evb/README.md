@@ -282,22 +282,28 @@ and a missing skip option are rejected before connecting to the board.
 The base-library example demonstrates loading a compiler image; it does not
 install a runnable application entry at PC 0000.
 
-## CPU timer/LED/UART registers
+## CPU peripheral registers
 
 | Address | Read | Write |
 |---|---|---|
 | FFF0..FFF1 | timer COUNT, 16 bits | set COUNT |
 | FFF2..FFF3 | timer COMPARE, 16 bits | set COMPARE |
-| FFF4..FFF5 | timer CSR: ENABLE/AUTO/INTEN in bits 0/1/2 | set control bits |
-| FFF6..FFFC | reserved, zero | ignored |
+| FFF4 | timer CSR: ENABLE/AUTO/INTEN in bits 0/1/2 | set control bits |
+| FFF5 | IRQ_PENDING: timer/UART RX/UART TX/PS2 in bits 0/1/2/3 | W1C selected pending bits |
+| FFF6..FFFA | VGA registers | see VGA reference |
+| FFFB | PS2_CSR: RXAVAIL/FULL/RXIE/FRAMEERR/OVERFLOW in bits 0..4 | set RXIE, W1C errors |
+| FFFC | PS2_DATA: oldest raw byte, consuming; zero if empty | ignored |
 | FFFD | LED1 in bit 0, LED2 in bit 1; other bits zero | set LEDs from bits 0/1; ignore bits 7:2 |
 | FFFE | bit 0 received, bit 1 TX buffer free; other bits zero | ignored |
 | FFFF | last received seven-bit byte; clear received on final bus ACK | enqueue seven-bit CPU TX byte; wait when full |
 
 The [timer reference](../../system/docs/timer_mmio.md) describes counting and
 word access behavior. The board uses `TIMER_DIVISOR=25000` at 25 MHz (1 ms per
-counting interval). Timer IRQ is connected to the CPU, which does not yet
-handle interrupts. CPU halt/debug reset leave the timer running.
+counting interval). Timer, UART and PS/2 events share the CPU IRQ through the
+[IRQ_PENDING block](../../system/docs/interrupts_mmio.md). The CPU supports
+interrupts; the current Forth kernel still polls UART. CPU halt/debug reset
+leave peripherals and source pending intact. [PS/2 reception](../../ps2/README.md)
+uses GPIO1.14/G1 and GPIO1.16/J5 without conflicting with VGA/UART.
 
 Reading an empty RX register returns the last byte, initially zero. New reception
 wins over simultaneous consumption. TX buffer free does not imply an idle UART

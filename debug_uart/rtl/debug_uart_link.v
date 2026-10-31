@@ -11,7 +11,7 @@ module debug_uart_link #(
     output [3:0] o_uart_csr,
     input [7:0] i_csr_data,
     input i_csr_write,
-    output o_irq,
+    output o_irq, o_rx_irq, o_tx_irq,
     input i_input_read,
     output o_halt, o_run, o_step, o_reset_cpu,
     input i_halted, i_break_reason, i_break_event,
@@ -30,6 +30,7 @@ wire buffered_valid, buffered_ready;
 uart_buffers buffers(.i_clk(i_clk), .i_reset(i_reset), .i_rx_data(rx_data), .i_rx_valid(rx_valid),
     .i_input_read(i_input_read), .o_input_data(o_input_data), .o_csr(o_uart_csr),
     .i_csr_data(i_csr_data), .i_csr_write(i_csr_write), .o_irq(o_irq),
+    .o_rx_irq(o_rx_irq), .o_tx_irq(o_tx_irq),
     .i_output_data(i_output_data), .i_output_valid(i_output_valid), .o_output_ready(o_output_ready),
     .o_tx_data(buffered_data), .o_tx_valid(buffered_valid), .i_tx_ready(buffered_ready));
 uart_rx #(.CLKS_PER_BIT(CLKS_PER_BIT)) rx(

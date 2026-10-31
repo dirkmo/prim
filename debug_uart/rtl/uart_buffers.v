@@ -7,7 +7,7 @@ module uart_buffers(
     output [3:0] o_csr,
     input [7:0] i_csr_data,
     input i_csr_write,
-    output reg o_irq,
+    output reg o_irq, o_rx_irq, o_tx_irq,
     input [6:0] i_output_data,
     input i_output_valid,
     output o_output_ready,
@@ -24,11 +24,13 @@ always @(posedge i_clk) begin
     if (i_reset) begin
         o_input_data <= 0; received <= 0;
         o_tx_data <= 0; pending <= 0;
-        rxie <= 0; txie <= 0; o_irq <= 0;
+        rxie <= 0; txie <= 0; o_irq <= 0; o_rx_irq <= 0; o_tx_irq <= 0;
     end else begin
         // Event pulses use the enables from before this edge. No retroactive IRQ.
         o_irq <= (rxie && i_rx_valid && !i_rx_data[7]) ||
                  (txie && o_tx_valid && i_tx_ready);
+        o_rx_irq <= rxie && i_rx_valid && !i_rx_data[7];
+        o_tx_irq <= txie && o_tx_valid && i_tx_ready;
         if (i_csr_write) begin
             rxie <= i_csr_data[2]; txie <= i_csr_data[3];
         end

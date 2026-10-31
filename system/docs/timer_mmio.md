@@ -1,8 +1,9 @@
 # System timer
 
 `prim_system` connects the standalone [`timer`](../../timer/README.md) through
-`timer_mmio.v` and `memory_io.v` to the shared CPU/debug bus. Timer IRQ is wired
-to `Prim.i_irq` ORed with the UART IRQ. The CPU latches requests even while
+`timer_mmio.v` and `memory_io.v` to the shared CPU/debug bus. Timer IRQ feeds
+the [shared pending/IRQ block](interrupts_mmio.md), alongside UART and PS/2.
+The CPU latches requests even while
 masked or halted; configure the ISR with INTAD before enabling interrupts with
 INTEI. See the [CPU interrupt reference](../../cpu/README.md#interrupts) and
 the [complete register overview](registers.md).
@@ -16,19 +17,23 @@ All addresses below are CPU byte addresses. Register words are little-endian.
 |---|---|---|
 | FFF0..FFF1 | COUNT, 16 bits | R/W |
 | FFF2..FFF3 | COMPARE, 16 bits | R/W |
-| FFF4..FFF5 | CSR: bit 0 ENABLE, bit 1 AUTO, bit 2 INTEN | R/W; bits 15:3 read zero |
-| FFF6..FFFC | Reserved | Read zero, writes ignored |
+| FFF4 | CSR: bit 0 ENABLE, bit 1 AUTO, bit 2 INTEN | R/W; bits 7:3 read zero |
+| FFF5 | Shared IRQ_PENDING; bit 0 timer event | Read pending, W1C; see shared IRQ reference |
+| FFF6..FFFA | Optional VGA | See [VGA reference](../../vga/README.md) |
+| FFFB..FFFC | Optional PS/2 | See [PS/2 reference](../../ps2/README.md) |
 | FFFD | LEDs | See [LED/UART reference](uart_mmio.md) |
 | FFFE..FFFF | UART | See [LED/UART reference](uart_mmio.md) |
 
-Aligned timer words access both bytes atomically in one system clock. Byte
+Aligned COUNT/COMPARE words access both bytes atomically in one system clock. Byte
 accesses preserve the other register byte. All bus byte masks are supported.
 An odd word crossing two timer registers (FFF1 or FFF3) uses two consecutive
 phases, lower address first, with final ACK on the second phase. These accesses
 are not atomic: the low-address read byte is retained from the first phase,
 and a low-address write takes effect before the final ACK. Requests must remain
 stable until ACK, as on the rest of the bus. Aligned words are recommended for
-coherent COUNT reads.
+coherent COUNT reads. FFF4/FFF5 is instead serialized into independent control
+and W1C bytes. Use byte writes to control IRQ enables without acknowledging
+pending; whole-word read/modify/write can unintentionally clear pending events.
 
 A mixed SRAM/timer word at FFEF completes its SRAM byte first, then its timer
 byte at final ACK. Timer/reserved crossings use the selected timer byte only.
@@ -44,7 +49,8 @@ The Olimex wrapper explicitly uses 25000 at 25 MHz, giving 1 ms.
 Full system reset clears timer registers, divider and IRQ. CPU-only debug reset,
 halt and step do not reset or pause the timer. An enabled timer continues to
 run while the debug master owns the bus. Each interrupt pulse lasts one system
-clock, without a pending latch. The [standalone documentation](../../timer/README.md)
+clock in the standalone component; the system retains it in FFF5 bit 0.
+Acknowledge that bit before servicing the timer handler. The [standalone documentation](../../timer/README.md)
 defines counting, reload, write priority and interrupt conditions.
 
 ## Software example

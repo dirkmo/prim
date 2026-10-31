@@ -222,3 +222,9 @@ reserves for MMIO from ordinary RAM initialization and verification.
 To enable RX and TX interrupts, write `0x0c` to CSR after installing the ISR.
 For an interrupt-driven transmitter, enqueue the first byte explicitly to start
 the stream; enabling TXIE on an already-empty slot does not create an interrupt.
+
+`uart_buffers` and `debug_uart_link` also expose `o_rx_irq` and `o_tx_irq`
+separately, with the same event timing as `o_irq`. Prim's system wrapper uses
+these to retain separate source identities in [IRQ_PENDING](../../system/docs/interrupts_mmio.md).
+System enable/backlog replay is implemented there, without changing the
+standalone combined UART event output.

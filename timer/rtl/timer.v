@@ -10,10 +10,12 @@ module timer #(
     input wire [1:0] i_be,
     input wire [15:0] i_wdata,
     output reg [15:0] o_rdata,
-    output reg o_irq
+    output reg o_irq,
+    output o_inten
 );
 reg [15:0] count, compare;
 reg [2:0] csr;
+assign o_inten = csr[2];
 
 wire write_reg = i_cs && i_we && (|i_be) && i_addr != 2'b11;
 wire tick;

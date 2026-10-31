@@ -5,6 +5,9 @@ set_io button_n K11
 # adapter TX -> GPIO1.5 / FPGA RX; adapter RX <- GPIO1.7 / FPGA TX.
 set_io -pullup yes uart_rx E4
 set_io uart_tx B2
+# iCE40-IO Rev.A PS/2 resistor-divider inputs, GPIO1.14 clock / .16 data.
+set_io ps2_clk G1
+set_io ps2_data J5
 # iCE40-IO Rev.A: GPIO1.20 HSYNC, GPIO1.18 VSYNC.
 set_io vga_hsync J4
 set_io vga_vsync H2

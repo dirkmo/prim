@@ -8,7 +8,8 @@ RX, TX and status signals without address decoding. Their buffer/handshake
 semantics are described in the
 [UART register-interface reference](../../debug_uart/docs/register_interface.md).
 The full system reserves FFF0..FFFF for MMIO, including the
-[timer at FFF0..FFF5](timer_mmio.md). FFF6..FFFC is reserved and reads zero.
+[timer at FFF0..FFF4](timer_mmio.md), [shared IRQ_PENDING at FFF5](interrupts_mmio.md),
+optional VGA at FFF6..FFFA and optional [PS/2 at FFFB/FFFC](../../ps2/README.md).
 
 ## Byte addresses
 
@@ -39,14 +40,15 @@ The table below applies to BS=11:
 
 | Starting byte address of 16-bit access | Low byte, bits 7:0 | High byte, bits 15:8 | Write effect |
 |---|---|---|---|
-| `FFFC` | Reserved (zero) | LEDs at FFFD | Ignore low byte; set LEDs from high bits 1:0 |
+| `FFFC` | PS/2 DATA (or zero if disabled) | LEDs at FFFD | Ignore low byte; set LEDs from high bits 1:0 |
 | `FFFD` | LEDs at FFFD | CSR at FFFE | Set LEDs from low bits 1:0; update RXIE/TXIE from high bits 2/3 |
 | `FFFE` | CSR at FFFE | RX DATA at FFFF | Update RXIE/TXIE from low bits 2/3; enqueue high byte's low seven bits |
 | `FFFF` | RX DATA at FFFF | SRAM[0000], due to wraparound | Enqueue low byte's low seven bits; write all eight high-byte bits to SRAM[0000] |
 
-A read consumes RX once at final ACK if the RX lane is selected. For mixed
+A read consumes UART RX once at final ACK if the RX lane is selected. For mixed
 MMIO/SRAM transfers, the SRAM lane completes first and the UART effect occurs
-at the final ACK. Requests remain stable through all phases; a TX wait after
+at the final ACK. PS/2/VGA/IRQ_PENDING crossings instead use per-byte completion;
+see their references. Requests remain stable through all phases; a TX wait after
 the SRAM phase must not repeat that SRAM write. A word read at FFFE returns
 the pre-consumption CSR value. A simultaneous new reception can leave the
 received flag set after ACK.
@@ -93,11 +95,14 @@ access behavior and loader exclusions.
 RXIE enables a one-clock IRQ for each CPU-channel reception. TXIE enables a
 one-clock IRQ when the pending CPU TX slot becomes free because the transmitter
 accepts its byte. This is before the frame completes. Debug-channel traffic
-does not generate UART IRQs. Enabling a source does not replay old events or
-interrupt merely because its status bit is already set. Events use the enables
+does not generate UART IRQs. The standalone UART does not replay old events
+on enable. Events use the enables
 from before their edge, including when a CSR write completes on that edge.
 
-UART and timer pulses are ORed into the CPU IRQ input. The CPU retains
-coalesced requests while globally masked or halted. There are no additional
-UART pending or acknowledgment bits. CSR reads leave RX intact; DATA reads
-consume RX. Software must enqueue an initial byte to start interrupt-driven TX.
+The system retains separate RX/TX source events in FFF5 bits 1/2, shared with
+timer and PS/2. It additionally replays retained pending events on re-enable,
+and seeds RX pending on enabling RXIE with unread input. Initial TXFREE alone
+does not create an event. See [shared IRQ dispatch and acknowledgment](interrupts_mmio.md).
+The CPU retains coalesced requests while globally masked or halted. CSR reads
+leave RX intact; DATA reads consume RX without clearing source pending.
+Software must enqueue an initial byte to start interrupt-driven TX.

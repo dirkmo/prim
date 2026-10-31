@@ -13,7 +13,7 @@ reg [7:0] reference[0:65535];
 memory_io #(.TIMER_DIVISOR(1)) dut(
     .i_clk(clk), .i_reset(reset), .i_addr(addr), .i_cpu_to_mem(data),
     .i_bs(bs), .i_we(we), .o_mem_to_cpu(result), .o_ack(ack),
-    .i_output_ready(1'b1), .i_input_data(7'b0), .i_uart_csr(4'b0010),
+    .i_output_ready(1'b1), .i_input_data(7'b0), .i_uart_rx_irq(1'b0), .i_uart_tx_irq(1'b0), .i_uart_csr(4'b0010),
     .o_timer_irq(irq), .ram_addr(ram_addr), .ram_data(ram_data),
     .ram_cs_n(ram_cs), .ram_oe_n(ram_oe), .ram_we_n(ram_we));
 assign ram_data = !ram_cs && !ram_oe && ram_we ? memory[ram_addr[14:0]] : 16'hzzzz;
@@ -41,8 +41,8 @@ begin
     saved_writes=timer_writes;
     expected_writes=0;
     if (wr) begin
-        if (lanes[0] && address>=16'hfff0 && address<=16'hfff5) expected_writes=1;
-        if (lanes[1] && address>=16'hffef && address<=16'hfff4 &&
+        if (lanes[0] && address>=16'hfff0 && address<=16'hfff4) expected_writes=1;
+        if (lanes[1] && address>=16'hffef && address<=16'hfff3 &&
             (!lanes[0] || address<16'hfff0 || address[0])) expected_writes=expected_writes+1;
     end
     n=0;

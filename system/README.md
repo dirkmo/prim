@@ -6,7 +6,7 @@ bit fields, reset values, access side effects and CPU registers.
 `rtl/prim_system.v` composes the standalone CPU from `cpu/rtl/`, the serial
 subsystem from `debug_uart/rtl/`, and this component's bus mux and memory/MMIO
 controllers. `rtl/bus_mux.v` grants the debug bus only on confirmed CPU halt.
-`rtl/memory_io.v` owns the FFF0..FFFF timer/reserved/LED/UART address mapping and produces a seven-bit
+`rtl/memory_io.v` owns the FFF0..FFFF timer/IRQ/VGA/PS2/LED/UART address mapping and produces a seven-bit
 valid/ready output stream; it does not instantiate or configure a UART.
 `rtl/memory.v` implements the physical SRAM interface. The system wrapper adds
 no CPU instruction behavior.
@@ -15,6 +15,14 @@ Optional `VGA_ENABLE=1` adds the [VGA text controller](../vga/README.md),
 registers at FFF6..FFFA and a switchable 4-KiB video-RAM window at E000..EFFF.
 The Olimex board enables it using the existing 25 MHz clock. Generic system
 instances default to VGA disabled.
+
+Optional `PS2_ENABLE=1` adds the [PS/2 receiver and FIFO](../ps2/README.md)
+at FFFB/FFFC. The Olimex board enables it on G1/J5. Generic instances default
+to PS/2 disabled. FFF5 is always the [shared IRQ_PENDING register](docs/interrupts_mmio.md)
+for timer, UART RX/TX and PS/2 events; install a dispatcher before enabling
+sources. CPU-only reset retains peripheral pending state. The Forth kernel
+still uses UART polling; console routing and the software dispatcher follow
+in AP4–AP7.
 
 Complete SRAM/MMIO/CPU/debug and TokenForth integration tests live in `tests/`.
 See [CPU](../cpu/README.md), [debug UART](../debug_uart/README.md), and

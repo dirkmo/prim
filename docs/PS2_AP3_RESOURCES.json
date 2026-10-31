@@ -1,0 +1,138 @@
+{
+  "artifact_sha256": {
+    "build/ps2-ap3/board/nextpnr.log": "5d9dbfe5140efe514587e847e4d4f383fcdf653a93f07a04bda5760e40313c54",
+    "build/ps2-ap3/board/prim.bin": "f7a02c198260a8429b456a324f1c8aff8575acb13c3be781a9a1b4d4c97a5fdc",
+    "build/ps2-ap3/board/prim.json": "5f83b74019e84ceee84cf25272fbc53c9a5f4f1bd65b82dbe13eb1629bd6b70b",
+    "build/ps2-ap3/board/synth.log": "66a5ab2a3678d56f33063d11999973cad9e158429b8a3eb54de6f50b77056e43",
+    "build/ps2-ap3/board/timing.json": "58fc193687cd93688756ffdd6118f79f05772c6139d976581e68ce92a64fa312"
+  },
+  "baseline": "docs/PS2_AP1_BASELINE.json",
+  "board": {
+    "flip_flops": 1054,
+    "fmax": {
+      "clk_sys": {
+        "achieved": 28.983827590942383,
+        "constraint": 25
+      }
+    },
+    "synthesis_cells": {
+      "$_TBUF_": 16,
+      "$scopeinfo": 18,
+      "SB_CARRY": 364,
+      "SB_DFF": 56,
+      "SB_DFFE": 578,
+      "SB_DFFESR": 291,
+      "SB_DFFESS": 11,
+      "SB_DFFSR": 108,
+      "SB_DFFSS": 10,
+      "SB_LUT4": 3518,
+      "SB_PLL40_CORE": 1,
+      "SB_RAM40_4K": 17
+    },
+    "utilization": {
+      "ICESTORM_LC": {
+        "available": 7680,
+        "used": 4225
+      },
+      "ICESTORM_PLL": {
+        "available": 2,
+        "used": 1
+      },
+      "ICESTORM_RAM": {
+        "available": 32,
+        "used": 17
+      },
+      "SB_GB": {
+        "available": 8,
+        "used": 4
+      },
+      "SB_IO": {
+        "available": 206,
+        "used": 56
+      },
+      "SB_WARMBOOT": {
+        "available": 1,
+        "used": 0
+      }
+    }
+  },
+  "command": "python3 boards/olimex_ice40hx8k_evb/build.py build --output build/ps2-ap3/board",
+  "date": "2026-10-31",
+  "delta": {
+    "carry_cells": 3,
+    "ebr": 1,
+    "flip_flops": 81,
+    "lut4": 188,
+    "pll": 0,
+    "routed_logic_cells": 205
+  },
+  "fifo_alternatives": {
+    "forced_logic": {
+      "carry": 10,
+      "ebr": 0,
+      "flip_flops": 148,
+      "lut4": 163
+    },
+    "inferred": {
+      "carry": 10,
+      "ebr": 1,
+      "flip_flops": 25,
+      "lut4": 54
+    },
+    "reproduction": "Synthesize ps2_fifo standalone with synth_ice40; for the alternative add ram_style=\"logic\" to storage declaration. No attribute in selected implementation.",
+    "selection": "Keep inferred EBR storage: saves 109 LUT4 and 123 flip-flops; complete board uses 17 of 32 EBRs."
+  },
+  "git_parent": "1ff9379379e054eaccac4fc12d789912e817e837",
+  "purpose": "AP2/AP3 PS2 and shared IRQ hardware implementation; no physical programming",
+  "settings": {
+    "clock_mhz": 25,
+    "data_stack_cells": 16,
+    "device": "hx8k",
+    "package": "ct256",
+    "ps2_enable": true,
+    "ps2_fifo_depth": 16,
+    "ps2_filter_cycles": 8,
+    "ps2_timeout_cycles": 50000,
+    "return_stack_cells": 16,
+    "seed": 1,
+    "vga_enable": true
+  },
+  "software_cost": {
+    "ap2_ap3_cpu_code_bytes_added": 0,
+    "ap2_ap3_sram_bytes_added": 0,
+    "note": "Forth ISR and console software deferred to AP4-AP7. Forth source changed separately since AP1; do not attribute unrelated kernel-size changes to this hardware implementation."
+  },
+  "source_sha256": {
+    "boards/olimex_ice40hx8k_evb/board.pcf": "c87f246fe40164abc2ea2690066bd3eb55d0989650e6aa826cae8ab28f42ab0a",
+    "boards/olimex_ice40hx8k_evb/build.py": "197b25bf4a3d09acc6b5bd7e324d902501b1150594570dc1e14a929390e04d7a",
+    "boards/olimex_ice40hx8k_evb/top.v": "3f804b2d8b42d0bf5a9e81f9d94fbbf15ca829e3761d527880f82a1ba0ba5d2c",
+    "cpu/rtl/opcodes.v": "61247f7126ce2e2392de889a973174d066764b51432b12b7e5e646581a232662",
+    "cpu/rtl/prim.v": "87be916b5380fd0eea848db2a62a15d3335fedd95634a2bed154a57b0050beaf",
+    "debug_uart/rtl/debug_uart.v": "0c1228ba28a5944e9a1746b7ef7d283bf58480a5940bed7ee3c168e6733d4648",
+    "debug_uart/rtl/debug_uart_link.v": "8594a2cb9a1f3d3dc7e131918728cff399d12e2ae331662b11275eeb8eda3c2b",
+    "debug_uart/rtl/uart_arbiter.v": "8e37db7a124d900729be6dacbe8ebb1d6cfc29ef8d5a4d96b142b6bb01c3fa26",
+    "debug_uart/rtl/uart_buffers.v": "d42fc0aa19e73ad8c09ef11389bf8c23c9b34c3760228a5e29695b3142a76941",
+    "debug_uart/rtl/uart_rx.v": "cc0c8da94cf7b951cb4bfc1a5101e5c0c3a8ebc4cc6222ec6ea28b725bc001bd",
+    "debug_uart/rtl/uart_tx.v": "bd2a408ac60c1e097c34abebc2fd453cc7212c9780d33f183bacfc546e757051",
+    "ps2/rtl/ps2_fifo.v": "def3df1d6b029c939a2075a141cff0a3ba5783226cfe19ed0bdb3b6dab12d1e6",
+    "ps2/rtl/ps2_rx.v": "56849d28a26f8dba5869d20daf6066287124ee73bfd3304fc591c3177e351a74",
+    "system/rtl/bus_mux.v": "010f1741b11800d5d8019d60427f3435eb15247af412e4564e018b8a8a0bebea",
+    "system/rtl/memory.v": "b916a19bb77aff461043295be5b4adf1f97b1011ba0034bdd7f585ce7969519e",
+    "system/rtl/memory_io.v": "41259a6d98c5fb8792a5e012c77ca39bfd71201b490d5d3475b1bbd05fd34757",
+    "system/rtl/prim_system.v": "690beabb023a480e3cfd394c4de4152a6540ac4c313e22c672a502ea49f57dd6",
+    "system/rtl/timer_mmio.v": "b013bdf5cbf929b328ba938c90e4f9e613debe451c180067d897ece717205047",
+    "timer/rtl/timer.v": "c720ae2311ff2d5eabb322db83787c09f14b464ecef3c12ba0fbb5325630b45d",
+    "vga/rtl/vga_font.v": "e75c22841259fd8884e38418e9f3ae0dd9c5c1a7839d794f13077724d01a6514",
+    "vga/rtl/vga_text.v": "142e6cc71b535dd2fc41a54ec2c353c15e903d0219b9fad51ab8142521f6ac61"
+  },
+  "tools": {
+    "nextpnr": "\"nextpnr-ice40\" -- Next Generation Place and Route (Version nextpnr-0.11.1-18-gdec04b3b)",
+    "yosys": "Yosys 0.68+136 (git sha1 c30457480, RelWithDebInfo, GNU /usr/bin/c++ 16.2.1) [/home/dirk/.cache/yay/yosys-nightly/yosys at makepkg]"
+  },
+  "validation": {
+    "ctest": "21/21 passed including existing Forth suite; final extended PS2 suite rerun separately and passed",
+    "physical_hardware": "Not programmed/tested",
+    "ps2_suite": "4 tests: receiver filters 1/2/8, FIFO depths 1/2/16 with 3000 random cycles each, VGA off/on MMIO, synthesized iCE40 FIFO scoreboard",
+    "system_irq": "Real PS2 frame while CPU masked/halted, RUN/ISR, debug read consumption and CPU-only reset retention"
+  }
+}

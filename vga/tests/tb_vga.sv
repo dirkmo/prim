@@ -17,7 +17,7 @@ reg [7:0] font [0:4095];
 memory_io #(.VGA_ENABLE(1)) dut(
     .i_clk(clk), .i_reset(reset), .i_addr(addr), .i_cpu_to_mem(data),
     .i_bs(bs), .i_we(we), .o_mem_to_cpu(result), .o_ack(ack),
-    .i_output_ready(1'b1), .i_input_data(7'b0), .i_uart_csr(4'b0010),
+    .i_output_ready(1'b1), .i_input_data(7'b0), .i_uart_rx_irq(1'b0), .i_uart_tx_irq(1'b0), .i_uart_csr(4'b0010),
     .o_vga_hsync(hs), .o_vga_vsync(vs), .o_vga_pixel(pixel), .o_vga_active(active),
     .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(cs), .ram_oe_n(oe), .ram_we_n(wr));
 assign ram_data = !cs && !oe && wr ? memory[ram_addr[14:0]] : 16'hzzzz;

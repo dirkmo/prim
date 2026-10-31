@@ -15,10 +15,12 @@ liegt das niederwertige Byte an der kleineren Adresse.
 | `0x0000..0xFFEF` | SRAM | 65520 Bytes | R/W | Nicht initialisiert | Programmspeicher und Daten |
 | `0xFFF0..0xFFF1` | Timer COUNT | 16 Bit | R/W | `0x0000` | Aktueller Zählerstand; Schreiben mit Ergebnis null setzt auch die Vorteilerphase zurück |
 | `0xFFF2..0xFFF3` | Timer COMPARE | 16 Bit | R/W | `0x0000` | Vergleichswert |
-| `0xFFF4..0xFFF5` | Timer CSR | 16 Bit, davon 3 genutzt | R/W | `0x0000` | Timersteuerung; ungenutzte Bits lesen null, Schreibwerte dort werden ignoriert |
+| `0xFFF4` | Timer CSR | 8 bits, 3 used | R/W | `0x00` | Timer controls; unused bits zero |
+| `0xFFF5` | IRQ_PENDING | 8 bits, 4 used | R/W1C | `0x00` | Bits 0/1/2/3 timer/UART RX/UART TX/PS2 events; read is nondestructive |
 | `0xFFF6..0xFFF9` | VGA CONTROL / ROW_OFFSET / CURSOR_X / CURSOR_Y | 8 bits each | R/W | `0x00` | Optional with VGA_ENABLE=1; see [VGA bit fields](../../vga/README.md#cpu-register-and-memory-contract) |
 | `0xFFFA` | VGA STATUS | 8 bits | R | Raster-dependent | Bit 0 blank, bit 1 vertical blank; writes ignored |
-| `0xFFFB..0xFFFC` | Reserviert | 2 Bytes | R/W | `0x00` je Byte | Lesen liefert null, Schreiben ohne Wirkung |
+| `0xFFFB` | PS2_CSR | 8 bits, 5 used | R/W, W1C errors | `0x00` | Optional PS2_ENABLE: RXAVAIL/FULL/RXIE/FRAMEERR/OVERFLOW in bits 0..4 |
+| `0xFFFC` | PS2_DATA | 8 bits | R | `0x00` when empty | Optional PS2_ENABLE: read pops oldest raw byte; writes ignored |
 | `0xFFFD` | LEDs | 8 Bit, davon 2 genutzt | R/W | `0x00` | LED1/LED2; ungenutzte Bits lesen null und werden beim Schreiben ignoriert |
 | `0xFFFE` | UART CSR | 8 Bit, davon 4 genutzt | R; W für Bits 2/3 | `0x02` | Empfangs-/Sendestatus und Interruptfreigaben |
 | `0xFFFF` | UART RX DATA | 8 Bit, davon 7 genutzt | R | `0x00` | Letztes Empfangsbyte; Lesen löscht RXAVAIL bei ACK, behält aber das Datenbyte |
@@ -29,6 +31,11 @@ With `VGA_ENABLE=0`, `0xFFF6..0xFFFA` remain reserved (reads return zero,
 writes are ignored). The Olimex board wrapper enables VGA. CONTROL bit 0
 maps 4 KiB of video RAM at `0xE000..0xEFFF`, preserving the underlying SRAM.
 See the [VGA reference](../../vga/README.md) for register and banking semantics.
+With PS2_ENABLE=0, FFFB/FFFC return zero and ignore writes; the board enables
+PS/2. See [PS/2 register semantics](../../ps2/README.md) for FIFO and byte-lane
+behavior. IRQ_PENDING is present independently of the optional peripherals.
+CPU-only reset preserves FIFO, peripheral enables and shared pending; system
+reset clears them.
 Die physischen SRAM-Zellen hinter `0xFFF0..0xFFFF` sind über diesen Bus nicht
 zugänglich. CPU und Debug-Master sehen dieselben Register und Nebenwirkungen.
 Beim Laden eines vollständigen Speicherabbilds muss der Board-Host mit
@@ -65,19 +72,20 @@ Dictionarybeispiel steht in
 
 ## Bitbelegung der Steuerregister
 
-### Timer CSR (`0xFFF4`, 16 Bit)
+### Timer CSR (`0xFFF4`, 8 bits)
 
 | Bit | Name | Zugriff | Reset | Bedeutung bei 1 |
 |---|---|---|---|---|
 | 0 | ENABLE | R/W | 0 | Zählen freigegeben |
 | 1 | AUTO | R/W | 0 | Nach erreichtem Vergleichswert ungleich null beim nächsten Zählintervall auf null zurücksetzen |
 | 2 | INTEN | R/W | 0 | IRQ beim Hochzählen auf COMPARE erzeugen |
-| 15:3 | Reserviert | R/ignoriertes W | 0 | Lesen immer null |
+| 7:3 | Reserviert | R/ignoriertes W | 0 | Lesen immer null |
 
 CSR wird ausschließlich durch Software geändert. Im Einmalbetrieb bleibt COUNT
 auf COMPARE stehen; ENABLE bleibt gesetzt. Ein gültiger Registerschreibzugriff
 hat Vorrang vor Zählen und IRQ-Erzeugung. Timerlesezugriffe haben keine
-Nebenwirkungen. Es gibt kein Timer-Pending- oder Quittierungsregister.
+Nebenwirkungen. The system retains timer pending in FFF5 bit 0; see
+[shared pending and acknowledgment](interrupts_mmio.md).
 
 Der IRQ dauert einen Systemtakt. Automatisches Rücksetzen und Software-Schreiben
 erzeugen keinen IRQ. Im Automatikbetrieb beträgt die Periode
@@ -109,10 +117,12 @@ CSR-Lesen verbraucht kein Empfangsbyte. DATA-Lesen liefert auch ohne RXAVAIL das
 behaltene Byte; NUL ist gültige Eingabe. Ein neuer Empfang überschreibt den
 Ein-Byte-RX-Puffer und gewinnt gegenüber gleichzeitigem Verbrauch.
 
-RXIE/TXIE erzeugen Ereignisimpulse von einem Systemtakt. Freigeben meldet keine
-vergangenen Ereignisse nach. TXIE signalisiert die Übernahme des gepufferten
+RXIE/TXIE erzeugen Ereignisimpulse von einem Systemtakt. The shared system IRQ
+block retains source events and replays pending on enable, including UART RX
+backlog; the standalone UART combined output does not replay backlog. TXIE signalisiert die Übernahme des gepufferten
 Bytes durch den Sender, bevor dessen Frame abgeschlossen ist. Debug-Verkehr
-erzeugt keine UART-IRQs. Es gibt kein zusätzliches UART-Pending-Register.
+erzeugt keine UART-IRQs. FFF5 bits 1/2 retain UART RX/TX events; DATA reads
+do not clear them. See [IRQ_PENDING](interrupts_mmio.md).
 Details: [LED/UART-MMIO](uart_mmio.md),
 [UART-Puffer und Handshake](../../debug_uart/docs/register_interface.md).
 
@@ -124,12 +134,15 @@ Details: [LED/UART-MMIO](uart_mmio.md),
 - Ein Wort an A greift auf A und `(A+1) mod 65536` zu. BS=01 wählt A als
   unteres Datenbyte, BS=10 A+1 als oberes, BS=11 beide. Nicht gewählte Bytes
   haben keine Nebenwirkung.
-- Ausgerichtete Timerwörter sind atomar. Wörter an `0xFFF1` und `0xFFF3`
-  durchlaufen zwei Timerregister in zwei Phasen, kleinere Adresse zuerst;
-  der erste Schreibeffekt erfolgt bereits vor dem abschließenden ACK.
-- Ein Wort an `0xFFFC` kombiniert reserviert/LEDs, an `0xFFFD` LEDs/UART-CSR,
-  an `0xFFFE` UART-CSR/DATA. Ein Wortlesen an `0xFFFE` verbraucht RX und liefert
-  den CSR-Wert vor diesem Verbrauch.
+- Aligned COUNT/COMPARE words are atomic. FFF4/FFF5 instead accesses timer
+  control followed by IRQ_PENDING; high-byte ones acknowledge pending. Avoid
+  whole-word control read/modify/write. See [IRQ word accesses](interrupts_mmio.md).
+  Words at `0xFFF1` and `0xFFF3` cross timer registers in two phases, lower
+  address first; the first write effect precedes the final ACK.
+- A word at `0xFFFC` combines PS/2 DATA (or zero if disabled) and LEDs;
+  `0xFFFD` combines LEDs/UART CSR, `0xFFFE` UART CSR/DATA. A read at `0xFFFE`
+  consumes UART RX and returns CSR before consumption. Transfers touching
+  PS/2/VGA/IRQ_PENDING complete their selected lanes individually, lower first.
 - Ein Wort an `0xFFFF` kombiniert UART-DATA mit SRAM an `0x0000`.
   Gemischte SRAM/MMIO-Zugriffe erledigen die SRAM-Seite zuerst.
   LED-/UART-Nebenwirkungen erfolgen einmalig beim abschließenden ACK.
@@ -159,8 +172,8 @@ Die Resetwerte gelten für Systemreset und CPU-only Debug-Reset.
 Die Stackindizes laufen ohne Über-/Unterlaufprüfung um. Unbenutzte Stackzellen
 sind nach Reset undefiniert. Interrupt-Eintritt sichert den PC auf dem
 Rücksprungstack; Carry, Datenstack und globale Interruptfreigabe bleiben erhalten.
-Timer- und UART-IRQ sind per ODER mit dem CPU-Eingang verbunden. Die CPU speichert
-keine getrennte Herkunftskennung. Weitere Regeln und Opcodewerte stehen in der
+Timer, UART and PS/2 events feed a shared pending block and the CPU IRQ input.
+FFF5 retains source identity; the CPU itself retains only a coalesced request. Weitere Regeln und Opcodewerte stehen in der
 [CPU-Interruptreferenz](../../cpu/README.md#interrupts).
 
 Zur Ablaufsteuerung besitzt die CPU außerdem `r_ir` (8 Bit, Reset 0),

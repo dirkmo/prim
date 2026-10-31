@@ -487,3 +487,14 @@ row clearing, text/backspace, SRAM preservation and stack bounds. Run either
 script directly from the root or select them with `ctest -R vga`.
 The [VGA guide](../vga/README.md) records resource/timing results and physical
 hardware checks that remain outstanding.
+
+## PS/2 and shared interrupts
+
+`ps2_checks` runs `python3 ps2/tests/test_ps2.py`: all-byte receiver checks,
+independent random FIFO scoreboards and PS/2/MMIO/shared-pending tests with
+VGA both enabled and disabled. With Yosys and yosys-config available, it also
+executes the FIFO scoreboard against the synthesized iCE40 EBR/cell netlist;
+otherwise that extra check is explicitly skipped. `debug_uart_checks` includes
+real serial-debug reads, PS/2 input and masked/HALT/RUN interrupt delivery on
+the complete CPU/system. See [the PS/2 guide](../ps2/README.md) and
+[shared pending semantics](../system/docs/interrupts_mmio.md).

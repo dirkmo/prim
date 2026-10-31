@@ -1,4 +1,5 @@
-// FFF0..FFF5: timer; FFF6..FFFC: reserved; FFFD: LEDs; FFFE/FFFF: UART.
+// Core timer/LED/UART path; the outer wrapper intercepts FFF5 IRQ_PENDING,
+// optional FFF6..FFFA VGA and FFFB/FFFC PS/2 registers.
 // Other lanes retain SRAM word/unaligned/wrapping semantics.
 // LED/UART effects occur at ACK; cross-register timer words use two phases.
 module memory_io_core #(
@@ -21,7 +22,7 @@ module memory_io_core #(
     output o_uart_csr_write,
     output o_input_read,
     output reg [1:0] o_leds,
-    output o_timer_irq,
+    output o_timer_irq, o_timer_inten,
     output [15:0] ram_addr,
     inout [15:0] ram_data,
     output ram_cs_n, ram_oe_n, ram_we_n
@@ -90,7 +91,7 @@ end
 timer_mmio #(.DIVISOR(TIMER_DIVISOR)) timer_bus(
     .i_clk(i_clk), .i_reset(i_reset), .i_cs(mmio_turn && timer_access),
     .i_we(i_we), .i_addr(i_addr), .i_wdata(i_cpu_to_mem), .i_bs(i_bs),
-    .o_rdata(timer_read), .o_ack(timer_ack), .o_irq(o_timer_irq));
+    .o_rdata(timer_read), .o_ack(timer_ack), .o_irq(o_timer_irq), .o_inten(o_timer_inten));
 memory #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) sram(
     .i_clk(i_clk), .i_reset(i_reset), .i_addr(i_addr), .i_cpu_to_mem(i_cpu_to_mem),
     .i_bs(ram_turn ? ram_mask : 2'b00), .i_we(i_we), .o_mem_to_cpu(ram_result), .o_ack(ram_ack),
@@ -98,13 +99,18 @@ memory #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) sram(
     .ram_oe_n(ram_oe_n), .ram_we_n(ram_we_n));
 endmodule
 
-// Optional VGA banking wraps the existing bus without changing ordinary SRAM,
-// timer or UART transactions. Only words touching VGA are split into bytes.
+// Serialize transfers touching VGA, PS/2 or IRQ_PENDING into byte lanes.
+// Ordinary SRAM and UART accesses retain their original path and ACK semantics.
 module memory_io #(
     parameter integer READ_CYCLES = 2,
     parameter integer WRITE_CYCLES = 2,
     parameter integer TIMER_DIVISOR = 50000,
-    parameter integer VGA_ENABLE = 0
+    parameter integer VGA_ENABLE = 0,
+    parameter integer PS2_ENABLE = 0,
+    parameter integer CLK_HZ = 25000000,
+    parameter integer PS2_FIFO_DEPTH = 16,
+    parameter integer PS2_FILTER_CYCLES = 8,
+    parameter integer PS2_TIMEOUT_CYCLES = CLK_HZ / 500
 )(
     input i_clk, i_reset,
     input [15:0] i_addr, i_cpu_to_mem,
@@ -124,46 +130,78 @@ module memory_io #(
     output [15:0] ram_addr,
     inout [15:0] ram_data,
     output ram_cs_n, ram_oe_n, ram_we_n,
-    output o_vga_hsync, o_vga_vsync, o_vga_pixel, o_vga_active
+    output o_vga_hsync, o_vga_vsync, o_vga_pixel, o_vga_active,
+    input i_ps2_clk, i_ps2_data,
+    input i_uart_rx_irq, i_uart_tx_irq,
+    output o_irq
 );
 wire [15:0] core_addr, core_wdata, core_rdata;
 wire [1:0] core_bs;
-wire core_ack;
-generate if (VGA_ENABLE) begin: video
-    wire bank;
-    wire [15:0] next_addr = i_addr + 16'd1;
-    wire reg_lo = i_addr >= 16'hfff6 && i_addr <= 16'hfffa;
-    wire reg_hi = next_addr >= 16'hfff6 && next_addr <= 16'hfffa;
-    wire ram_lo = bank && i_addr[15:12] == 4'he;
-    wire ram_hi = bank && next_addr[15:12] == 4'he;
-    wire split = (i_bs[0] && (reg_lo || ram_lo)) ||
-                 (i_bs[1] && (reg_hi || ram_hi));
-    reg second;
-    reg [7:0] low_data;
-    wire high_lane = second || !i_bs[0];
-    wire [15:0] address = high_lane ? next_addr : i_addr;
-    wire [7:0] wdata = high_lane ? i_cpu_to_mem[15:8] : i_cpu_to_mem[7:0];
-    wire reg_sel = high_lane ? reg_hi : reg_lo;
-    wire ram_sel = high_lane ? ram_hi : ram_lo;
-    wire selected = !i_reset && split && (|i_bs);
-    wire [7:0] reg_data, video_data;
-    wire video_ack;
-    wire byte_ack = reg_sel ? 1'b1 : ram_sel ? video_ack : core_ack;
-    wire [7:0] byte_data = reg_sel ? reg_data : ram_sel ? video_data : core_rdata[7:0];
-    wire last = high_lane || !i_bs[1];
-    assign core_addr = split ? address : i_addr;
-    assign core_wdata = split ? {8'b0,wdata} : i_cpu_to_mem;
-    assign core_bs = split ? ((selected && !reg_sel && !ram_sel) ? 2'b01 : 2'b00) : i_bs;
-    assign o_ack = split ? (selected && last && byte_ack) : core_ack;
-    assign o_mem_to_cpu = split ?
-        {i_bs[1] ? byte_data : 8'b0, i_bs[0] ? (second ? low_data : byte_data) : 8'b0} : core_rdata;
-    always @(posedge i_clk) begin
-        if (i_reset) second <= 0;
-        else if (selected && byte_ack) begin
-            second <= !last;
-            if (!high_lane) low_data <= byte_data;
-        end
+wire core_ack, timer_inten;
+wire bank;
+wire [15:0] next_addr = i_addr + 16'd1;
+wire reg_lo = VGA_ENABLE && i_addr >= 16'hfff6 && i_addr <= 16'hfffa;
+wire reg_hi = VGA_ENABLE && next_addr >= 16'hfff6 && next_addr <= 16'hfffa;
+wire ram_lo = bank && i_addr[15:12] == 4'he;
+wire ram_hi = bank && next_addr[15:12] == 4'he;
+wire ps2_lo = PS2_ENABLE && (i_addr == 16'hfffb || i_addr == 16'hfffc);
+wire ps2_hi = PS2_ENABLE && (next_addr == 16'hfffb || next_addr == 16'hfffc);
+wire pending_lo = i_addr == 16'hfff5;
+wire pending_hi = next_addr == 16'hfff5;
+wire split = (i_bs[0] && (reg_lo || ram_lo || ps2_lo || pending_lo)) ||
+             (i_bs[1] && (reg_hi || ram_hi || ps2_hi || pending_hi));
+reg second;
+reg [7:0] low_data;
+wire high_lane = second || !i_bs[0];
+wire [15:0] address = high_lane ? next_addr : i_addr;
+wire [7:0] wdata = high_lane ? i_cpu_to_mem[15:8] : i_cpu_to_mem[7:0];
+wire reg_sel = high_lane ? reg_hi : reg_lo;
+wire ram_sel = high_lane ? ram_hi : ram_lo;
+wire ps2_sel = high_lane ? ps2_hi : ps2_lo;
+wire pending_sel = high_lane ? pending_hi : pending_lo;
+wire special = reg_sel || ram_sel || ps2_sel || pending_sel;
+wire selected = !i_reset && split && (|i_bs);
+wire [7:0] reg_data, video_data, ps2_data, ps2_csr;
+wire video_ack, ps2_event;
+wire byte_ack = ram_sel ? video_ack : special ? 1'b1 : core_ack;
+reg [3:0] irq_pending, previous_mask;
+wire [7:0] byte_data = reg_sel ? reg_data : ram_sel ? video_data :
+    ps2_sel ? (address[0] ? ps2_csr : ps2_data) :
+    pending_sel ? {4'b0,irq_pending} : core_rdata[7:0];
+wire last = high_lane || !i_bs[1];
+wire ps2_csr_write = selected && ps2_sel && address[0] && i_we;
+wire ps2_pop = selected && ps2_sel && !address[0] && !i_we;
+wire [3:0] ack_mask = selected && pending_sel && i_we ? wdata[3:0] : 4'b0;
+wire [3:0] enabled_mask = {ps2_csr[2], i_uart_csr[3], i_uart_csr[2], timer_inten};
+wire [3:0] rising_mask = enabled_mask & ~previous_mask;
+// UART events are already qualified by the enable at the reception edge.
+// Enabling RX with unread input additionally replays that backlog here.
+wire [3:0] events = {ps2_event | (rising_mask[3] && (ps2_csr[0] || |ps2_csr[4:3])), i_uart_tx_irq,
+    i_uart_rx_irq | (rising_mask[1] && i_uart_csr[0]), o_timer_irq};
+// Source enables qualify events at their source, not after their pulse delay.
+assign o_irq = !i_reset && (|events || |(rising_mask & irq_pending));
+always @(posedge i_clk) begin
+    if (i_reset) begin irq_pending <= 0; previous_mask <= 0; end
+    else begin
+        irq_pending <= (irq_pending & ~ack_mask) | events;
+        previous_mask <= enabled_mask;
     end
+end
+assign core_addr = split ? address : i_addr;
+assign core_wdata = split ? {8'b0,wdata} : i_cpu_to_mem;
+assign core_bs = split ? ((selected && !special) ? 2'b01 : 2'b00) : i_bs;
+assign o_ack = split ? (selected && last && byte_ack) : core_ack;
+assign o_mem_to_cpu = split ?
+    {i_bs[1] ? byte_data : 8'b0, i_bs[0] ? (second ? low_data : byte_data) : 8'b0} : core_rdata;
+always @(posedge i_clk) begin
+    if (i_reset) second <= 0;
+    else if (selected && byte_ack) begin
+        second <= !last;
+        if (!high_lane) low_data <= byte_data;
+    end
+end
+
+generate if (VGA_ENABLE) begin: video
     vga_text display(
         .i_clk(i_clk), .i_reset(i_reset), .i_cs(selected && ram_sel),
         .i_we(i_we), .i_addr(address[11:0]), .i_data(wdata),
@@ -173,15 +211,31 @@ generate if (VGA_ENABLE) begin: video
         .o_hsync(o_vga_hsync), .o_vsync(o_vga_vsync),
         .o_pixel(o_vga_pixel), .o_active(o_vga_active));
 end else begin: no_video
-    assign core_addr = i_addr;
-    assign core_wdata = i_cpu_to_mem;
-    assign core_bs = i_bs;
-    assign o_mem_to_cpu = core_rdata;
-    assign o_ack = core_ack;
+    assign bank = 0;
+    assign video_data = 0;
+    assign reg_data = 0;
+    assign video_ack = 0;
     assign o_vga_hsync = 1;
     assign o_vga_vsync = 1;
     assign o_vga_pixel = 0;
     assign o_vga_active = 0;
+end
+if (PS2_ENABLE) begin: keyboard
+    wire [7:0] received_data;
+    wire received_valid, received_error;
+    ps2_rx #(.CLK_HZ(CLK_HZ), .FILTER_CYCLES(PS2_FILTER_CYCLES),
+        .TIMEOUT_CYCLES(PS2_TIMEOUT_CYCLES)) receiver(
+        .i_clk(i_clk), .i_reset(i_reset), .i_ps2_clk(i_ps2_clk), .i_ps2_data(i_ps2_data),
+        .o_data(received_data), .o_valid(received_valid), .o_error(received_error));
+    ps2_fifo #(.DEPTH(PS2_FIFO_DEPTH)) fifo(
+        .i_clk(i_clk), .i_reset(i_reset), .i_data(received_data),
+        .i_valid(received_valid), .i_error(received_error),
+        .i_pop(ps2_pop), .i_csr_write(ps2_csr_write), .i_csr_data(wdata),
+        .o_data(ps2_data), .o_csr(ps2_csr), .o_event(ps2_event));
+end else begin: no_keyboard
+    assign ps2_data = 0;
+    assign ps2_csr = 0;
+    assign ps2_event = 0;
 end endgenerate
 memory_io_core #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES),
     .TIMER_DIVISOR(TIMER_DIVISOR)) core(
@@ -191,6 +245,7 @@ memory_io_core #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES),
     .i_output_ready(i_output_ready), .i_input_data(i_input_data), .i_uart_csr(i_uart_csr),
     .o_uart_csr_data(o_uart_csr_data), .o_uart_csr_write(o_uart_csr_write),
     .o_input_read(o_input_read), .o_leds(o_leds), .o_timer_irq(o_timer_irq),
+    .o_timer_inten(timer_inten),
     .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(ram_cs_n),
     .ram_oe_n(ram_oe_n), .ram_we_n(ram_we_n));
 endmodule

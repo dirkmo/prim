@@ -194,11 +194,11 @@ initial begin
     command("A2fffW3000", "K");
     command("A0fffW0000", "K");
     command("A4fffW5000", "K");
-    command("A0fffR", "3000"); command("A4fffR", "5000");
+    command("A0fffR", "3000"); command("A4fffR", "5010");
     if(timer_irqs!=1 || !dut.halted) $fatal(1,"timer one-shot while halted");
     command("Z", "K");
     command("A0fffR", "3000"); command("A2fffR", "3000");
-    command("A4fffR", "5000");
+    command("A4fffR", "5010");
     if(timer_irqs!=1) $fatal(1,"CPU reset changed timer");
     command("A0fffW0000", "K");
     command("A0fffR", "3000");

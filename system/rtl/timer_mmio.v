@@ -7,7 +7,7 @@ module timer_mmio #(
     input [15:0] i_addr, i_wdata,
     input [1:0] i_bs,
     output [15:0] o_rdata,
-    output o_ack, o_irq
+    output o_ack, o_irq, o_inten
 );
 wire [15:0] next_addr = i_addr + 16'd1;
 wire low_sel = i_bs[0] && i_addr[15:4] == 12'hfff && i_addr[3:0] <= 5;
@@ -38,5 +38,5 @@ end
 timer #(.DIVISOR(DIVISOR)) counter(
     .i_clk(i_clk), .i_reset(i_reset), .i_cs(i_cs && (low_sel || high_sel)),
     .i_we(i_we), .i_addr(reg_addr), .i_be(reg_be), .i_wdata(reg_wdata),
-    .o_rdata(reg_rdata), .o_irq(o_irq));
+    .o_rdata(reg_rdata), .o_irq(o_irq), .o_inten(o_inten));
 endmodule

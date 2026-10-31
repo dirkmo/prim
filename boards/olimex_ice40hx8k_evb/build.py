@@ -12,6 +12,8 @@ SOURCES = [
     ROOT / 'timer/rtl/timer.v',
     ROOT / 'vga/rtl/vga_text.v',
     ROOT / 'vga/rtl/vga_font.v',
+    ROOT / 'ps2/rtl/ps2_rx.v',
+    ROOT / 'ps2/rtl/ps2_fifo.v',
     *(ROOT / 'system/rtl' / name for name in ('memory.v', 'memory_io.v', 'timer_mmio.v', 'bus_mux.v', 'prim_system.v')),
     *(ROOT / 'debug_uart/rtl' / name for name in
       ('uart_rx.v', 'uart_tx.v', 'uart_buffers.v', 'uart_arbiter.v', 'debug_uart.v', 'debug_uart_link.v')),
