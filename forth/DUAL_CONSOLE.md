@@ -160,7 +160,7 @@ Reserved SRAM allocation (user dictionary still ends at F000):
 | F180..F1FF | PS/2 raw ring: six-byte header + 64-byte storage |
 | F200..F2FF | UART editor: ten bytes of state, buffer at +16, 128 bytes |
 | F300..F3FF | Local editor: same layout |
-| F400..FFEF | Remaining reserved SRAM |
+| F400..FFDF | Remaining reserved SRAM |
 
 The total reservation is 1024 bytes from existing reserved SRAM, with 498
 bytes of actual state/buffer storage. The existing 0200..027F buffer remains

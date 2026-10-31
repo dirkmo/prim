@@ -1,6 +1,7 @@
 """AP 5: dictionary lookup, output and the outer interpreter run on Prim."""
 from functools import partial
 from prim.isa import PrimOpcodes as Op
+from forth.image import WORD_NAME_OFFSET
 from forth.kernel.primitives import Code, emit_word
 
 
@@ -74,7 +75,7 @@ def emit_console(image):
     c.ops(Op.ADD, Op.BYTE_FETCH)
     c.call('fold_ascii')
     c.load('find_header')
-    c.push(8)
+    c.push(WORD_NAME_OFFSET)
     c.ops(Op.ADD)
     c.load('find_index')
     c.ops(Op.ADD, Op.BYTE_FETCH)
@@ -251,7 +252,7 @@ def emit_console(image):
         c.jump(next_word)
         c.mark(visible)
         c.load('word_cursor')
-        c.push(8)
+        c.push(WORD_NAME_OFFSET)
         c.ops(Op.ADD)
         c.store('print_addr')
         field('word_cursor', 3, byte=True)

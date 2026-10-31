@@ -66,6 +66,10 @@ source tokenizer is used. Each initial image is deterministic.
 | `kernel.map.json` | Memory regions, symbol addresses, word headers/XT/flags/effects |
 | `kernel.disasm` | Generated executable instructions; data and reserved RAM omitted |
 
+Maps use `prim-forth-map-v2`: dictionary headers have six fixed bytes, followed
+by the name at +6. The map records name/XT offsets. Rebuild image and map
+together when moving from the previous eight-byte header format.
+
 Runtime definitions are written to SRAM by the CPU; they do not modify these
 initial build artifacts. A fresh build/run starts with kernel words only.
 
@@ -169,8 +173,8 @@ words. No DOES> behavior is implemented.
 
 Interpreted S" returns a temporary address/length valid until the next
 interpreted S" or reset. ." does not overwrite that buffer. Compiled S" refers
-to persistent embedded bytes; compiled ." uses private temporaries and works
-even with eight occupied user cells. TYPE consumes address/length and writes
+to persistent embedded bytes; compiled ." uses private temporaries and
+preserves the user stack. TYPE consumes address/length and writes
 bytes; length zero performs no read. Ordinary output follows the selected
 command endpoint: seven-bit UART or the integrated VGA text backend.
 

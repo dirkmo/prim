@@ -88,7 +88,6 @@ def emit_data(image):
     c.store('print_addr')
     c.jump('print_span')
     word('TYPE', 2, 0, lambda: c.call('raw_type'))
-    image.define('type_xt', image.symbols[image.words[-1]['xt']])
 
     c.mark('parse_string')  # Input position is after exactly one opening delimiter.
     c.push('input_buffer')

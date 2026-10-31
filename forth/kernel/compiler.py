@@ -1,6 +1,7 @@
 """AP 6: transactional native-code compiler, executed entirely on Prim."""
 from functools import partial
 from prim.isa import PrimOpcodes as Op
+from forth.image import WORD_NAME_OFFSET
 from forth.kernel.primitives import Code, emit_word
 
 
@@ -163,7 +164,7 @@ def emit_compiler(image):
         c.set_cell('definition_open', 1)
         # Alignment + padded header + at least one return byte, in one check.
         c.load('token_length')
-        c.push(9)
+        c.push(WORD_NAME_OFFSET + 1)
         c.ops(Op.ADD)
         c.push(0xFFFE)
         c.ops(Op.AND)
@@ -183,7 +184,6 @@ def emit_compiler(image):
         c.load('token_length')
         c.call('compile_byte')
         c.compile_cell(0)  # XT patched after the name is copied and padded.
-        c.compile_cell(0)  # Call class, no inline opcode.
         c.set_cell('compiler_index', 0)
         loop, copied = c.label('name_copy'), c.label('name_copied')
         c.mark(loop)

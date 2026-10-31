@@ -141,6 +141,7 @@ def emit_frontend(image):
     c.mark('source_read')
     c.call('source_select')
     c.call('source_recover')
+    c.mark('source_read_ready')  # Source selected/recovered by caller or above.
     read, finish = c.label('source_read_byte'), c.label('source_read_finish')
     c.load('input_failed')
     c.jz(read)
@@ -219,7 +220,7 @@ def emit_frontend(image):
     c.jz(not_ready)
     c.jump(end)
     c.mark(not_ready)
-    c.call('source_read')
+    c.call('source_read_ready')
     c.load('input_available')
     c.jz(end)
     c.load('input_byte')

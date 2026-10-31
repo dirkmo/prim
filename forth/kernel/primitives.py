@@ -130,7 +130,6 @@ def emit_word(c, name, need, give, body, flags=0):
     image.cell(previous)
     image.emit([flags, len(name)])
     image.cell(Ref(xt))
-    image.emit([0, 0])  # Normal call class; checked inline emission is AP 6.
     image.emit(name.encode('ascii'))
     if image.pc & 1:
         image.emit([0])

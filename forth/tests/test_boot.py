@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'src'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
-from forth.build import build_image
+from forth.build import build_image, memory_map
 from forth.kernel.boot import VARIABLES
 from forth.image import Image, RAM_END, Ref
 from prim.cpu import Prim
@@ -23,6 +23,21 @@ RTL = False
 
 
 class BootChecks(unittest.TestCase):
+    def test_profile_metadata_and_compact_dictionary(self):
+        for dual in (False, True):
+            with self.subTest(dual=dual):
+                image = build_image(dual_console=dual)
+                mapping = memory_map(image)
+                self.assertEqual(mapping['format'], 'prim-forth-map-v2')
+                self.assertEqual(mapping['dictionary'], {'name_offset': 6, 'xt_offset': 4})
+                self.assertEqual('skip_lf' in image.symbols, not dual)
+                self.assertEqual('skip_lf' in mapping['variables'], not dual)
+                self.assertNotIn('type_xt', image.symbols)
+                for word in mapping['words']:
+                    header, xt, name = word['header'], word['xt'], word['name'].encode()
+                    self.assertEqual(image.memory[header + 6:header + 6 + len(name)], name)
+                    self.assertEqual(xt, (header + 6 + len(name) + 1) & ~1)
+
     def test_artifacts_reproducible_from_foreign_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

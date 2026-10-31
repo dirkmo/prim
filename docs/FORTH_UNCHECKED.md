@@ -1,5 +1,8 @@
 # Forth without data-stack bounds checks
 
+Historical measurements from the bounds-check removal. Current sizes and the
+current dictionary ABI are documented in [Forth status](../forth/STATUS.md).
+
 The previous, validated 32/32 + asynchronous IRQ state was committed as
 `bb0eb19` before this change, as requested.
 

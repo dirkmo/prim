@@ -11,7 +11,7 @@ if __package__ in (None, ''):
     sys.path.insert(0, str(ROOT))
     sys.path.insert(0, str(ROOT / 'src'))
 
-from forth.image import Image, KERNEL_START, RAM_END, USER_LIMIT
+from forth.image import Image, KERNEL_START, RAM_END, USER_LIMIT, WORD_NAME_OFFSET
 from forth.kernel.boot import VARIABLES, emit_kernel
 
 
@@ -25,15 +25,17 @@ def build_image(*, dual_console=True):
 
 def memory_map(image):
     return {
-        'format': 'prim-forth-map-v1',
+        'format': 'prim-forth-map-v2',
+        'dictionary': {'name_offset': WORD_NAME_OFFSET, 'xt_offset': 4},
         'console_profile': 'dual' if image.dual_console else 'uart-only',
         'console_variables': {name: address for name, address in image.symbols.items()
                               if 0xF000 <= address < 0xFF00 and name != 'user_limit'},
-        'stage': 'PS2 AP7 dual console' if image.dual_console else 'UART-only interpreter/compiler',
+        'stage': 'dual-console interpreter/compiler' if image.dual_console else 'UART-only interpreter/compiler',
         'image': {'file': 'kernel.bin', 'start': 0, 'size': RAM_END,
                   'endianness': 'little', 'entry': 0},
         'symbols': dict(sorted(image.symbols.items())),
-        'variables': VARIABLES,
+        'variables': {name: address for name, address in VARIABLES.items()
+                      if name in image.symbols},
         'words': [{**word, 'header': image.symbols[word['header']],
                    'xt': image.symbols[word['xt']]} for word in image.words],
         'regions': [
@@ -66,7 +68,7 @@ def write_artifacts(directory, *, dual_console=True):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--uart-only', action='store_true', help='Legacy UART polling image for host/models without PS/2 or VGA')
+    parser.add_argument('--uart-only', action='store_true', help='UART polling image for host/models without PS/2 or VGA')
     parser.add_argument('--output', type=Path, default=ROOT / 'build' / 'forth')
     args = parser.parse_args()
     image = write_artifacts(args.output, dual_console=not args.uart_only)

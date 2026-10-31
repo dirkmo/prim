@@ -7,6 +7,7 @@ from prim.isa import PrimOpcodes as Op
 RAM_END = 0xFFE0
 USER_LIMIT = 0xF000
 KERNEL_START = 0x0400
+WORD_NAME_OFFSET = 6  # Link16, flags8, length8, XT16; then the name.
 
 
 @dataclass(frozen=True)

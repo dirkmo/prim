@@ -13,7 +13,8 @@ from forth.kernel.interrupts import IRQ_VARIABLES, emit_interrupts
 from forth.kernel.keyboard import KBD_VARIABLES, emit_keyboard
 from forth.kernel.frontend import FRONT_VARIABLES, emit_frontend
 
-# Private RAM cells; public Forth words will expose selected cells later.
+# Private RAM layout. Keep addresses stable across profiles; skip_lf is only
+# emitted/initialized for UART polling, since dual editors have per-source state.
 VARIABLES = {
     name: 0x0100 + 2 * index
     for index, name in enumerate((
@@ -38,7 +39,9 @@ VARIABLES = {
 
 def emit_kernel(image):
     dual = getattr(image, 'dual_console', False)
-    for name, address in VARIABLES.items():
+    variables = {name: address for name, address in VARIABLES.items()
+                 if not dual or name != 'skip_lf'}
+    for name, address in variables.items():
         image.define(name, address)
     if dual:
         for name, address in {**IO_VARIABLES, **IRQ_VARIABLES, **KBD_VARIABLES, **FRONT_VARIABLES}.items():
@@ -64,7 +67,7 @@ def emit_kernel(image):
     image.push(Ref('uart_csr'))
     image.op(Op.BYTE_STORE)
 
-    for name in VARIABLES:
+    for name in variables:
         initial = {'base': 10, 'here': Ref('user_start'),
                    'latest': Ref('kernel_latest')}.get(name, 0)
         image.push(initial)

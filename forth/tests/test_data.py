@@ -90,16 +90,25 @@ class DataChecks(unittest.TestCase):
             self.assertEqual(len(values), 9)
 
     def test_atomic_allocation_and_definition_failures(self):
-        for command, remaining in ((b'VARIABLE x', 19), (b'CREATE x', 17), (b'42 CONSTANT x', 17)):
-            before = USER_LIMIT - remaining
-            def prepare(memory):
-                memory.write16(VARIABLES['here'], before)
-                memory.data[USER_LIMIT:USER_LIMIT + 4] = b'kept'
-            out, _, memory, _ = session(self.image, command + b'\n', prepare)
-            self.assertIn(b'dictionary full', out)
-            self.assertEqual(cell(memory, VARIABLES['here']), before)
-            self.assertEqual(cell(memory, VARIABLES['latest']), self.image.symbols['kernel_latest'])
-            self.assertEqual(memory.data[USER_LIMIT:USER_LIMIT + 4], b'kept')
+        # Name x has an eight-byte padded header; stubs take eight bytes and
+        # VARIABLE adds one cell. Check both exact fit and atomic failure.
+        for command, required in ((b'VARIABLE x', 18), (b'CREATE x', 16), (b'42 CONSTANT x', 16)):
+            for remaining in (required - 1, required):
+                with self.subTest(command=command, remaining=remaining):
+                    before = USER_LIMIT - remaining
+                    def prepare(memory):
+                        memory.write16(VARIABLES['here'], before)
+                        memory.data[USER_LIMIT:USER_LIMIT + 4] = b'kept'
+                    out, _, memory, _ = session(self.image, command + b'\n', prepare)
+                    if remaining < required:
+                        self.assertIn(b'dictionary full', out)
+                        self.assertEqual(cell(memory, VARIABLES['here']), before)
+                        self.assertEqual(cell(memory, VARIABLES['latest']), self.image.symbols['kernel_latest'])
+                    else:
+                        self.assertNotIn(b'error:', out)
+                        self.assertEqual(cell(memory, VARIABLES['here']), USER_LIMIT)
+                        self.assertEqual(lookup(memory, 'x')[0], before)
+                    self.assertEqual(memory.data[USER_LIMIT:USER_LIMIT + 4], b'kept')
         for source, code in ((b'-1 ALLOT', 20), (b'32768 ALLOT', 20),
                               (b'CREATE', 14), (b'VARIABLE', 14),
                               (b': bad [ VARIABLE x', 13)):

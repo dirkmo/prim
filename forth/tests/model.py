@@ -148,7 +148,7 @@ def lookup(memory, name):
     header = cell(data, VARIABLES['latest'])
     while header:
         length = data[header + 3]
-        if bytes(data[header + 8:header + 8 + length]).upper() == name.upper().encode():
+        if bytes(data[header + 6:header + 6 + length]).upper() == name.upper().encode():
             return header, cell(data, header + 4)
         header = cell(data, header)
     raise AssertionError(f'missing dictionary entry: {name}')

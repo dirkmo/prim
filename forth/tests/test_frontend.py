@@ -4,6 +4,29 @@ from dual_support import DualSession
 
 
 class FrontendChecks(unittest.TestCase):
+    def test_ready_line_retains_queued_input_and_loss_invalidates_it(self):
+        for source, base, ring in ((0, 0xF200, 0xF100), (1, 0xF300, 0xF180)):
+            with self.subTest(source=source):
+                r = DualSession()
+                r.set('poll_source', source)
+                r.memory.write16(base, 3)
+                r.memory.write16(base + 2, 1)  # Completed line awaits interpretation.
+                r.memory.data[base + 16:base + 19] = b'1 .'
+                r.memory.write16(ring + 2, 1)
+                r.memory.data[ring + 6] = 65 if source == 0 else 0x1C
+                r.invoke('collect_source')
+                self.assertEqual(r.memory.read16(ring), 0)  # Do not consume next line.
+                self.assertEqual(r.memory.read16(base + 2), 1)
+                self.assertEqual(r.memory.data[base + 16:base + 19], b'1 .')
+                r.memory.write16(ring + 4, 1)  # Loss must still discard a ready line.
+                r.invoke('collect_source')
+                self.assertEqual(r.memory.read16(ring), 1)
+                self.assertEqual(r.memory.read16(base + 2), 0)
+                self.assertEqual(r.memory.read16(base + 4), 6)
+                self.assertEqual(r.memory.read16(base + 8), 1)
+                self.assertEqual(r.get('input_available'), 0)
+                self.assertTrue(r.cpu._int_enable)
+
     def test_error_message_irq_and_rollback_on_both_consoles(self):
         for local in (False, True):
             with self.subTest(local=local):

@@ -140,7 +140,7 @@ class ConsoleChecks(unittest.TestCase):
             address = self.image.symbols['user_start'] + 0x1000
             for name, flags, xt in (('cafe', 0, true['xt']), ('CAFE', 4, false['xt'])):
                 data = (latest.to_bytes(2, 'little') + bytes([flags, len(name)])
-                        + self.image.symbols[xt].to_bytes(2, 'little') + bytes(2) + name.encode())
+                        + self.image.symbols[xt].to_bytes(2, 'little') + name.encode())
                 memory.data[address:address + len(data)] = data
                 latest, address = address, address + 32
             memory.write16(VARIABLES['latest'], latest)
@@ -210,7 +210,7 @@ class ConsoleChecks(unittest.TestCase):
                                         ('only', 2, 'TRUE')):
                 word = next(w for w in self.image.words if w['name'] == target)
                 data = (previous.to_bytes(2, 'little') + bytes([flags, len(name)])
-                        + self.image.symbols[word['xt']].to_bytes(2, 'little') + bytes(2)
+                        + self.image.symbols[word['xt']].to_bytes(2, 'little')
                         + name.encode())
                 memory.data[header:header + len(data)] = data
                 previous, header = header, header + 32

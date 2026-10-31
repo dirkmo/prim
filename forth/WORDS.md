@@ -105,7 +105,7 @@ see [the guide](README.md) for the complete input/memory contracts.
 | `CONSTANT` | `cell --` | - | Parse a name and define a constant-value word with DEPTH bookkeeping. |
 | `TYPE` | `addr u --` | - | Emit u bytes; length zero performs no read. |
 | `S"` | `-- addr u (interpret); -- (compile)` | I | Parse through the next quote. Interpret to a temporary buffer; compile persistent data and two depth-tracked runtime results. |
-| `."` | `--` | I | Parse through the next quote. Print now or compile printing; preserves the user stack even at depth eight. |
+| `."` | `--` | I | Parse through the next quote. Print now or compile printing; uses private temporaries to preserve the user stack. |
 
 ## Deliberate omissions
 

@@ -1,12 +1,9 @@
-# Kleines Forth auf Prim – Architekturentscheidung (AP 1)
+# Kleines Forth auf Prim – aktuelle Architektur
 
-Stand: 31. Oktober 2026. Zielarchitektur; AP 2 implementiert Build und Boot,
-AP 3 die Grundwörter, AP 4 Texteingabe/Parser/Zahlen und AP 5 den interaktiven
-Interpreter. AP 6 implementiert den Laufzeitcompiler, AP 7 die Kontrollstrukturen und AP 8 Daten/Strings. Änderungen hier begründen;
-AP 9 integriert Regressionen bis zum seriellen RTL-System; AP 10 ergänzt
-Bedienungsanleitung, vollständige Wortreferenz und ausführbare Beispiele.
-Alle APs abgeschlossen; aktuellen Stand und Messwerte in STATUS.md nachlesen.
-Arbeitsstand und APs: [STATUS.md](STATUS.md).
+Der Kernel umfasst Interpreter, Laufzeitcompiler und 90 Wörter. Die früheren
+Arbeitspakete sind abgeschlossen; historische Entscheidungen und Messwerte
+stehen in [HISTORY.md](HISTORY.md), der aktuelle Stand in [STATUS.md](STATUS.md).
+Diese Beschreibung verwendet das kompakte Wörterbuchformat der Map-Version 2.
 Bedienung: [README.md](README.md), [Wörter](WORDS.md), [Beispiele](examples/README.md).
 
 ## Dual-console extension
@@ -28,8 +25,9 @@ seine Tokens und sein Wörterbuch sind keine Laufzeitabhängigkeit.
 Die ISA bleibt unverändert. Seit der 32/32-Erweiterung haben Daten- und
 Returnstack je 32 Hardwarezellen; kein allgemeiner Hardware-Überlaufschutz.
 Kein Anspruch auf Standardkonformität.
-Erste Version: eine Konsole, ein Wörterbuch, keine Interruptbenutzung, keine
-Dateien, kein Multitasking, kein Persistieren selbst kompilierter Wörter.
+Das UART-only-Profil verwendet Polling, das Dual-Profil asynchrone Interrupts.
+Beide nutzen ein Wörterbuch; keine Dateien, kein Multitasking und kein
+Persistieren selbst kompilierter Wörter.
 
 ## Speicher und Boot
 
@@ -45,8 +43,8 @@ Alle Bereiche sind Byteadressen; Zellen sind 16 Bit Little Endian.
 | `0380..03FF` | Scratch für Stackanzeige, Zahlenausgabe, Rechenroutinen |
 | `0400..KERNEL_END-1` | Initialer Kernel einschließlich Wörterbuch |
 | `USER_START..EFFF` | Benutzerwörterbuch, Code und Daten, aufwärts wachsend |
-| `F000..FFEF` | Reserve, nicht durch ALLOT/Compiler belegen |
-| `FFF0..FFFF` | System-MMIO, kein normaler RAM |
+| `F000..FFDF` | Reserve, nicht durch ALLOT/Compiler belegen |
+| `FFE0..FFFF` | System-MMIO, kein normaler RAM |
 
 Scratch 0380..038D ist für nicht reentrante Software-Arithmetik belegt;
 ab AP 5 zusätzlich 038E..039D als 16-Byte-Ziffernpuffer und 03A0..03DF für
@@ -81,24 +79,23 @@ und Kleinschreibung. Neuere Definition überschattet ältere; keine Warnpflicht.
 | +2 | Flags, 8 Bit |
 | +3 | Namenslänge, 8 Bit |
 | +4 | Ausführungsadresse XT, 16 Bit |
-| +6 | Kompilierklasse, 8 Bit |
-| +7 | Inline-Opcode, 8 Bit, nur bei Inline-Klasse benutzt |
-| +8 | Name, anschließend ggf. ein Paddingbyte bis zur geraden Adresse |
+| +6 | Name, anschließend ggf. ein Paddingbyte bis zur geraden Adresse |
 
 Flags: Bit 0 IMMEDIATE, Bit 1 COMPILE_ONLY, Bit 2 HIDDEN; andere Bits null.
-Kompilierklasse 0 erzeugt normalen Aufruf, Klasse 1 einen Inline-
-Primitiv-Emitter. Klasse 1 ist Kernelwörtern vorbehalten. Name hinter dem
-Header, Code normalerweise direkt hinter Name/Padding; XT bleibt ausdrücklich
-gespeichert, damit Kernelheader auch separate Routinen bezeichnen können.
+Die sechs festen Headerbytes enthalten keine Kompilierklasse und keinen
+Inline-Opcode. Code steht normalerweise direkt hinter Name/Padding; XT bleibt
+ausdrücklich gespeichert. Maps der Version 2 geben Namens- und XT-Offset an.
+Images und Maps des früheren Acht-Byte-Formats müssen gemeinsam neu gebaut werden.
 
 XT ist immer eine ausführbare Prim-Codeadresse, kein Header oder Tokenindex.
-Jedes öffentliche Wort hat eine aufrufbare Implementierung, auch bei Inline-
-Kompilierung. EXECUTE führt ein XT aus. Bei normalem Forth-Programmieren
-werden niemals Rücksprungadressen als Daten verwendet.
+Jedes öffentliche Wort hat eine aufrufbare Implementierung. EXECUTE führt ein
+XT aus. Bei normalem Forth-Programmieren werden niemals Rücksprungadressen als
+Daten verwendet.
 
 CREATE erzeugt einen acht Byte langen Stub
 `PUSH16 literal_depth; CALL; PUSH16 body; NOP.RET`; body beginnt direkt dahinter,
-HERE zeigt darauf. Der Guard prüft/zählt das Adressergebnis zur Laufzeit. VARIABLE reserviert dort eine
+HERE zeigt darauf. literal_depth zählt das Adressergebnis zur Laufzeit ohne
+Grenzprüfung. VARIABLE reserviert dort eine
 mit null initialisierte Zelle. CONSTANT erzeugt einen Stub für den Wert.
 Keine DOES>-Semantik in Version 1. Alle Wortzugriffe dürfen ungerade Adressen
 verwenden; Header werden nur zur Übersicht ausgerichtet.
@@ -106,8 +103,8 @@ verwenden; Header werden nur zur Übersicht ausgerichtet.
 ## Ausführung und Stacks
 
 Subroutine-Threaded Code: `PUSH16 xt; CALL`. Literale als PUSH8 für 0..255,
-sonst PUSH16. Primitive soweit sinnvoll inline, mit gleicher Forth-Semantik
-wie ihr aufrufbarer Stub. Kein separater innerer Thread-Interpreter.
+sonst PUSH16, jeweils mit DEPTH-Buchführung. Primitive werden wie andere
+Wörter als Aufrufe kompiliert. Kein separater innerer Thread-Interpreter.
 
 Der Forth-Datenstack liegt auf dem Hardware-Datenstack. Es gibt keine feste
 Acht-Zellen-Benutzergrenze und keine Laufzeitprüfung auf Datenstack-Unter- oder
@@ -214,14 +211,12 @@ LITERAL ist compile-only/immediate und kompiliert die oberste Benutzerzelle.
 IMMEDIATE markiert die zuletzt abgeschlossene Benutzerdefinition; keine
 Kernelheader oder offene Definition verändern.
 
-AP-6-Umsetzung: Alle Header bleiben in Klasse 0. Normale Wörter werden als
-Stub-Aufrufe mit DEPTH-Buchführung kompiliert. Ein Literal erzeugt einen Aufruf
+Normale Wörter werden als Stub-Aufrufe mit DEPTH-Buchführung kompiliert. Ein Literal erzeugt einen Aufruf
 von literal_depth (DEPTH+1 ohne Ergebniszelle), danach erst PUSH8/16.
-Auch kompilierter Code enthält keine Datenstack-Grenzprüfung. Keine
-Opcode-Inline-Klasse wird benötigt. `:` ist IMMEDIATE, um verschachtelte
-Definitionsanfänge unmittelbar abzuweisen; `]` ist ebenfalls IMMEDIATE und
+Auch kompilierter Code enthält keine Datenstack-Grenzprüfung. `:` ist
+IMMEDIATE, um verschachtelte Definitionsanfänge unmittelbar abzuweisen; `]` ist ebenfalls IMMEDIATE und
 benötigt eine offene Definition. `;`, `[`, LITERAL und `[']` sind zusätzlich
-COMPILE_ONLY. Die Byte-/Zellemitter werden ab AP 8 über C, und , öffentlich nutzbar.
+COMPILE_ONLY. Die Byte-/Zellemitter sind über C, und , öffentlich nutzbar.
 
 Unaufgelöste Sprünge liegen in einem eigenen RAM-Kontrollstack, nicht auf dem
 Daten-/Returnstack: 32 Einträge mit 16-Bit-Typ und 16-Bit-Adresse. IF/ELSE/THEN
@@ -258,9 +253,9 @@ Return-Bit-Folding betrifft die unmittelbar erzeugten Literale:
 
 ## Öffentlicher Wortumfang der ersten Version
 
-Dies ist der Zielumfang nach AP 8; Zeilen für AP 3–8 sind implementiert,
-die übrigen Wörter noch geplant. Aktuelle Wortliste und Prüfungen in README.md.
-Stubs/Inline-Emitter müssen jeweils dieselben dokumentierten Stackeffekte haben.
+Die Tabelle ordnet die implementierten Wörter ihren ursprünglichen
+Arbeitspaketen zu. Die vollständige aktuelle Wortliste steht in WORDS.md.
+Aufrufbare Wörter erfüllen die dort dokumentierten Stackeffekte.
 
 | AP | Wörter |
 | --- | --- |
@@ -314,17 +309,16 @@ ungültige XT, Endlosschleifen und Hardware-Returnstacküberlauf sind nicht sich
 abfangbar. Compiler-/Allocatorgrenzen sind kein Schutz gegen absichtliche
 Speichermanipulation. Hardwaredebug bleibt für solche Fälle nutzbar.
 
-## Buildstruktur und Abnahmekriterien für die folgenden APs
+## Buildstruktur und Prüfungen
 
 Dateistruktur: `forth/build.py`, `forth/image.py`, `forth/kernel/`,
-`forth/tests/`, `forth/README.md` ab AP 2; `forth/lib/` und `forth/examples/`
-erst bei Bedarf in späteren APs anlegen.
+`forth/tests/`, `forth/examples/` und `forth/README.md`.
 Buildwerkzeug in Python, Wiederverwendung von prim.isa und Prim-Assembler/
 CPU-Modell erlaubt, keine TokenForth-Compiler-/Tokenizerabhängigkeit. Statische
 Kernelbeschreibung darf Prim-Code und Header generieren; sie darf den späteren
 CPU-Interpreter nicht durch Ausführung auf dem Host ersetzen.
 
-AP-2-Artefakte unter build/forth/: kernel.bin (RAM 0000..FFEF, 65520 Bytes),
+Artefakte unter build/forth/: kernel.bin (RAM 0000..FFDF, 65504 Bytes),
 kernel.map.json und kernel.disasm. CLI: `python3 forth/build.py`; Build- und
 Simulatoranleitung in README.md. Keine Änderungen am ISA-/Stackmodell.
 

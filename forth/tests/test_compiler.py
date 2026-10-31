@@ -186,9 +186,9 @@ class CompilerChecks(unittest.TestCase):
             self.assertEqual(cell(memory, VARIABLES['latest']), self.image.symbols['kernel_latest'])
             self.assertEqual(memory.data[USER_LIMIT:USER_LIMIT + 16], b'protected bytes!')
         # A final literal can use the last RAM byte: return folded into its opcode.
-        # Name 'x': 10-byte header + 6-byte checked literal.
+        # Name 'x': 8-byte padded header + 6-byte depth-tracked literal.
         def exact(memory):
-            memory.write16(VARIABLES['here'], USER_LIMIT - 16)
+            memory.write16(VARIABLES['here'], USER_LIMIT - 14)
         out, stack, memory, _ = session(self.image, b': x 1 ; x\n', exact)
         self.assertNotIn(b'error:', out)
         self.assertEqual(stack, [1])
@@ -196,7 +196,7 @@ class CompilerChecks(unittest.TestCase):
         # Brackets force a separate return: fail and roll the entire word back.
         out, _, memory, _ = session(self.image, b': x [ ] 1 ;\n', exact)
         self.assertIn(b'error: dictionary full\r\n', out)
-        self.assertEqual(cell(memory, VARIABLES['here']), USER_LIMIT - 16)
+        self.assertEqual(cell(memory, VARIABLES['here']), USER_LIMIT - 14)
         self.assertEqual(cell(memory, VARIABLES['latest']), self.image.symbols['kernel_latest'])
 
     def test_cli_eof_rolls_back_open_definition(self):
