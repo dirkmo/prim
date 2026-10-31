@@ -1,9 +1,26 @@
 # Olimex Rev.B official netlist, U4 ball names (CT256).
 set_io clk_100mhz J3
 set_io button_n K11
-# Debug UART on GPIO1: adapter TX -> pin 33; adapter RX <- pin 34.
-set_io -pullup yes uart_rx G3
-set_io uart_tx F3
+# Debug UART on free iCE40-IO Rev.A pass-through GPIOs:
+# adapter TX -> GPIO1.5 / FPGA RX; adapter RX <- GPIO1.7 / FPGA TX.
+set_io -pullup yes uart_rx E4
+set_io uart_tx B2
+# iCE40-IO Rev.A: GPIO1.20 HSYNC, GPIO1.18 VSYNC.
+set_io vga_hsync J4
+set_io vga_vsync H2
+# RGB bus [2:0] maps to expansion signals COLOR1/2/3 (470R/1k/1.8k).
+# RED1/2/3: GPIO1.27/29/34.
+set_io vga_red[2] E3
+set_io vga_red[1] H5
+set_io vga_red[0] F3
+# GREEN1/2/3: GPIO1.32/30/28.
+set_io vga_green[2] H3
+set_io vga_green[1] F2
+set_io vga_green[0] H6
+# BLUE1/2/3: GPIO1.26/24/22.
+set_io vga_blue[2] F1
+set_io vga_blue[1] H4
+set_io vga_blue[0] G2
 set_io leds[0] M12
 set_io leds[1] R16
 set_io sram_cs_n T6

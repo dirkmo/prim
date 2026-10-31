@@ -4,6 +4,8 @@ module olimex_ice40hx8k_evb(
     input button_n,
     input uart_rx,
     output uart_tx,
+    output vga_hsync, vga_vsync,
+    output [2:0] vga_red, vga_green, vga_blue,
     output [1:0] leds,
     output [17:0] sram_addr,
     inout [15:0] sram_data,
@@ -31,10 +33,16 @@ always @(posedge clk_sys) begin
     else reset_pipe <= {reset_pipe[2:0], !button_sync[1]};
 end
 wire [15:0] ram_addr;
+wire pixel;
+// Drive every DAC bit on iCE40-IO Rev.A: monochrome black or full white.
+assign vga_red = {3{pixel}};
+assign vga_green = {3{pixel}};
+assign vga_blue = {3{pixel}};
 assign sram_addr = {2'b00, ram_addr};
 prim_system #(.CLK_HZ(25000000), .READ_CYCLES(3), .WRITE_CYCLES(3), .START_HALTED(1),
-              .TIMER_DIVISOR(25000)) system(
+              .TIMER_DIVISOR(25000), .VGA_ENABLE(1)) system(
     .i_clk(clk_sys), .i_reset(reset), .i_rx(uart_rx), .o_tx(uart_tx), .o_leds(leds),
+    .o_vga_hsync(vga_hsync), .o_vga_vsync(vga_vsync), .o_vga_pixel(pixel),
     .ram_addr(ram_addr), .ram_data(sram_data), .ram_cs_n(sram_cs_n),
     .ram_oe_n(sram_oe_n), .ram_we_n(sram_we_n));
 endmodule

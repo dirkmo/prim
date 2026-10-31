@@ -4,7 +4,8 @@ module prim_system #(
     parameter integer READ_CYCLES = 2,
     parameter integer WRITE_CYCLES = 2,
     parameter integer START_HALTED = 0,
-    parameter integer TIMER_DIVISOR = 50000
+    parameter integer TIMER_DIVISOR = 50000,
+    parameter integer VGA_ENABLE = 0
 )(
     input i_clk,
     input i_reset,
@@ -16,7 +17,8 @@ module prim_system #(
     inout [15:0] ram_data,
     output ram_cs_n,
     output ram_oe_n,
-    output ram_we_n
+    output ram_we_n,
+    output o_vga_hsync, o_vga_vsync, o_vga_pixel, o_vga_active
 );
 wire [15:0] addr, to_mem, from_mem, cpu_addr, cpu_data, debug_addr, debug_data, pc;
 wire [1:0] bs, cpu_bs, debug_bs;
@@ -46,11 +48,13 @@ debug_uart_link #(.CLK_HZ(CLK_HZ)) uart(.i_clk(i_clk), .i_reset(i_reset), .i_rx(
     .o_addr(debug_addr), .o_data(debug_data), .o_bs(debug_bs), .o_we(debug_we),
     .i_ack(debug_ack), .i_data(from_mem));
 memory_io #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES),
-            .TIMER_DIVISOR(TIMER_DIVISOR)) io(
+            .TIMER_DIVISOR(TIMER_DIVISOR), .VGA_ENABLE(VGA_ENABLE)) io(
     .i_clk(i_clk), .i_reset(i_reset), .i_addr(addr), .i_cpu_to_mem(to_mem),
     .i_input_data(input_data), .i_uart_csr(uart_csr),
     .o_uart_csr_data(uart_csr_data), .o_uart_csr_write(uart_csr_write), .o_input_read(input_read),
     .o_leds(o_leds), .o_timer_irq(timer_irq),
+    .o_vga_hsync(o_vga_hsync), .o_vga_vsync(o_vga_vsync),
+    .o_vga_pixel(o_vga_pixel), .o_vga_active(o_vga_active),
     .o_output_data(output_data), .o_output_valid(output_valid), .i_output_ready(output_ready),
     .i_bs(bs), .i_we(we), .o_mem_to_cpu(from_mem), .o_ack(ack),
     .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(ram_cs_n),

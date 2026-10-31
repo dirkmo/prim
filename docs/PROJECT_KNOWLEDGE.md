@@ -156,8 +156,10 @@ writes. Rev.B board pins and build/program targets are prepared under
 `boards/olimex_ice40hx8k_evb/`. The initial 100 MHz board timing failed (about
 52–54 MHz achieved); the user-approved board PLL now supplies a 25 MHz global
 system clock. The routed build with timer passes at 25 MHz (40.87 MHz reported maximum);
-The debug UART uses GPIO1.33 (FPGA RX/G3) and GPIO1.34 (FPGA TX/F3).
-The user has confirmed functional board operation and streaming SRAM loading.
+The debug UART now uses GPIO1.5 (FPGA RX/E4) and GPIO1.7 (FPGA TX/B2), free
+pass-through pins on iCE40-IO Rev.A. The user confirmed functional board
+operation and streaming SRAM loading with the earlier GPIO1.33/34 mapping;
+the new expansion-board wiring has been built and routed but not tested on hardware.
 External SRAM timing margins remain unmeasured; the reusable system's default
 clock/timing parameters are not the board's selected 25-MHz configuration.
 

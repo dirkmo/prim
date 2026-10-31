@@ -16,13 +16,19 @@ liegt das niederwertige Byte an der kleineren Adresse.
 | `0xFFF0..0xFFF1` | Timer COUNT | 16 Bit | R/W | `0x0000` | Aktueller Zählerstand; Schreiben mit Ergebnis null setzt auch die Vorteilerphase zurück |
 | `0xFFF2..0xFFF3` | Timer COMPARE | 16 Bit | R/W | `0x0000` | Vergleichswert |
 | `0xFFF4..0xFFF5` | Timer CSR | 16 Bit, davon 3 genutzt | R/W | `0x0000` | Timersteuerung; ungenutzte Bits lesen null, Schreibwerte dort werden ignoriert |
-| `0xFFF6..0xFFFC` | Reserviert | 7 Bytes | R/W | `0x00` je Byte | Lesen liefert null, Schreiben ohne Wirkung |
+| `0xFFF6..0xFFF9` | VGA CONTROL / ROW_OFFSET / CURSOR_X / CURSOR_Y | 8 bits each | R/W | `0x00` | Optional with VGA_ENABLE=1; see [VGA bit fields](../../vga/README.md#cpu-register-and-memory-contract) |
+| `0xFFFA` | VGA STATUS | 8 bits | R | Raster-dependent | Bit 0 blank, bit 1 vertical blank; writes ignored |
+| `0xFFFB..0xFFFC` | Reserviert | 2 Bytes | R/W | `0x00` je Byte | Lesen liefert null, Schreiben ohne Wirkung |
 | `0xFFFD` | LEDs | 8 Bit, davon 2 genutzt | R/W | `0x00` | LED1/LED2; ungenutzte Bits lesen null und werden beim Schreiben ignoriert |
 | `0xFFFE` | UART CSR | 8 Bit, davon 4 genutzt | R; W für Bits 2/3 | `0x02` | Empfangs-/Sendestatus und Interruptfreigaben |
 | `0xFFFF` | UART RX DATA | 8 Bit, davon 7 genutzt | R | `0x00` | Letztes Empfangsbyte; Lesen löscht RXAVAIL bei ACK, behält aber das Datenbyte |
 | `0xFFFF` | UART TX DATA | 8 Bit, davon 7 genutzt | W | Puffer leer | Byte zum Senden einreihen; wartet bei vollem Puffer; Bit 7 wird ignoriert |
 
 RX und TX teilen dieselbe Adresse und werden über die Zugriffsrichtung gewählt.
+With `VGA_ENABLE=0`, `0xFFF6..0xFFFA` remain reserved (reads return zero,
+writes are ignored). The Olimex board wrapper enables VGA. CONTROL bit 0
+maps 4 KiB of video RAM at `0xE000..0xEFFF`, preserving the underlying SRAM.
+See the [VGA reference](../../vga/README.md) for register and banking semantics.
 Die physischen SRAM-Zellen hinter `0xFFF0..0xFFFF` sind über diesen Bus nicht
 zugänglich. CPU und Debug-Master sehen dieselben Register und Nebenwirkungen.
 Beim Laden eines vollständigen Speicherabbilds muss der Board-Host mit

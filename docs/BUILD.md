@@ -20,7 +20,8 @@ export PORT=/dev/serial/by-id/your-uart-adapter
 ```
 
 Replace the example path with your adapter's actual device path. The UART runs
-at 115200 baud; FPGA RX is GPIO1 pin 33 and FPGA TX is GPIO1 pin 34. See the
+at 115200 baud; FPGA RX is GPIO1 pin 5 and FPGA TX is GPIO1 pin 7
+(iCE40-IO Rev.A compatible). See the
 [board guide](../boards/olimex_ice40hx8k_evb/README.md) for wiring.
 
 Compile the program, load it into CPU SRAM, and start execution:

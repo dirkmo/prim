@@ -208,13 +208,13 @@ initial begin
     repeat(40) @(negedge clk);
     if(timer_irqs<=saved_irqs) $fatal(1,"timer auto mode");
     command("A4fffW4000", "K");
-    saved_count=dut.io.timer_bus.counter.count; saved_irqs=timer_irqs;
+    saved_count=dut.io.core.timer_bus.counter.count; saved_irqs=timer_irqs;
     repeat(40) @(negedge clk);
-    if(dut.io.timer_bus.counter.count!==saved_count || timer_irqs!=saved_irqs)
+    if(dut.io.core.timer_bus.counter.count!==saved_count || timer_irqs!=saved_irqs)
         $fatal(1,"disabled timer changed");
     reset=1; repeat(4) @(negedge clk);
-    if(dut.timer_irq || dut.io.timer_bus.counter.count!==0 ||
-       dut.io.timer_bus.counter.compare!==0 || dut.io.timer_bus.counter.csr!==0)
+    if(dut.timer_irq || dut.io.core.timer_bus.counter.count!==0 ||
+       dut.io.core.timer_bus.counter.compare!==0 || dut.io.core.timer_bus.counter.csr!==0)
         $fatal(1,"system reset did not clear timer");
     $display("PASS debug system DIV=%0d",DIV); $finish;
 end

@@ -19,8 +19,8 @@ memory_io #(.TIMER_DIVISOR(1)) dut(
 assign ram_data = !ram_cs && !ram_oe && ram_we ? memory[ram_addr[14:0]] : 16'hzzzz;
 always @(posedge ram_we) if (!reset && !ram_cs) memory[ram_addr[14:0]]=ram_data;
 always @(posedge clk) begin
-    if (!reset && dut.timer_bus.counter.i_cs && dut.timer_bus.counter.i_we &&
-        (|dut.timer_bus.counter.i_be)) timer_writes=timer_writes+1;
+    if (!reset && dut.core.timer_bus.counter.i_cs && dut.core.timer_bus.counter.i_we &&
+        (|dut.core.timer_bus.counter.i_be)) timer_writes=timer_writes+1;
     if (!reset && irq) $fatal(1,"disabled timer generated IRQ");
 end
 

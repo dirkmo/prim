@@ -1,7 +1,7 @@
 // FFF0..FFF5: timer; FFF6..FFFC: reserved; FFFD: LEDs; FFFE/FFFF: UART.
 // Other lanes retain SRAM word/unaligned/wrapping semantics.
 // LED/UART effects occur at ACK; cross-register timer words use two phases.
-module memory_io #(
+module memory_io_core #(
     parameter integer READ_CYCLES = 2,
     parameter integer WRITE_CYCLES = 2,
     parameter integer TIMER_DIVISOR = 50000
@@ -94,6 +94,103 @@ timer_mmio #(.DIVISOR(TIMER_DIVISOR)) timer_bus(
 memory #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) sram(
     .i_clk(i_clk), .i_reset(i_reset), .i_addr(i_addr), .i_cpu_to_mem(i_cpu_to_mem),
     .i_bs(ram_turn ? ram_mask : 2'b00), .i_we(i_we), .o_mem_to_cpu(ram_result), .o_ack(ram_ack),
+    .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(ram_cs_n),
+    .ram_oe_n(ram_oe_n), .ram_we_n(ram_we_n));
+endmodule
+
+// Optional VGA banking wraps the existing bus without changing ordinary SRAM,
+// timer or UART transactions. Only words touching VGA are split into bytes.
+module memory_io #(
+    parameter integer READ_CYCLES = 2,
+    parameter integer WRITE_CYCLES = 2,
+    parameter integer TIMER_DIVISOR = 50000,
+    parameter integer VGA_ENABLE = 0
+)(
+    input i_clk, i_reset,
+    input [15:0] i_addr, i_cpu_to_mem,
+    input [1:0] i_bs,
+    input i_we,
+    output [15:0] o_mem_to_cpu,
+    output o_ack,
+    output [6:0] o_output_data,
+    output o_output_valid,
+    input i_output_ready,
+    input [6:0] i_input_data,
+    input [3:0] i_uart_csr,
+    output [7:0] o_uart_csr_data,
+    output o_uart_csr_write, o_input_read,
+    output [1:0] o_leds,
+    output o_timer_irq,
+    output [15:0] ram_addr,
+    inout [15:0] ram_data,
+    output ram_cs_n, ram_oe_n, ram_we_n,
+    output o_vga_hsync, o_vga_vsync, o_vga_pixel, o_vga_active
+);
+wire [15:0] core_addr, core_wdata, core_rdata;
+wire [1:0] core_bs;
+wire core_ack;
+generate if (VGA_ENABLE) begin: video
+    wire bank;
+    wire [15:0] next_addr = i_addr + 16'd1;
+    wire reg_lo = i_addr >= 16'hfff6 && i_addr <= 16'hfffa;
+    wire reg_hi = next_addr >= 16'hfff6 && next_addr <= 16'hfffa;
+    wire ram_lo = bank && i_addr[15:12] == 4'he;
+    wire ram_hi = bank && next_addr[15:12] == 4'he;
+    wire split = (i_bs[0] && (reg_lo || ram_lo)) ||
+                 (i_bs[1] && (reg_hi || ram_hi));
+    reg second;
+    reg [7:0] low_data;
+    wire high_lane = second || !i_bs[0];
+    wire [15:0] address = high_lane ? next_addr : i_addr;
+    wire [7:0] wdata = high_lane ? i_cpu_to_mem[15:8] : i_cpu_to_mem[7:0];
+    wire reg_sel = high_lane ? reg_hi : reg_lo;
+    wire ram_sel = high_lane ? ram_hi : ram_lo;
+    wire selected = !i_reset && split && (|i_bs);
+    wire [7:0] reg_data, video_data;
+    wire video_ack;
+    wire byte_ack = reg_sel ? 1'b1 : ram_sel ? video_ack : core_ack;
+    wire [7:0] byte_data = reg_sel ? reg_data : ram_sel ? video_data : core_rdata[7:0];
+    wire last = high_lane || !i_bs[1];
+    assign core_addr = split ? address : i_addr;
+    assign core_wdata = split ? {8'b0,wdata} : i_cpu_to_mem;
+    assign core_bs = split ? ((selected && !reg_sel && !ram_sel) ? 2'b01 : 2'b00) : i_bs;
+    assign o_ack = split ? (selected && last && byte_ack) : core_ack;
+    assign o_mem_to_cpu = split ?
+        {i_bs[1] ? byte_data : 8'b0, i_bs[0] ? (second ? low_data : byte_data) : 8'b0} : core_rdata;
+    always @(posedge i_clk) begin
+        if (i_reset) second <= 0;
+        else if (selected && byte_ack) begin
+            second <= !last;
+            if (!high_lane) low_data <= byte_data;
+        end
+    end
+    vga_text display(
+        .i_clk(i_clk), .i_reset(i_reset), .i_cs(selected && ram_sel),
+        .i_we(i_we), .i_addr(address[11:0]), .i_data(wdata),
+        .o_data(video_data), .o_ack(video_ack),
+        .i_reg_cs(selected && reg_sel), .i_reg_addr(address[2:0] - 3'd6),
+        .o_reg_data(reg_data), .o_bank(bank),
+        .o_hsync(o_vga_hsync), .o_vsync(o_vga_vsync),
+        .o_pixel(o_vga_pixel), .o_active(o_vga_active));
+end else begin: no_video
+    assign core_addr = i_addr;
+    assign core_wdata = i_cpu_to_mem;
+    assign core_bs = i_bs;
+    assign o_mem_to_cpu = core_rdata;
+    assign o_ack = core_ack;
+    assign o_vga_hsync = 1;
+    assign o_vga_vsync = 1;
+    assign o_vga_pixel = 0;
+    assign o_vga_active = 0;
+end endgenerate
+memory_io_core #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES),
+    .TIMER_DIVISOR(TIMER_DIVISOR)) core(
+    .i_clk(i_clk), .i_reset(i_reset), .i_addr(core_addr), .i_cpu_to_mem(core_wdata),
+    .i_bs(core_bs), .i_we(i_we), .o_mem_to_cpu(core_rdata), .o_ack(core_ack),
+    .o_output_data(o_output_data), .o_output_valid(o_output_valid),
+    .i_output_ready(i_output_ready), .i_input_data(i_input_data), .i_uart_csr(i_uart_csr),
+    .o_uart_csr_data(o_uart_csr_data), .o_uart_csr_write(o_uart_csr_write),
+    .o_input_read(o_input_read), .o_leds(o_leds), .o_timer_irq(o_timer_irq),
     .ram_addr(ram_addr), .ram_data(ram_data), .ram_cs_n(ram_cs_n),
     .ram_oe_n(ram_oe_n), .ram_we_n(ram_we_n));
 endmodule

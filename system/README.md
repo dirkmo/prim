@@ -11,6 +11,11 @@ valid/ready output stream; it does not instantiate or configure a UART.
 `rtl/memory.v` implements the physical SRAM interface. The system wrapper adds
 no CPU instruction behavior.
 
+Optional `VGA_ENABLE=1` adds the [VGA text controller](../vga/README.md),
+registers at FFF6..FFFA and a switchable 4-KiB video-RAM window at E000..EFFF.
+The Olimex board enables it using the existing 25 MHz clock. Generic system
+instances default to VGA disabled.
+
 Complete SRAM/MMIO/CPU/debug and TokenForth integration tests live in `tests/`.
 See [CPU](../cpu/README.md), [debug UART](../debug_uart/README.md), and
 [the implemented protocol](../docs/DRAFT.md) for the component boundaries.

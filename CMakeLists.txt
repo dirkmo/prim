@@ -86,6 +86,13 @@ add_test(NAME uart_component_checks
 add_test(NAME timer_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/timer/tests/test_timer.py
         --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
+add_test(NAME vga_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/vga/tests/test_vga.py
+        --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
+set_tests_properties(vga_checks PROPERTIES TIMEOUT 120)
+add_test(NAME vga_forth_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/vga/tests/test_forth.py)
+set_tests_properties(vga_forth_checks PROPERTIES TIMEOUT 120)
 add_test(NAME top_makefile_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test_makefile.py)
 add_test(NAME test_harness_checks

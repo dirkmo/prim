@@ -409,6 +409,7 @@ Stop the server with Ctrl+C.
 - [cpu/](cpu/README.md): standalone CPU and instruction-level tests.
 - [debug_uart/](debug_uart/README.md): UART RX/TX, debug protocol, host library and component tests.
 - [system/](system/README.md): bus mux, SRAM/MMIO and complete system integration.
+- [vga/](vga/README.md): 80x30 monochrome VGA text, banked video RAM, cursor and scrolling.
 - `tests/support/`: shared simulation helpers.
 
 Build and run all suites from the repository root:
@@ -427,7 +428,7 @@ examples, tests and the iCE40 resource comparison.
 The [Olimex Rev.B board flow](boards/olimex_ice40hx8k_evb/README.md) adds explicit
 `fpga_bitstream` and `fpga_program` targets plus UART first-contact tools. The
 initial 100 MHz timing check failed; the approved board PLL now supplies a
-25 MHz system clock and the routed build passes timing. The debug UART uses GPIO1 pin 33 (FPGA RX) and pin 34 (FPGA TX).
+25 MHz system clock and the routed build passes timing. The debug UART uses GPIO1 pin 5 (FPGA RX) and pin 7 (FPGA TX), free with iCE40-IO Rev.A.
 
 Use a separate build directory for the Olimex board:
 

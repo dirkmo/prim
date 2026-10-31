@@ -41,7 +41,7 @@ memory_io #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES)) dut(
     .ram_oe_n(oe_n), .ram_we_n(we_n), .o_output_data(output_data), .o_output_valid(output_valid), .i_output_ready(output_ready),
     .i_input_data(input_data), .i_uart_csr(uart_csr), .o_uart_csr_data(csr_data), .o_uart_csr_write(csr_write), .o_input_read(input_read), .o_leds(leds),
     .o_timer_irq(timer_irq));
-assign controller_drive = dut.sram.drive;
+assign controller_drive = dut.core.sram.drive;
 uart_buffers buffers(.i_clk(clk), .i_reset(reset), .i_rx_data(8'b0), .i_rx_valid(1'b0),
     .i_input_read(input_read), .o_input_data(input_data), .o_csr(uart_csr), .i_csr_data(csr_data), .i_csr_write(csr_write),
     .i_output_data(output_data), .i_output_valid(output_valid), .o_output_ready(output_ready),

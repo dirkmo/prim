@@ -474,3 +474,16 @@ RTL UART buffers. A separate check requires the word reference to cover every
 kernel word exactly once. The root Make targets `forth-image`, `forth-console`
 and `test-forth` expose the standalone workflow; isolated Makefile tests verify
 their behavior without accessing hardware or invoking TokenForth compilation.
+
+## VGA checks
+
+`vga_checks` runs the [complete-raster RTL scoreboard](../vga/tests/tb_vga.sv)
+with VGA enabled. It verifies the memory window, byte lanes, register masks,
+SRAM isolation, concurrent CPU transfers, glyph pipeline, full-frame sync and
+blanking, modulo-32 scrolling, cursor forms/blink and reset retention.
+`vga_forth_checks` executes the [Forth output driver](../vga/examples/console.fs)
+on the Python Prim CPU against a separate bank model, checking scroll wrap,
+row clearing, text/backspace, SRAM preservation and stack bounds. Run either
+script directly from the root or select them with `ctest -R vga`.
+The [VGA guide](../vga/README.md) records resource/timing results and physical
+hardware checks that remain outstanding.

@@ -13,6 +13,13 @@ Sources of the fixed pin mapping:
 
 The board wrapper and constraints are specifically for Rev.B, not Rev.B1.
 
+The board now includes the [VGA text controller](../../vga/README.md).
+The iCE40-IO Rev.A expansion board provides VGA through its onboard resistor
+DACs: GPIO1.20/18 carry HSYNC/VSYNC and nine GPIOs carry RGB. UART uses the free
+GPIO1.5/7 pass-through pins. The VGA guide contains the wiring, memory map,
+Forth output driver and new resource/timing measurements. The timer-only
+resource figures below describe the earlier build.
+
 ## System clock and timing
 
 The board oscillator remains 100 MHz. With user approval on 29 October 2026,
@@ -28,8 +35,8 @@ constrains the oscillator to 100 MHz and derives the PLL output constraint as
 system clock of **40.87 MHz** with the timer integrated. This is an internal timing report, not a supported
 operating-frequency claim above the selected 25 MHz.
 
-The UART pin assignment requested by the user is GPIO1 pin 33 for FPGA RX
-(ball G3) and GPIO1 pin 34 for FPGA TX (ball F3). Artifacts are in
+The current UART pin assignment is GPIO1 pin 5 for FPGA RX (ball E4) and
+GPIO1 pin 7 for FPGA TX (ball B2), compatible with iCE40-IO Rev.A. Artifacts are in
 `build/olimex_ice40hx8k_evb/`, including the bitstream `prim.bin`. Utilization is
 3414/7680 logic cells (44.5%), one PLL, and no block RAM. The user has confirmed
 the running bitstream, working debug communication and successful
@@ -43,21 +50,26 @@ timing alone does not establish external SRAM setup/hold margins.
 
 ## UART wiring
 
-GPIO1 pins 33/34 are the selected UART connection. The Rev.B netlist maps
-GPIO1.33 to PIO3_14/IOL_8A (FPGA ball G3) and GPIO1.34 to PIO3_15/IOL_8B
-(FPGA ball F3). Both assignments are defined directly in `board.pcf`, the
-single pin-constraint source used by CMake and the standalone build script:
+GPIO1 pins 5/7 are free pass-through signals on the
+[iCE40-IO Rev.A expansion board](https://github.com/OLIMEX/iCE40-IO/blob/master/ICE40-IO_Rev_A.net).
+They are accessible at the expansion board's GPIO_Out1 connector with the same
+pin numbers. The main board Rev.B netlist maps GPIO1.5 to FPGA ball E4 and
+GPIO1.7 to B2. The former UART pins 33/34 are used by IrDA_Tx and VGA_RED3 on
+the expansion board. Both current assignments are defined in `board.pcf`:
 
 ```tcl
-set_io -pullup yes uart_rx G3
-set_io uart_tx F3
+set_io -pullup yes uart_rx E4
+set_io uart_tx B2
 ```
 
-| USB-UART adapter | Rev.B board connection | FPGA ball |
+| USB-UART adapter | GPIO1 / iCE40-IO GPIO_Out1 connection | FPGA ball |
 |---|---|---|
-| TX, 3.3 V logic | GPIO1 pin 33, FPGA RX | G3 |
-| RX | GPIO1 pin 34, FPGA TX | F3 |
-| GND | GPIO1 pin 2, GND | — |
+| TX, 3.3 V logic | Pin 5, FPGA RX | E4 |
+| RX | Pin 7, FPGA TX | B2 |
+| GND | Pin 2, GND | — |
+
+Move the adapter wires from pins 33/34 to pins 5/7 when installing this
+bitstream. Baud rate and debug protocol remain 115200/8N1.
 
 These UART signals are separate from the PGM1 SPI pins used by the UM-FT2232H.
 The board uses its existing power supply; the UART adapter's power output is
@@ -354,7 +366,8 @@ UART/flash operation was performed by the development agent.
 
 ## Resource comparison for the duplex extension
 
-Same Rev.B board target, 25 MHz PLL and seed 1, GPIO1.33/34 UART:
+Historical measurements before iCE40-IO integration: same Rev.B board target,
+25 MHz PLL and seed 1, previous GPIO1.33/34 UART:
 
 | Resource | Before duplex | After duplex | Delta |
 |---|---:|---:|---:|
