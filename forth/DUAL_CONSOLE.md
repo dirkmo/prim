@@ -72,3 +72,34 @@ pending, FIFO/ring wrap/loss, errors, events during dispatch, unhandled-source
 masking, both carry values, eight preserved user cells and untouched arithmetic
 scratch under actual Prim IRQ entry. The measured IRQ path stays within the
 three-cell/four-frame additional budget.
+
+## AP6: keyboard decoding
+
+Set-2 decoding runs entirely on Prim in foreground, using three compact
+128-byte normal/Shift/AltGr tables. State uses twelve cells at F040..F057.
+The chosen layout is German ISO QWERTZ with ASCII output: letters/digits,
+Enter, keypad Enter, BS, Tab, Escape and punctuation. AltGr-Q is @, AltGr-7/8/9/0
+is `{[]}`, AltGr-ß is backslash, AltGr-plus is tilde and AltGr-ISO-< is bar.
+Shift-2 supplies quotes, Shift-comma semicolon and Shift-period colon.
+Unrepresentable umlauts/ß/§ and unsupported function/navigation keys emit
+nothing. No dead-key composition or keyboard LED commands.
+
+Both Shift and both Ctrl keys retain independent pressed bits. Caps toggles
+once per press, not per typematic repetition, and affects letters only.
+Ctrl maps ASCII letters and @.._ to control codes, with Ctrl-space producing
+NUL; availability is separate from the byte value. AltGr selects its own
+table before Ctrl processing. Ordinary make repeats generate repeated text;
+breaks update state without text. E0 fake shifts used by Print Screen never
+change Shift; the eight-byte Pause sequence is consumed completely.
+BAT resets modifiers, ACK/resend replies clear prefixes, and protocol error
+bytes mark local input loss for foreground recovery. A ring/frame error resets
+modifiers/prefixes and discards damaged input in AP7.
+
+Scan positions were checked against the Linux
+[atkbd set-2 table](https://github.com/torvalds/linux/blob/master/drivers/input/keyboard/atkbd.c),
+and German symbol positions against kbd's
+[de-latin1 layout](https://github.com/legionus/kbd/blob/master/data/keymaps/i386/qwertz/de-latin1.map).
+The ASCII/dead-key restrictions above are this kernel's explicit choices.
+`python3 forth/tests/test_keyboard.py` executes literal scan sequences on Prim
+and compares independent expected ASCII strings, modifier release, typematic,
+Caps, AltGr, Ctrl/NUL, startup, unsupported sequences and recovery.
