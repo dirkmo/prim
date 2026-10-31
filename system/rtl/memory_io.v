@@ -107,6 +107,7 @@ module memory_io #(
     parameter integer TIMER_DIVISOR = 50000,
     parameter integer VGA_ENABLE = 0,
     parameter integer PS2_ENABLE = 0,
+    parameter integer AUDIO_ENABLE = 0,
     parameter integer CLK_HZ = 25000000,
     parameter integer PS2_FIFO_DEPTH = 16,
     parameter integer PS2_FILTER_CYCLES = 8,
@@ -133,7 +134,8 @@ module memory_io #(
     output o_vga_hsync, o_vga_vsync, o_vga_pixel, o_vga_active,
     input i_ps2_clk, i_ps2_data,
     input i_uart_rx_irq, i_uart_tx_irq,
-    output o_irq
+    output o_irq,
+    output o_audio_pwm
 );
 wire [15:0] core_addr, core_wdata, core_rdata;
 wire [1:0] core_bs;
@@ -146,10 +148,12 @@ wire ram_lo = bank && i_addr[15:12] == 4'he;
 wire ram_hi = bank && next_addr[15:12] == 4'he;
 wire ps2_lo = PS2_ENABLE && (i_addr == 16'hfffb || i_addr == 16'hfffc);
 wire ps2_hi = PS2_ENABLE && (next_addr == 16'hfffb || next_addr == 16'hfffc);
+wire audio_lo = i_addr[15:4] == 12'hffe;
+wire audio_hi = next_addr[15:4] == 12'hffe;
 wire pending_lo = i_addr == 16'hfff5;
 wire pending_hi = next_addr == 16'hfff5;
-wire split = (i_bs[0] && (reg_lo || ram_lo || ps2_lo || pending_lo)) ||
-             (i_bs[1] && (reg_hi || ram_hi || ps2_hi || pending_hi));
+wire split = (i_bs[0] && (reg_lo || ram_lo || ps2_lo || pending_lo || audio_lo)) ||
+             (i_bs[1] && (reg_hi || ram_hi || ps2_hi || pending_hi || audio_hi));
 reg second;
 reg [7:0] low_data;
 wire high_lane = second || !i_bs[0];
@@ -159,13 +163,16 @@ wire reg_sel = high_lane ? reg_hi : reg_lo;
 wire ram_sel = high_lane ? ram_hi : ram_lo;
 wire ps2_sel = high_lane ? ps2_hi : ps2_lo;
 wire pending_sel = high_lane ? pending_hi : pending_lo;
-wire special = reg_sel || ram_sel || ps2_sel || pending_sel;
+wire audio_sel = high_lane ? audio_hi : audio_lo;
+wire [7:0] audio_data;
+wire audio_ready;
+wire special = reg_sel || ram_sel || ps2_sel || pending_sel || audio_sel;
 wire selected = !i_reset && split && (|i_bs);
 wire [7:0] reg_data, video_data, ps2_data, ps2_csr;
 wire video_ack, ps2_event;
-wire byte_ack = ram_sel ? video_ack : special ? 1'b1 : core_ack;
+wire byte_ack = audio_sel ? audio_ready : ram_sel ? video_ack : special ? 1'b1 : core_ack;
 reg [3:0] irq_pending, previous_mask;
-wire [7:0] byte_data = reg_sel ? reg_data : ram_sel ? video_data :
+wire [7:0] byte_data = audio_sel ? audio_data : reg_sel ? reg_data : ram_sel ? video_data :
     ps2_sel ? (address[0] ? ps2_csr : ps2_data) :
     pending_sel ? {4'b0,irq_pending} : core_rdata[7:0];
 wire last = high_lane || !i_bs[1];
@@ -201,7 +208,17 @@ always @(posedge i_clk) begin
     end
 end
 
-generate if (VGA_ENABLE) begin: video
+generate if (AUDIO_ENABLE) begin: sound
+    audio #(.CLK_HZ(CLK_HZ)) generator(
+        .i_clk(i_clk), .i_reset(i_reset), .i_cs(selected && audio_sel),
+        .i_we(i_we), .i_addr(address[3:0]), .i_data(wdata),
+        .o_data(audio_data), .o_ready(audio_ready), .o_pwm(o_audio_pwm));
+end else begin: no_sound
+    assign audio_data = 0;
+    assign audio_ready = 1;
+    assign o_audio_pwm = 0;
+end
+if (VGA_ENABLE) begin: video
     vga_text display(
         .i_clk(i_clk), .i_reset(i_reset), .i_cs(selected && ram_sel),
         .i_we(i_we), .i_addr(address[11:0]), .i_data(wdata),

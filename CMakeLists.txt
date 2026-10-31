@@ -86,6 +86,12 @@ add_test(NAME uart_component_checks
 add_test(NAME timer_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/timer/tests/test_timer.py
         --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
+add_test(NAME audio_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/audio/tests/test_audio.py
+        --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
+add_test(NAME audio_forth_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/audio/tests/test_forth.py)
+set_tests_properties(audio_forth_checks PROPERTIES TIMEOUT 180)
 add_test(NAME ps2_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/ps2/tests/test_ps2.py
         --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})

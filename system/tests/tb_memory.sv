@@ -167,7 +167,7 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
         write_count = wr ? read_count : 0;
         if (wr && b == 3 && !a[0]) read_count = 0;
         if (WITH_UART) begin
-            ram_mask = {b[1] && (((a+1)&65535) < 65520), b[0] && (a < 65520)};
+            ram_mask = {b[1] && (((a+1)&65535) < 65504), b[0] && (a < 65504)};
             if (ram_mask != b) begin
                 read_count = ram_mask!=0 ? 1 : 0;
                 write_count = wr ? read_count : 0;
@@ -187,6 +187,8 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
             $fatal(1, "Wrong SRAM access count addr=%h bs=%b we=%b reads=%0d expected=%0d writes=%0d expected=%0d",
                    a, b, wr, reads-before_reads, read_count, writes-before_writes, write_count);
         if (WITH_UART && !wr) begin
+            if (b[0] && a>=16'hffe0 && a<=16'hffef) expected[7:0]=0;
+            if (b[1] && ((a+1)&65535)>=65504 && ((a+1)&65535)<=65519) expected[15:8]=0;
             if (b[0] && a>=16'hfff6 && a<=16'hfffc) expected[7:0]=0;
             if (b[1] && a>=16'hfff5 && a<=16'hfffb) expected[15:8]=0;
             if(b[0] && a==16'hfffd) expected[7:0]={6'b0,expected_leds};
@@ -208,8 +210,8 @@ task access(input [15:0] a, input [15:0] d, input [1:0] b, input wr);
         if (WITH_UART && uart_csr[3:2] !== expected_ie) $fatal(1, "CSR enable mismatch");
         if (WITH_UART && leds !== expected_leds) $fatal(1, "LED register mismatch");
         if (wr) begin
-            if (b[0] && !(WITH_UART && a>=16'hfff0)) reference[a] = d[7:0];
-            if (b[1] && !(WITH_UART && ((a+1)&65535)>=65520)) reference[(a+1)&65535] = d[15:8];
+            if (b[0] && !(WITH_UART && a>=16'hffe0)) reference[a] = d[7:0];
+            if (b[1] && !(WITH_UART && ((a+1)&65535)>=65504)) reference[(a+1)&65535] = d[15:8];
         end
         if (sram[a>>1] !== expected_word(a>>1) ||
             sram[((a+1)&65535)>>1] !== expected_word(((a+1)&65535)>>1))

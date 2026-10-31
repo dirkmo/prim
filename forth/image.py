@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from prim.assembler import PrimAsm
 from prim.isa import PrimOpcodes as Op
 
-RAM_END = 0xFFF0
+RAM_END = 0xFFE0
 USER_LIMIT = 0xF000
 KERNEL_START = 0x0400
 

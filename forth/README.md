@@ -62,7 +62,7 @@ source tokenizer is used. Each initial image is deterministic.
 
 | File | Meaning |
 | --- | --- |
-| `kernel.bin` | Raw CPU RAM image, 65520 bytes, addresses 0000..FFEF, entry at 0 |
+| `kernel.bin` | Raw CPU RAM image, 65504 bytes, addresses 0000..FFDF, entry at 0 |
 | `kernel.map.json` | Memory regions, symbol addresses, word headers/XT/flags/effects |
 | `kernel.disasm` | Generated executable instructions; data and reserved RAM omitted |
 
@@ -89,7 +89,7 @@ without changing CPU state. For a fresh Forth session, use `reset-halt` and
 RX-credit polling for queued CPU input. A plain terminal or uploader must pace
 input: the CPU UART has a single retained RX byte, not a line FIFO.
 
-This image ends before FFF0, so no `SKIP_UART_MMIO` option is needed. Re-uploading
+This image ends before FFE0, so no `SKIP_UART_MMIO` option is needed. Re-uploading
 it overwrites user RAM. The existing `make image`/`make load-run` targets build
 TokenForth `.cf` programs; use `forth-image` followed by `upload` for this kernel.
 Hardware transport needs the project's serial dependencies (`make setup`).
@@ -195,7 +195,7 @@ Current size and performance results: [unchecked stacks](../docs/FORTH_UNCHECKED
 Tail calls reduce return depth but cannot remove every live caller frame.
 
 Code/data allocation is confined to USER_START..EFFF, with USER_START from the
-generated kernel map. F000..FFEF is reserved; FFF0..FFFF is MMIO. Stack display,
+generated kernel map. F000..FFDF is reserved; FFE0..FFFF is MMIO. Stack display,
 string and arithmetic scratch have separate regions. There is no memory
 isolation: arbitrary !/C!/EXECUTE operands can corrupt the kernel. Nontermination,
 invalid XT and hardware-stack overflow are not recoverable Forth exceptions.

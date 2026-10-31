@@ -9,6 +9,7 @@ BOARD = Path(__file__).resolve().parent
 ROOT = BOARD.parents[1]
 SOURCES = [
     ROOT / 'cpu/rtl/prim.v',
+    ROOT / 'audio/rtl/audio.v',
     ROOT / 'timer/rtl/timer.v',
     ROOT / 'vga/rtl/vga_text.v',
     ROOT / 'vga/rtl/vga_font.v',

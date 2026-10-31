@@ -26,7 +26,7 @@ end
 
 task write_byte_model(input integer address, input [7:0] value);
 begin
-    if (address < 65524) reference[address]=value;
+    if (address < 65504 || (address >= 65520 && address < 65524)) reference[address]=value;
     else if (address == 65524) reference[address]=value & 7;
 end
 endtask
@@ -68,7 +68,7 @@ initial begin
         memory[j]=16'ha55a;
         reference[2*j]=8'h5a; reference[2*j+1]=8'ha5;
     end
-    for(j=65520;j<65533;j=j+1) reference[j]=0;
+    for(j=65504;j<65533;j=j+1) reference[j]=0;
     repeat(3) @(negedge clk); reset=0;
     for(a=65519;a<=65526;a=a+1) begin
         for(mask=1;mask<=3;mask=mask+1) begin
@@ -87,7 +87,7 @@ initial begin
     @(negedge clk); bs=0;
     repeat(3) @(negedge clk);
     if(ack || !ram_cs || !ram_oe || !ram_we) $fatal(1,"bus active while idle");
-    for(j=65520/2;j<32768;j=j+1)
+    for(j=65504/2;j<32768;j=j+1)
         if(memory[j]!==16'ha55a) $fatal(1,"MMIO changed hidden SRAM at %h",j);
     $display("PASS timer MMIO masks, crossings, write counts, SRAM isolation");
     $finish;

@@ -74,7 +74,7 @@ class MakefileChecks(unittest.TestCase):
 
     def test_standalone_forth_workflow_never_builds_tokenforth_or_accesses_hardware(self):
         self.make('forth-image', 'PROGRAM=/missing/source.cf')
-        self.assertEqual(len((self.root / 'build/forth/kernel.bin').read_bytes()), 65520)
+        self.assertEqual(len((self.root / 'build/forth/kernel.bin').read_bytes()), 65504)
         self.assertFalse((self.root / 'build/src').exists())
         self.assertFalse((self.root / 'build/software').exists())
         output = self.make('forth-console', input='2 3 + .\n')

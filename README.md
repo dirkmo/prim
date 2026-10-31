@@ -14,6 +14,11 @@
 
 Write repository documentation in English.
 
+## Audio
+
+[Procedural mono audio](audio/README.md): three tone voices, noise, envelopes,
+one PWM output and an optional Forth library. [Register reference](audio/registers.md).
+
 ## Standalone Forth
 
 An independent on-CPU text interpreter and compiler lives in [forth/](forth/README.md).

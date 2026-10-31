@@ -33,17 +33,17 @@ def prepare_image(path, skip_mmio=False, report=None):
     image = Path(path).read_bytes()
     if not 1 <= len(image) <= 65536:
         raise ValueError('Image must contain 1..65536 bytes')
-    if len(image) > 0xfff0:
+    if len(image) > 0xffe0:
         if not skip_mmio:
-            raise ValueError('Addresses 0xFFF0..0xFFFF are timer/reserved/LED/UART MMIO; use --skip-mmio to omit them explicitly')
-        for address in range(0xfff0, len(image)):
+            raise ValueError('Addresses 0xFFE0..0xFFFF are audio/timer/VGA/PS2/LED/UART MMIO; use --skip-mmio to omit them explicitly')
+        for address in range(0xffe0, len(image)):
             message = (f'Skipping address 0x{address:04X} (image byte 0x{image[address]:02x}): '
                        'system MMIO; not written or verified.')
             if report:
                 report(message)
             else:
                 print(message, file=sys.stderr)
-        image = image[:0xfff0]
+        image = image[:0xffe0]
     return image
 
 
@@ -79,7 +79,7 @@ def add_commands(parser, *, console=False):
     load.add_argument('--write-delay', type=write_delay, default=0,
                       help='Minimum pause between streamed word writes in seconds (default: 0)')
     load.add_argument('--skip-mmio', action='store_true',
-                      help='Explicitly omit timer/reserved/LED/UART MMIO at FFF0..FFFF from writing and verification')
+                      help='Explicitly omit audio/timer/VGA/PS2/LED/UART MMIO at FFE0..FFFF from writing and verification')
     if console:
         from prim_debug_uart.console import HELP
         commands.add_parser('console', description=HELP, formatter_class=argparse.RawDescriptionHelpFormatter)

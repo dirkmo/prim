@@ -6,13 +6,15 @@ module prim_system #(
     parameter integer START_HALTED = 0,
     parameter integer TIMER_DIVISOR = 50000,
     parameter integer VGA_ENABLE = 0,
-    parameter integer PS2_ENABLE = 0
+    parameter integer PS2_ENABLE = 0,
+    parameter integer AUDIO_ENABLE = 0
 )(
     input i_clk,
     input i_reset,
     input i_rx,
     input i_ps2_clk, i_ps2_data,
     output o_tx,
+    output o_audio_pwm,
     output o_halted,
     output [1:0] o_leds,
     output [15:0] ram_addr,
@@ -52,11 +54,11 @@ debug_uart_link #(.CLK_HZ(CLK_HZ)) uart(.i_clk(i_clk), .i_reset(i_reset), .i_rx(
     .i_ack(debug_ack), .i_data(from_mem));
 memory_io #(.READ_CYCLES(READ_CYCLES), .WRITE_CYCLES(WRITE_CYCLES),
             .TIMER_DIVISOR(TIMER_DIVISOR), .VGA_ENABLE(VGA_ENABLE),
-            .PS2_ENABLE(PS2_ENABLE), .CLK_HZ(CLK_HZ)) io(
+            .PS2_ENABLE(PS2_ENABLE), .AUDIO_ENABLE(AUDIO_ENABLE), .CLK_HZ(CLK_HZ)) io(
     .i_clk(i_clk), .i_reset(i_reset), .i_addr(addr), .i_cpu_to_mem(to_mem),
     .i_input_data(input_data), .i_uart_csr(uart_csr),
     .o_uart_csr_data(uart_csr_data), .o_uart_csr_write(uart_csr_write), .o_input_read(input_read),
-    .o_leds(o_leds), .o_timer_irq(timer_irq),
+    .o_leds(o_leds), .o_audio_pwm(o_audio_pwm), .o_timer_irq(timer_irq),
     .i_ps2_clk(i_ps2_clk), .i_ps2_data(i_ps2_data),
     .i_uart_rx_irq(uart_rx_irq), .i_uart_tx_irq(uart_tx_irq), .o_irq(irq),
     .o_vga_hsync(o_vga_hsync), .o_vga_vsync(o_vga_vsync),

@@ -61,7 +61,7 @@ class Client:
     def write_bytes(self, values, address=None):
         values = bytes(values)
         # Fail the test if a write could reach the system MMIO address.
-        if address is None or address + len(values) > 0xfff0:
+        if address is None or address + len(values) > 0xffe0:
             raise AssertionError('write touched system MMIO')
         self.calls.append(('write_bytes', address, values))
         self.memory[address:address + len(values)] = values
@@ -69,7 +69,7 @@ class Client:
     def write_words(self, values, address=None):
         values = tuple(values)
         data = b''.join(value.to_bytes(2, 'little') for value in values)
-        if address is None or address + len(data) > 0xfff0:
+        if address is None or address + len(data) > 0xffe0:
             raise AssertionError('word write touched system MMIO')
         self.calls.append(('write_words', address, values))
         self.memory[address:address + len(data)] = data
@@ -102,7 +102,7 @@ class Client:
         if address is None:
             address = self.pointer
         self.pointer = address + 1
-        if address >= 0xfff0:
+        if address >= 0xffe0:
             raise AssertionError('skipped image byte was verified')
         self.reads.append(address)
         return self.memory[address] ^ int(address == self.corrupt_address)
@@ -222,20 +222,20 @@ class HostChecks(unittest.TestCase):
             image.write_bytes(data)
             client = Client()
             output, errors = self.invoke(client, 'load', str(image), '--skip-mmio', '--verify', '--run')
-            self.assertEqual(client.memory[:0xfff0], data[:0xfff0])
-            self.assertEqual(client.memory[0xfff0:], bytes([0x5a]) * 16)
-            self.assertEqual(client.reads, list(range(0xfff0)))
-            words = tuple(int.from_bytes(data[i:i+2], 'little') for i in range(0, 0xfff0, 2))
+            self.assertEqual(client.memory[:0xffe0], data[:0xffe0])
+            self.assertEqual(client.memory[0xffe0:], bytes([0x5a]) * 32)
+            self.assertEqual(client.reads, list(range(0xffe0)))
+            words = tuple(int.from_bytes(data[i:i+2], 'little') for i in range(0, 0xffe0, 2))
             self.assertEqual(client.calls, ['reset_halt', ('write_words', 0, words), ('set_address', 0), 'read_pc', 'run'])
-            self.assertEqual(client.word_reads, list(range(0, 0xfff0, 2)))
-            self.assertIn('65520 bytes', output)
+            self.assertEqual(client.word_reads, list(range(0, 0xffe0, 2)))
+            self.assertIn('65504 bytes', output)
             self.assertRegex(output, r'Verify completed in [0-9.]+ s \([0-9]+ bytes/s\)')
-            self.assertIn('Writing: 0/65520 bytes (0%)', output)
-            self.assertIn('Writing: 65520/65520 bytes (100%)', output)
-            self.assertIn('Verifying: 0/65520 bytes (0%)', output)
-            self.assertIn('Verifying: 65520/65520 bytes (100%)', output)
-            self.assertLess(output.index('Writing: 65520/65520'), output.index('Verifying: 0/65520'))
-            self.assertLess(output.index('Verifying: 65520/65520'), output.index('CPU running'))
+            self.assertIn('Writing: 0/65504 bytes (0%)', output)
+            self.assertIn('Writing: 65504/65504 bytes (100%)', output)
+            self.assertIn('Verifying: 0/65504 bytes (0%)', output)
+            self.assertIn('Verifying: 65504/65504 bytes (100%)', output)
+            self.assertLess(output.index('Writing: 65504/65504'), output.index('Verifying: 0/65504'))
+            self.assertLess(output.index('Verifying: 65504/65504'), output.index('CPU running'))
             self.assertIn('0xFFFF', errors)
             self.assertIn('0xff', errors)
             self.assertIn('not written or verified', errors)
@@ -243,7 +243,7 @@ class HostChecks(unittest.TestCase):
     def test_short_images_and_maximum_without_skip_stay_halted(self):
         with tempfile.TemporaryDirectory() as directory:
             image = Path(directory) / 'image.bin'
-            for size in (1, 5, 65520):
+            for size in (1, 5, 65504):
                 with self.subTest(size=size):
                     data = bytes([0x21]) * size
                     image.write_bytes(data)
@@ -261,14 +261,14 @@ class HostChecks(unittest.TestCase):
     def test_skip_mmio_option_at_first_timer_byte(self):
         with tempfile.TemporaryDirectory() as directory:
             image = Path(directory) / 'image.bin'
-            image.write_bytes(bytes(65521))
+            image.write_bytes(bytes(65505))
             client = Client()
             output, errors = self.invoke(client, 'load', str(image), '--skip-mmio', '--verify')
-            self.assertEqual(client.memory[:0xfff0], bytes(65520))
-            self.assertEqual(client.memory[0xfff0:], bytes([0x5a]) * 16)
-            self.assertIn('0xFFF0', errors)
+            self.assertEqual(client.memory[:0xffe0], bytes(65504))
+            self.assertEqual(client.memory[0xffe0:], bytes([0x5a]) * 32)
+            self.assertIn('0xFFE0', errors)
             self.assertNotIn('0xFFF1', errors)
-            self.assertIn('65520 bytes', output)
+            self.assertIn('65504 bytes', output)
 
     def test_partial_mmio_image_skips_timer_led_and_status(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -276,11 +276,11 @@ class HostChecks(unittest.TestCase):
             image.write_bytes(bytes(65535))
             client = Client()
             output, errors = self.invoke(client, 'load', str(image), '--skip-mmio')
-            self.assertIn('0xFFF0', errors)
+            self.assertIn('0xFFE0', errors)
             self.assertIn('0xFFFD', errors)
             self.assertIn('0xFFFE', errors)
             self.assertNotIn('0xFFFF', errors)
-            self.assertEqual(client.memory[0xfff0:], bytes([0x5a]) * 16)
+            self.assertEqual(client.memory[0xffe0:], bytes([0x5a]) * 32)
             self.assertEqual(client.reads, [])
             with patch.object(host.DebugUART, 'connect') as connect, redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit):

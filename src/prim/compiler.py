@@ -129,8 +129,8 @@ def execute(cpu, opcodes, max_steps=DEFAULT_MAX_IMMEDIATE_STEPS):
         raise ValueError('Immediate step limit must be positive')
     program = [*opcodes, PrimOpcodes.BREAK]
     l = len(program)
-    if l >= 0xf0:
-        raise ValueError('Too much immediate code (maximum 238 code bytes)')
+    if l >= Consts.IMMEDIATE_CAPACITY:
+        raise ValueError(f'Too much immediate code (maximum {Consts.IMMEDIATE_CAPACITY - 2} code bytes)')
     cpu._mif._mem[Consts.AREA:Consts.AREA+l] = program
     cpu._pc = Consts.AREA
     for _ in range(max_steps):

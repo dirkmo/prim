@@ -9,6 +9,7 @@ set(OLIMEX_BOARD_DIR "${PROJECT_SOURCE_DIR}/boards/olimex_ice40hx8k_evb")
 set(OLIMEX_OUTPUT_DIR "${CMAKE_BINARY_DIR}")
 file(GLOB OLIMEX_RTL CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/cpu/rtl/*.v"
+    "${PROJECT_SOURCE_DIR}/audio/rtl/*.v"
     "${PROJECT_SOURCE_DIR}/timer/rtl/*.v"
     "${PROJECT_SOURCE_DIR}/vga/rtl/*.v"
     "${PROJECT_SOURCE_DIR}/ps2/rtl/*.v"

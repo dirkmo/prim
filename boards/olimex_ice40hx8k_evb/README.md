@@ -240,7 +240,7 @@ fourth reply digit. No FPGA read-request queue is used. The final reply is fully
 consumed before an optional byte read or any subsequent command. Update the FPGA
 bitstream along with the host: older bitstreams return prefixed memory reads
 and are incompatible. Reply transmission alone takes about 11.4 seconds for
-65520 bytes at 115200 baud, plus USB/host latency for each word.
+65504 bytes at 115200 baud, plus USB/host latency for each word.
 `--run` resumes after successful loading and, when requested, verification.
 A failed verification does not start the CPU. Token streams are not CPU binaries.
 
@@ -262,7 +262,7 @@ image. Wait for `Loaded ...` (or `Loaded and verified ...` with `--verify`)
 and, with `--run`, `CPU running`;
 the initial MMIO-skipping messages do not indicate completion.
 
-Images of 1..65520 bytes load directly. Compiler memory exports contain 65536
+Images of 1..65504 bytes load directly. Compiler memory exports contain 65536
 bytes; those require the explicit `--skip-mmio` option:
 
 ```sh
@@ -272,9 +272,9 @@ python boards/olimex_ice40hx8k_evb/host.py --port /dev/serial/by-id/<uart-adapte
 ```
 
 With a full 64-KiB image, the script reports the omitted bytes at
-`0xFFF0..0xFFFF`, writes only `0x0000..0xFFEF` (65520 bytes), optionally verifies
+`0xFFE0..0xFFFF`, writes only `0x0000..0xFFDF` (65504 bytes), optionally verifies
 them, and preserves the physical SRAM bytes hidden behind MMIO. Timer registers,
-reserved bytes, LEDs and UART are all excluded. Any image exceeding 65520 bytes
+reserved bytes, LEDs and UART are all excluded. Any image exceeding 65504 bytes
 requires `--skip-mmio`.
 Only included MMIO bytes are reported; no trimming occurs without this option.
 Empty images and images larger than 65536 bytes remain errors. Invalid sizes
@@ -391,3 +391,9 @@ The extra 16 flip-flops implement the two seven-bit buffers and their flags.
 Reported routed maximum changes from 54.72 to 50.12 MHz; timing passes at 25 MHz.
 Baseline reports: `build/uart-duplex-before/`; current reports/bitstream:
 `build/olimex_ice40hx8k_evb/`. No board hardware/timing measurement is implied.
+
+## Procedural audio
+
+The board enables the [audio peripheral](../../audio/README.md), using GPIO1.9
+(ball F5) for PWM output. Registers FFE0..FFEF extend MMIO down to FFE0.
+Use freshly rebuilt software images with this bitstream.

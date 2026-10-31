@@ -21,7 +21,9 @@ class Memory(MemoryIf):
     def read8(self, addr):
         addr &= 0xffff
         value = self.data[addr]
-        if self.uart and 0xfff0 <= addr <= 0xfff5:
+        if self.uart and 0xffe0 <= addr <= 0xffef:
+            value = 0
+        elif self.uart and 0xfff0 <= addr <= 0xfff5:
             value = self.timer[addr - 0xfff0]
         elif self.uart and 0xfff6 <= addr <= 0xfffc:
             value = 0
@@ -39,7 +41,9 @@ class Memory(MemoryIf):
 
     def write8(self, addr, value):
         addr, value = addr & 0xffff, value & 0xff
-        if self.uart and 0xfff0 <= addr <= 0xfff5:
+        if self.uart and 0xffe0 <= addr <= 0xffef:
+            pass
+        elif self.uart and 0xfff0 <= addr <= 0xfff5:
             offset = addr - 0xfff0
             self.timer[offset] = value if offset < 4 else value & 7 if offset == 4 else 0
         elif self.uart and 0xfff6 <= addr <= 0xfffc:

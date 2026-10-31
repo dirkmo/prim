@@ -35,7 +35,7 @@ class BootChecks(unittest.TestCase):
                                  (directory / 'b' / name).read_bytes())
             data = (directory / 'a/kernel.bin').read_bytes()
             mapping = json.loads((directory / 'a/kernel.map.json').read_text())
-            self.assertEqual(len(data), 65520)
+            self.assertEqual(len(data), 65504)
             self.assertEqual(mapping['image']['entry'], 0)
             regions = mapping['regions']
             self.assertEqual(regions[0]['start'], 0)
@@ -45,7 +45,7 @@ class BootChecks(unittest.TestCase):
             start = mapping['symbols']['user_start']
             self.assertEqual(start % 2, 0)
             self.assertLess(start, 0xF000)
-            self.assertEqual(data[start:], bytes(65520 - start))
+            self.assertEqual(data[start:], bytes(65504 - start))
 
     def test_cold_start_reinitializes_dirty_runtime_without_erasing_user_ram(self):
         image = build_image(dual_console=False)

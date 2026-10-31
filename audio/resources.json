@@ -1,0 +1,11 @@
+{
+  "before": {
+    "reports": "build/audio-before",
+    "resource_report": "Resources: /vol/dev/prim/build/audio-before\nResource                    Used    Total     Free    Usage\nLogic cells (routed)        5872     7680     1808    76.5%\nLUT4 (synthesized)          4934     7680     2746    64.2%\nFlip-flops (synth.)         1569     7680     6111    20.4%\nBlock RAM (4 Kibit)           17       32       15    53.1%\nPLLs                           1        2        1    50.0%\nGlobal buffers                 4        8        4    50.0%\nI/O pins                      56      206      150    27.2%\nCarry cells (synthesized): 340\nLUT/FF/carry are parts of logic cells; do not add these rows together.\nclk_sys: target 25.00 MHz, reported maximum 30.34 MHz (PASS)\nInternal timing report; physical UART/SRAM behavior requires board verification.\n"
+  },
+  "after": {
+    "reports": "build/audio-after",
+    "resource_report": "Resources: /vol/dev/prim/build/audio-after\nResource                    Used    Total     Free    Usage\nLogic cells (routed)        7630     7680       50    99.3%\nLUT4 (synthesized)          6015     7680     1665    78.3%\nFlip-flops (synth.)         2279     7680     5401    29.7%\nBlock RAM (4 Kibit)           17       32       15    53.1%\nPLLs                           1        2        1    50.0%\nGlobal buffers                 7        8        1    87.5%\nI/O pins                      57      206      149    27.7%\nCarry cells (synthesized): 547\nLUT/FF/carry are parts of logic cells; do not add these rows together.\nclk_sys: target 25.00 MHz, reported maximum 28.17 MHz (PASS)\nInternal timing report; physical UART/SRAM behavior requires board verification.\n"
+  },
+  "audio_rtl_sha256": "3a37924a4c4e9bd36f7784e992c92dfe5e2f5d5f95af724e864f2884c269af9e"
+}

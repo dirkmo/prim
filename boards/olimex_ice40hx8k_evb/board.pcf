@@ -63,3 +63,6 @@ set_io sram_data[12] T10
 set_io sram_data[13] T11
 set_io sram_data[14] T15
 set_io sram_data[15] T14
+
+# PWM audio, free iCE40-IO Rev.A pass-through GPIO1.9.
+set_io audio_pwm F5

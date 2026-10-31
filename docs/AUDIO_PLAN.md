@@ -1,7 +1,9 @@
 # Procedural mono audio implementation plan
 
-Status: proposed implementation; no audio RTL, bitstream or hardware validation
-has been produced. Scope approved for planning: three tone voices, one noise
+Status: implemented; see [audio documentation](../audio/README.md) and
+[the final register contract](../audio/registers.md). Hardware listening validation
+remains pending. The implementation uses write backpressure instead of the
+original snapshot queue below to fit the current system. Scope approved for planning: three tone voices, one noise
 voice, envelopes and one GPIO output. No wavetables or sample playback.
 
 ## Architecture and sound contract

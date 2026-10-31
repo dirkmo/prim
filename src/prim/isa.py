@@ -7,6 +7,8 @@ class Consts:
     LATEST = 12
     DICT = 0xFEFE
     AREA = DICT + 2
+    MMIO_BASE = 0xFFE0
+    IMMEDIATE_CAPACITY = MMIO_BASE - AREA
 
     iHERE = 0
     iLATEST = 1

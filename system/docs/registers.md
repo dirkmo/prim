@@ -12,7 +12,8 @@ liegt das niederwertige Byte an der kleineren Adresse.
 
 | Byteadresse | Register/Bereich | Breite | Zugriff | Resetwert | Bedeutung / Nebenwirkung |
 |---|---|---|---|---|---|
-| `0x0000..0xFFEF` | SRAM | 65520 Bytes | R/W | Nicht initialisiert | Programmspeicher und Daten |
+| `0x0000..0xFFDF` | SRAM | 65504 Bytes | R/W | Nicht initialisiert | Programmspeicher und Daten |
+| `0xFFE0..0xFFEF` | Audio | 16 bytes | R/W | Silent | Optional three tones + noise; see [audio registers](../../audio/registers.md) |
 | `0xFFF0..0xFFF1` | Timer COUNT | 16 Bit | R/W | `0x0000` | Aktueller Zählerstand; Schreiben mit Ergebnis null setzt auch die Vorteilerphase zurück |
 | `0xFFF2..0xFFF3` | Timer COMPARE | 16 Bit | R/W | `0x0000` | Vergleichswert |
 | `0xFFF4` | Timer CSR | 8 bits, 3 used | R/W | `0x00` | Timer controls; unused bits zero |
@@ -36,7 +37,7 @@ PS/2. See [PS/2 register semantics](../../ps2/README.md) for FIFO and byte-lane
 behavior. IRQ_PENDING is present independently of the optional peripherals.
 CPU-only reset preserves FIFO, peripheral enables and shared pending; system
 reset clears them.
-Die physischen SRAM-Zellen hinter `0xFFF0..0xFFFF` sind über diesen Bus nicht
+Die physischen SRAM-Zellen hinter `0xFFE0..0xFFFF` sind über diesen Bus nicht
 zugänglich. CPU und Debug-Master sehen dieselben Register und Nebenwirkungen.
 Beim Laden eines vollständigen Speicherabbilds muss der Board-Host mit
 `load --skip-mmio` den gesamten MMIO-Bereich aussparen.
@@ -57,12 +58,12 @@ Verwaltungszellen. Die Konstanten stehen in
 | Ab `0xFEFE` abwärts | Dictionary / `Consts.DICT` | Wortadressen; Eintrag i steht an `0xFEFE - 2*i` |
 | `0xFEFC..0xFEFD` | Dictionaryeintrag 1 | Enthält die Adresse `0x000C` von LATEST |
 | `0xFEFE..0xFEFF` | Dictionaryeintrag 0 | Enthält die Adresse `0x000A` von H |
-| `0xFF00..0xFFEF` | Scratchpad / `Consts.AREA` | 240 Bytes SRAM für temporären Immediate-Code |
+| `0xFF00..0xFFDF` | Scratchpad / `Consts.AREA` | 224 Bytes SRAM für temporären Immediate-Code |
 
 `AREA = DICT + 2 = 0xFF00`. `execute()` kopiert den Immediate-Code samt
 abschließendem BREAK dorthin und startet die Python-CPU an dieser Adresse.
-Die aktuelle Längenprüfung erlaubt höchstens 238 Codebytes plus ein BREAK,
-also 239 belegte Bytes bis einschließlich `0xFFEE`.
+Die aktuelle Längenprüfung erlaubt höchstens 222 Codebytes plus ein BREAK,
+also 223 belegte Bytes bis einschließlich `0xFFDE`.
 
 Diese Aufteilung ist eine Softwarekonvention innerhalb des SRAM; die Hardware
 schützt die Bereiche nicht gegeneinander. HERE/LATEST werden vom Compiler

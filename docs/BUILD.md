@@ -35,7 +35,7 @@ make run PORT="$PORT"
 
 `upload` resets and halts the CPU, writes SRAM, optionally verifies it, and leaves
 the CPU halted. Run `make run` after a successful upload. `SKIP_UART_MMIO=1` is
-required for compiler images: it skips addresses `FFF0..FFFF`, which belong to
+required for compiler images: it skips addresses `FFE0..FFFF`, which belong to
 peripherals. `VERIFY=1` checks the written SRAM by reading it back.
 
 ## Compile one or several source files
@@ -156,11 +156,11 @@ output and BREAK events appear in the console.
 
 ### Loading details and retries
 
-The system maps timer, reserved, LED and UART registers at `FFF0..FFFF`.
+The system maps audio, timer, VGA, PS/2, LED and UART registers at `FFE0..FFFF`.
 `--skip-mmio` (Make: `SKIP_UART_MMIO=1`) skips and reports those addresses,
-writing only the 65520 bytes of SRAM at `0000..FFEF` for a full compiler image.
+writing only the 65504 bytes of SRAM at `0000..FFDF` for a full compiler image.
 Without this option, the loader rejects images covering MMIO before opening the
-connection. Binary images of at most 65520 bytes do not require this option.
+connection. Binary images of at most 65504 bytes do not require this option.
 See the [register map](../system/docs/registers.md).
 
 Writes stream in 16-bit mode while a receiver counts acknowledgments. An odd
@@ -173,7 +173,7 @@ the third of four hex digits while the fourth digit is still arriving.
 Memory reads (`r`/`R`) return hex digits without a `K` prefix. Rebuild and upload
 the FPGA bitstream together with the host update; older bitstreams use a
 different read response format. No read-request queue is needed in the FPGA.
-For 65520 SRAM bytes at 115200 baud, reply transmission alone takes about
+For 65504 SRAM bytes at 115200 baud, reply transmission alone takes about
 11.4 seconds; USB and host latency add to that time for each word.
 
 The host requests low-latency serial mode when opening the port. On Linux FTDI
