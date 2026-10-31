@@ -70,7 +70,7 @@ class ConsoleMemory(MemoryIf):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.parse_args()
-    image = build_image()
+    image = build_image(dual_console=False)
     memory = ConsoleMemory(image.memory, sys.stdin.buffer, sys.stdout.buffer)
     cpu = Prim(memory)
     saved = None

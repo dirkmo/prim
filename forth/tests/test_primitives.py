@@ -26,7 +26,7 @@ RTL = False
 class PrimitiveChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.image = build_image()
+        cls.image = build_image(dual_console=False)
         cls.budget_data = cls.budget_return = cls.budget_extra = 0
 
     def check(self, word, inputs, expected):
@@ -276,7 +276,7 @@ class PrimitiveChecks(unittest.TestCase):
                      ('EMIT', [65], []), ('CR', [], []),
                      ('/', [7, 0], None), ('DUP', [1] * 8, None)]
             for word, args, expected in cases:
-                image = build_image()
+                image = build_image(dual_console=False)
                 program = Image()
                 start = image.symbols['user_start']
                 program.org(start)
@@ -311,7 +311,7 @@ class PrimitiveChecks(unittest.TestCase):
             self.skipTest('enable directed KEY + UART-buffer RTL test with --rtl')
         from support.process import run
 
-        image = build_image()
+        image = build_image(dual_console=False)
         program = Image()
         start = image.symbols['user_start']
         program.org(start)

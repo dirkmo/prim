@@ -69,6 +69,18 @@ class Code:
     def call(self, label):
         self.jump(label, Op.CALL)
 
+    def emit(self):
+        if getattr(self.i, 'dual_console', False):
+            self.call('raw_emit')
+        else:
+            self.push('uart_data')
+            self.ops(Op.BYTE_STORE)
+
+    def output(self, text):
+        for byte in text:
+            self.push(byte)
+            self.emit()
+
     def negate(self):
         self.push(0)
         self.ops(Op.SWAP, Op.SUB)
@@ -269,8 +281,7 @@ def emit_primitives(image):
         c.call('raw_key')
     word('KEY', 0, 1, key)
     def emit():
-        c.push('uart_data')
-        c.ops(Op.BYTE_STORE)
+        c.emit()
     word('EMIT', 1, 0, emit)
     def output(text):
         for byte in text:

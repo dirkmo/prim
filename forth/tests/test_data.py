@@ -20,7 +20,7 @@ RTL = False
 class DataChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.image = build_image()
+        cls.image = build_image(dual_console=False)
 
     def test_allocation_cell_byte_and_here(self):
         source = b'HERE 1 ALLOT HERE 4660 , 43981 C, HERE\n'
@@ -230,7 +230,7 @@ class DataChecks(unittest.TestCase):
         from support.paths import TIMINGS
         from forth.tests.forth_sram import ForthSramSimulation
         source = b': x ." hi" ; x'
-        image = build_image()
+        image = build_image(dual_console=False)
         p = Image(); p.org(USER_LIMIT)
         p.push(len(source)); p.push(VARIABLES['input_length']); p.op(Op.STORE)
         for index, byte in enumerate(source):

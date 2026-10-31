@@ -8,6 +8,7 @@ from forth.kernel.console import emit_console
 from forth.kernel.compiler import emit_compiler
 from forth.kernel.control import emit_control
 from forth.kernel.data import emit_data
+from forth.kernel.io import IO_VARIABLES, emit_io
 
 # Private RAM cells; public Forth words will expose selected cells later.
 VARIABLES = {
@@ -33,8 +34,12 @@ VARIABLES = {
 
 
 def emit_kernel(image):
+    dual = getattr(image, 'dual_console', False)
     for name, address in VARIABLES.items():
         image.define(name, address)
+    if dual:
+        for name, address in IO_VARIABLES.items():
+            image.define(name, address)
     for name, address in {
         'input_buffer': 0x0200, 'string_buffer': 0x0280,
         'control_stack': 0x0300, 'scratch': 0x0380,
@@ -67,10 +72,18 @@ def emit_kernel(image):
         image.push(Ref(name))
         image.op(Op.BYTE_STORE)
 
+    if dual:
+        for name in IO_VARIABLES:
+            image.push(0)
+            image.push(Ref(name))
+            image.op(Op.STORE)
+
     # Non-returning entry also used after errors/ABORT; no stale frames resumed.
     image.define('idle')
     image.push(Ref('console_start'))
     image.op(Op.JP)
+    if dual:
+        emit_io(image)
     emit_primitives(image)
     emit_parser(image)
     emit_console(image)
@@ -80,6 +93,8 @@ def emit_kernel(image):
     image.define('kernel_end')
     image.define('kernel_latest', image.symbols[image.words[-1]['header']])
     user_start = (image.pc + 1) & ~1
+    if dual and user_start >= 0xE000:
+        raise ValueError('dual-console kernel must reside below banked VRAM')
     if user_start >= USER_LIMIT:
         raise ValueError('kernel leaves no user dictionary space')
     image.define('user_start', user_start)

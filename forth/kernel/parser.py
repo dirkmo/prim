@@ -28,10 +28,7 @@ def emit_parser(image):
         c.ops(Op.ADD, Op.BYTE_FETCH)
 
     def output(text):
-        for byte in text:
-            c.push(byte)
-            c.push('uart_data')
-            c.ops(Op.BYTE_STORE)
+        c.output(text)
 
     def char_equals(value, target):
         c.load('io_char')
@@ -51,9 +48,10 @@ def emit_parser(image):
     c.push('uart_data')
     c.ops(Op.BYTE_FETCH, Op.NOP | 128)
 
-    c.mark('raw_emit')
-    c.push('uart_data')
-    c.ops(Op.BYTE_STORE, Op.NOP | 128)
+    if not getattr(image, 'dual_console', False):
+        c.mark('raw_emit')
+        c.push('uart_data')
+        c.ops(Op.BYTE_STORE, Op.NOP | 128)
 
     # ( char -- flag ): ASCII whitespace is 09..0D or 20.
     c.mark('is_space')

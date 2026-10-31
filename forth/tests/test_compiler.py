@@ -23,7 +23,7 @@ RTL = False
 class CompilerChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.image = build_image()
+        cls.image = build_image(dual_console=False)
 
     def test_definitions_multiline_and_compile_time_stack(self):
         cases = [
@@ -240,7 +240,7 @@ class CompilerChecks(unittest.TestCase):
             sim = SramSimulation(directory, Tools(), with_uart=True)
             sim.build()
             for source, expected, values in cases:
-                image = build_image()
+                image = build_image(dual_console=False)
                 p = Image()
                 p.org(USER_LIMIT)
                 p.push(len(source))

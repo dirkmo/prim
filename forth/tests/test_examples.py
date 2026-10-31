@@ -33,7 +33,7 @@ def fixtures():
 
 class ExampleChecks(unittest.TestCase):
     def test_examples_in_cpu_model(self):
-        image = build_image()
+        image = build_image(dual_console=False)
         for name, source, expected, stack in fixtures():
             with self.subTest(name=name):
                 self.assertTrue(all(len(line) <= 127 for line in source.splitlines()))
@@ -52,7 +52,7 @@ class ExampleChecks(unittest.TestCase):
     def test_word_reference_covers_every_kernel_word_once(self):
         text = (ROOT / 'forth/WORDS.md').read_text()
         documented = re.findall(r'^\| `([^`]+)` \|', text, re.MULTILINE)
-        names = [w['name'] for w in build_image().words]
+        names = [w['name'] for w in build_image(dual_console=False).words]
         self.assertEqual(len(documented), len(set(documented)))
         self.assertEqual(set(documented), set(names))
 
@@ -60,7 +60,7 @@ class ExampleChecks(unittest.TestCase):
         if not RTL:
             self.skipTest('enable executable documentation/UART checks with --rtl')
         with tempfile.TemporaryDirectory(prefix='forth-examples-') as directory:
-            simulator = RtlConsole(directory, build_image())
+            simulator = RtlConsole(directory, build_image(dual_console=False))
             for name, source, expected, stack in fixtures():
                 with self.subTest(name=name):
                     output, actual, _ = simulator.session(source)

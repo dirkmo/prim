@@ -24,7 +24,7 @@ RTL = False
 class ConsoleChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.image = build_image()
+        cls.image = build_image(dual_console=False)
 
     def test_number_output_all_bases(self):
         for base in range(2, 37):
@@ -228,7 +228,7 @@ class ConsoleChecks(unittest.TestCase):
             sim.build()
             for name, values, expected in (('.', [65529], b'-7 '), ('U.', [42], b'42 '),
                                            ('.S', [1, 2], b'<2> 1 2 ')):
-                image = build_image()
+                image = build_image(dual_console=False)
                 p = Image()
                 start = image.symbols['user_start']
                 p.org(start)

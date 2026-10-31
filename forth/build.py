@@ -15,8 +15,9 @@ from forth.image import Image, KERNEL_START, RAM_END, USER_LIMIT
 from forth.kernel.boot import VARIABLES, emit_kernel
 
 
-def build_image():
+def build_image(*, dual_console=True):
     image = Image()
+    image.dual_console = dual_console
     emit_kernel(image)
     image.resolve()
     return image
@@ -25,6 +26,9 @@ def build_image():
 def memory_map(image):
     return {
         'format': 'prim-forth-map-v1',
+        'console_profile': 'dual' if image.dual_console else 'uart-only',
+        'console_variables': {name: address for name, address in image.symbols.items()
+                              if 0xF000 <= address < 0xFF00 and name != 'user_limit'},
         'stage': 'AP8 interpreter/compiler, control, data definitions and strings',
         'image': {'file': 'kernel.bin', 'start': 0, 'size': RAM_END,
                   'endianness': 'little', 'entry': 0},
@@ -47,8 +51,8 @@ def memory_map(image):
     }
 
 
-def write_artifacts(directory):
-    image = build_image()
+def write_artifacts(directory, *, dual_console=True):
+    image = build_image(dual_console=dual_console)
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     (directory / 'kernel.bin').write_bytes(image.memory)
@@ -60,9 +64,10 @@ def write_artifacts(directory):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--uart-only', action='store_true', help='Legacy UART polling image for host/models without PS/2 or VGA')
     parser.add_argument('--output', type=Path, default=ROOT / 'build' / 'forth')
     args = parser.parse_args()
-    image = write_artifacts(args.output)
+    image = write_artifacts(args.output, dual_console=not args.uart_only)
     print(f'Built {args.output / "kernel.bin"}: {len(image.memory)} RAM bytes; '
           f'USER_START=0x{image.symbols["user_start"]:04x}; '
           f'{len(image.words)} kernel words (interactive interpreter)')

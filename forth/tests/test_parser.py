@@ -24,7 +24,7 @@ RTL = False
 class ParserChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.image = build_image()
+        cls.image = build_image(dual_console=False)
 
     def runner(self, rx=()):
         # Exercise all private routines with a full eight-cell user stack.
@@ -183,7 +183,7 @@ class ParserChecks(unittest.TestCase):
             simulation.build()
             for text, status, value in ((' -$8000 next', 1, 32768),
                                         (' 65536', 2, 0), (' 12z', 0, 0)):
-                image = build_image()
+                image = build_image(dual_console=False)
                 p = Image()
                 p.org(image.symbols['user_start'])
                 p.push(len(text))
@@ -219,7 +219,7 @@ class ParserChecks(unittest.TestCase):
             self.skipTest('enable UART-buffer input/editor test with --rtl')
         from support.process import run
 
-        image = build_image()
+        image = build_image(dual_console=False)
         p = Image()
         start = image.symbols['user_start']
         p.org(start)

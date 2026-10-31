@@ -32,7 +32,7 @@ EXPECTED = b'ok\r\n' + b''.join(line + b'\r\n' + result + b'ok\r\n' for line, re
 
 class SystemChecks(unittest.TestCase):
     def test_mixed_session_and_reset(self):
-        image = build_image()
+        image = build_image(dual_console=False)
         output, stack, memory, _ = session(image, SOURCE)
         self.assertEqual(output, EXPECTED)
         self.assertEqual(stack, [])
@@ -46,7 +46,7 @@ class SystemChecks(unittest.TestCase):
         if not RTL:
             self.skipTest('enable mixed UART-buffer session with --rtl')
         with tempfile.TemporaryDirectory(prefix='forth-mixed-') as directory:
-            output, stack, _ = RtlConsole(directory, build_image()).session(SOURCE)
+            output, stack, _ = RtlConsole(directory, build_image(dual_console=False)).session(SOURCE)
             self.assertEqual(output, EXPECTED)
             self.assertEqual(stack, [])
 
@@ -56,7 +56,7 @@ class SystemChecks(unittest.TestCase):
         tools = configured_tools()
         with tempfile.TemporaryDirectory(prefix='forth-wire-') as directory:
             directory = Path(directory)
-            image = bytes(build_image().memory) + bytes(16)
+            image = bytes(build_image(dual_console=False).memory) + bytes(16)
             image_file, source_file, expected_file, tx_file = [directory / (n + '.hex')
                 for n in ('image', 'source', 'expected', 'tx')]
             image_file.write_text(''.join(f'{image[n+1]:02x}{image[n]:02x}\n' for n in range(0, 65536, 2)))

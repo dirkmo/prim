@@ -19,10 +19,7 @@ def emit_console(image):
         c.store(name)
 
     def output(text):
-        for byte in text:
-            c.push(byte)
-            c.push('uart_data')
-            c.ops(Op.BYTE_STORE)
+        c.output(text)
 
     def field(name, offset, byte=False):
         c.load(name)

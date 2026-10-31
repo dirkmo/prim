@@ -48,7 +48,7 @@ class BootChecks(unittest.TestCase):
             self.assertEqual(data[start:], bytes(65520 - start))
 
     def test_cold_start_reinitializes_dirty_runtime_without_erasing_user_ram(self):
-        image = build_image()
+        image = build_image(dual_console=False)
         memory = Memory(image.memory, uart=True)
         memory.data[0x100:0x400] = b'\xa5' * 0x300
         memory.data[0xE000:0xE004] = b'kept'
@@ -118,7 +118,7 @@ class BootChecks(unittest.TestCase):
         from support.paths import TIMINGS
         from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
 
-        image = build_image()
+        image = build_image(dual_console=False)
         fixture = bytearray(image.memory)
         # Test-only stop before idle jumps into the production console.
         fixture[image.symbols['idle']] = Op.BREAK

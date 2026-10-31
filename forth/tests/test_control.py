@@ -30,7 +30,7 @@ CASES = [
 class ControlChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.image = build_image()
+        cls.image = build_image(dual_console=False)
 
     def test_conditionals_loops_and_nested_control(self):
         for source, expected in CASES:
@@ -120,7 +120,7 @@ class ControlChecks(unittest.TestCase):
         from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
         # Source is interpreted/compiled by Prim; host only installs its bytes.
         source = b': x IF 1 ELSE 2 THEN ; 0 x'
-        image = build_image()
+        image = build_image(dual_console=False)
         p = Image()
         p.org(USER_LIMIT)
         p.push(len(source)); p.push(VARIABLES['input_length']); p.op(Op.STORE)
