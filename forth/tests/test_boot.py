@@ -53,7 +53,7 @@ class BootChecks(unittest.TestCase):
         memory.data[0xE000:0xE004] = b'kept'
         cpu = Prim(memory)
         for _ in range(2):
-            memory.data[0x100:0x126] = b'\xa5' * 0x26
+            memory.data[0x100:0x128] = b'\xa5' * 0x28
             memory.uart_ie = 12  # CPU reset alone preserves peripheral enables.
             cpu.reset()
             cpu._int_enable = True  # INTDI must actually disable, not rely on reset.
@@ -73,9 +73,9 @@ class BootChecks(unittest.TestCase):
             self.assertEqual(memory.uart_ie, 0)
             self.assertEqual(memory.tx, [])
             self.assertEqual(memory.read16(0x100), image.symbols['user_start'])
-            self.assertEqual(memory.read16(0x102), 0)  # Empty dictionary.
+            self.assertEqual(memory.read16(0x102), image.symbols['kernel_latest'])
             self.assertEqual(memory.read16(0x104), 10)
-            self.assertEqual(memory.data[0x106:0x126], bytes(0x20))
+            self.assertEqual(memory.data[0x106:0x128], bytes(0x22))
             self.assertEqual(memory.data[0x200], 0)
             self.assertEqual(memory.data[0x280], 0)
             self.assertEqual(memory.data[0xE000:0xE004], b'kept')
@@ -125,9 +125,11 @@ class BootChecks(unittest.TestCase):
                     self.assertEqual(result.serial, b'')
                     writes = [w for record in result.records
                               for w in record.get('writes', [])]
-                    expected = {address: 0 for address in range(0x100, 0x126)}
+                    expected = {address: 0 for address in range(0x100, 0x128)}
                     start = image.symbols['user_start']
+                    latest = image.symbols['kernel_latest']
                     expected.update({0x100: start & 255, 0x101: start >> 8,
+                                     0x102: latest & 255, 0x103: latest >> 8,
                                      0x104: 10, 0x200: 0, 0x280: 0, 0xFFFE: 0})
                     self.assertEqual(dict(writes), expected)
                     self.assertEqual(len(writes), len(expected))

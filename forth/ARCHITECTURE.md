@@ -1,7 +1,8 @@
 # Kleines Forth auf Prim – Architekturentscheidung (AP 1)
 
 Stand: 31. Oktober 2026. Zielarchitektur; AP 2 implementiert Build und Boot,
-alle weitergehenden Sprachfunktionen sind noch geplant. Änderungen hier begründen.
+AP 3 die Grundwörter. Textinterpreter und Compiler noch geplant. Änderungen
+hier begründen; aktuellen Stand und Messwerte in STATUS.md nachlesen.
 Arbeitsstand und APs: [STATUS.md](STATUS.md).
 
 ## Ziel und Abgrenzung
@@ -32,6 +33,10 @@ Alle Bereiche sind Byteadressen; Zellen sind 16 Bit Little Endian.
 | `USER_START..EFFF` | Benutzerwörterbuch, Code und Daten, aufwärts wachsend |
 | `F000..FFEF` | Reserve, nicht durch ALLOT/Compiler belegen |
 | `FFF0..FFFF` | System-MMIO, kein normaler RAM |
+
+Ab AP 3 ist Scratch 0380..038D für nicht reentrante Software-Arithmetik belegt;
+038E..03FF bleibt für weitere Scratchzwecke frei. Kein anderer Kernelpfad darf
+dort Werte über einen Arithmetikaufruf hinweg als erhalten voraussetzen.
 
 `USER_START = align2(KERNEL_END)`; Buildfehler, wenn der Kernel keinen
 Benutzerspeicher vor F000 lässt. Kein fester, ungemessener Kernelgrößenanspruch.
@@ -221,7 +226,8 @@ AP 6 implementiert beide Optimierungen ohne ISA-Änderung:
 
 ## Öffentlicher Wortumfang der ersten Version
 
-Dies ist der Zielumfang nach AP 8, nicht die Liste bereits vorhandener Wörter.
+Dies ist der Zielumfang nach AP 8; Zeilen für AP 3 sind implementiert,
+die übrigen Wörter noch geplant. Aktuelle Wortliste und Prüfungen in README.md.
 Stubs/Inline-Emitter müssen jeweils dieselben dokumentierten Stackeffekte haben.
 
 | AP | Wörter |

@@ -23,6 +23,7 @@ class Image:
         self.instructions = []
         self.relocations = []
         self.occupied = set()
+        self.words = []
 
     def define(self, name, value=None):
         if name in self.symbols:
@@ -65,6 +66,14 @@ class Image:
             self.emit([Op.PUSH, value & 0xFF, value >> 8])
         else:
             raise ValueError('literal outside 16-bit range')
+
+    def cell(self, value):
+        """Emit a data cell (possibly relocated), never an instruction."""
+        if isinstance(value, Ref):
+            self.relocations.append((self.pc, value.name))
+            self.emit([0, 0])
+        else:
+            self.emit(value.to_bytes(2, 'little'))
 
     def resolve(self):
         # Validate all references before patching any operand.

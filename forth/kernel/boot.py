@@ -1,7 +1,8 @@
-"""AP 2 cold start; idle is replaced by the console in later work packages."""
+"""Cold start and kernel composition; idle awaits the later text console."""
 from prim.isa import PrimOpcodes as Op
 
 from forth.image import KERNEL_START, USER_LIMIT, Ref
+from forth.kernel.primitives import emit_primitives
 
 # Private RAM cells; public Forth words will expose selected cells later.
 VARIABLES = {
@@ -11,7 +12,7 @@ VARIABLES = {
         'input_length', 'input_pos', 'string_length', 'control_depth',
         'definition_open', 'saved_here', 'saved_latest', 'pending_header',
         'last_opcode', 'last_end', 'fold_safe', 'skip_lf',
-        'token_addr', 'token_length',
+        'token_addr', 'token_length', 'last_error',
     ))
 }
 
@@ -54,8 +55,9 @@ def emit_kernel(image):
     image.define('idle')
     image.push(Ref('idle'))
     image.op(Op.JP)
+    emit_primitives(image)
     image.define('kernel_end')
-    image.define('kernel_latest', 0)  # No public words/headers until AP 3.
+    image.define('kernel_latest', image.symbols[image.words[-1]['header']])
     user_start = (image.pc + 1) & ~1
     if user_start >= USER_LIMIT:
         raise ValueError('kernel leaves no user dictionary space')

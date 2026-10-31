@@ -25,11 +25,13 @@ def build_image():
 def memory_map(image):
     return {
         'format': 'prim-forth-map-v1',
-        'stage': 'AP2 boot only; no Forth interpreter yet',
+        'stage': 'AP3 checked primitives; no text interpreter yet',
         'image': {'file': 'kernel.bin', 'start': 0, 'size': RAM_END,
                   'endianness': 'little', 'entry': 0},
         'symbols': dict(sorted(image.symbols.items())),
         'variables': VARIABLES,
+        'words': [{**word, 'header': image.symbols[word['header']],
+                   'xt': image.symbols[word['xt']]} for word in image.words],
         'regions': [
             {'name': name, 'start': start, 'end_exclusive': end}
             for name, start, end in (
@@ -62,7 +64,8 @@ def main():
     args = parser.parse_args()
     image = write_artifacts(args.output)
     print(f'Built {args.output / "kernel.bin"}: {len(image.memory)} RAM bytes; '
-          f'USER_START=0x{image.symbols["user_start"]:04x} (boot only)')
+          f'USER_START=0x{image.symbols["user_start"]:04x}; '
+          f'{len(image.words)} kernel words (no text interpreter yet)')
 
 
 if __name__ == '__main__':

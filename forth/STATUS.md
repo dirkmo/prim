@@ -8,12 +8,12 @@ Ein kleines, eigenständiges Forth unter `forth/` im Projekt-Root entwickeln.
 Es verwendet normale Forth-Syntax und einen vollständig auf der Prim-CPU
 laufenden Textinterpreter und Compiler. Standardkonformität ist kein Ziel.
 
-**AP 1 und AP 2 sind abgeschlossen. Kernel-Build und Boot sind implementiert;
-noch kein Forth-Interpreter oder Laufzeitcompiler.** Der Nutzer hat zuletzt
-mit „nun ap2“ AP 2 beauftragt. AP 3 wurde nicht begonnen.
+**AP 1–3 sind abgeschlossen. Kernel-Build, Boot und 50 geprüfte Grundwörter
+sind implementiert; noch kein Textinterpreter oder Laufzeitcompiler.**
+Der Nutzer hat zuletzt mit „nun ap3“ AP 3 beauftragt. AP 4 wurde nicht begonnen.
 Die konkrete Architektur steht in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-AP 3–10 sind offen. Dieses Dokument bei späterer Arbeit knapp aktuell halten:
+AP 4–10 sind offen. Dieses Dokument bei späterer Arbeit knapp aktuell halten:
 Entscheidungen, betroffene Dateien, Prüfungen und nächste Schritte festhalten.
 
 ## Verbindliche Leitplanken aus dem Gespräch
@@ -121,13 +121,14 @@ sie ohne Abhängigkeit von TokenForth-Sprachsemantik geeignet sind.
 Ergebnis: [build.py](build.py), [image.py](image.py) und
 [kernel/boot.py](kernel/boot.py) erzeugen ein RAM-Image, Symbol-/Speicherkarte
 und Instruktionsdisassembly. Boot initialisiert Kernelzustand und UART-
-Interruptfreigaben; anschließend endlose JP-Warteschleife. Keine öffentlichen
-Forth-Wörter oder Wörterbuchheader vorhanden, kernel_latest=0.
+Interruptfreigaben; anschließend endlose JP-Warteschleife. Im damaligen
+AP-2-Stand noch keine öffentlichen Forth-Wörter oder Header, kernel_latest=0;
+durch AP 3 inzwischen erweitert (aktueller Stand unten).
 
 Befehle und Simulatorverfahren: [README.md](README.md). Artefakte unter
 build/forth/: kernel.bin (65520 Bytes, ohne MMIO), kernel.map.json,
-kernel.disasm. Aktuell idle=0487, KERNEL_END=048B, USER_START=048C.
-Variablenzellen 0100..0125; genaue Namen/Adressen in kernel/boot.py und Map.
+kernel.disasm. Im AP-2-Stand idle=0487, KERNEL_END=048B, USER_START=048C.
+Variablenzellen damals 0100..0125; aktuelle Adressen in kernel/boot.py und Map.
 Alle übrigen in AP 1 reservierten Bereiche bleiben bestehen.
 
 Validierung: ` .venv/bin/python forth/tests/test_boot.py --rtl -v `:
@@ -138,14 +139,48 @@ Kaltstart geprüft. Nur Testkopie erhält BREAK bei idle. Kein Boardtest.
 
 ### AP 3 – Grundwörter und UART
 
-Status: offen. Abhängigkeiten: AP 2.
+Status: abgeschlossen (31. Oktober 2026). Abhängigkeiten: AP 2.
 
 Stackoperationen, Arithmetik, Vergleiche, Speicherzugriffe, `KEY`, `EMIT` und
 `CR` bereitstellen. Fehlende Rechenoperationen in Software ergänzen, soweit
 für die folgenden APs benötigt. Returnstackzugriffe mit Aufrufkonvention
 abgleichen; vorhandene CPU-Mnemonics nicht blind als Forth-Wörter übernehmen.
 
-Ergebnis: grundlegende Operationen und UART-Ein-/Ausgabe funktionieren.
+Ergebnis: [kernel/primitives.py](kernel/primitives.py) erzeugt alle 50 Wörter
+des AP-3-Zielumfangs mit Stackprüfungen, verketteten Headern und aufrufbaren XT.
+Alle Header derzeit Kompilierklasse 0; gleichwertige Inline-Emitter folgen in
+AP 6. Details und Wortliste: [README.md](README.md).
+
+Software-Multiplikation und gemeinsame signed Division mit 16 Rechenschritten;
+keine neuen CPU-Instruktionen. Private Fehlerausgänge geben den Grund über
+UART aus, setzen logischen Stack-/Compilerzustand zurück und springen über
+error_exit nach idle. Kein Zeilenhandling oder Definitionsrollback vorgezogen.
+
+Aktuell idle=048D, KERNEL_END=1131, USER_START=1132, kernel_latest=0C7C.
+Variablen bis 0127; neue Zelle last_error an 0126. Arithmetik-Scratch exklusiv
+0380..038D (a,b,q,rem,count,qsign,rsign), Rest ab 038E frei. Nicht reentrant.
+Beim Weiterentwickeln sind generierte Map und Variablenzuordnung maßgeblich.
+
+Validierung (alle erfolgreich):
+
+```sh
+.venv/bin/python forth/build.py
+.venv/bin/python forth/tests/test_boot.py --rtl -v
+.venv/bin/python forth/tests/test_primitives.py --rtl -v
+```
+
+4 Boottests und 9 Grundworttests. Darin 3 Boot- und 27 Grundwortvergleiche
+CPU/SRAM/UART gegen Python sowie ein gerichteter KEY-Test mit uart_buffers,
+verzögertem ACK und NUL-Empfang. Python prüft alle Wörter, Grenz-/Zufallswerte,
+alle zu kleinen Eingabetiefen, alle wachsenden Wörter an der Stackgrenze,
+Fehlerfälle und Wiederaufnahme nach Fehler. Echte Hardware nicht geprüft.
+
+Strukturelle Stackprüfung aller Verzweigungen/Schleifen/Hilfsaufrufe bei
+zulässigen Eingabetiefen: maximal 10 physische Datenzellen, höchstens 2
+zusätzlich zur Eingabetiefe, maximal 2 Returnstack-Einträge einschließlich
+Aufruf des öffentlichen Wortes. Dynamische Tests bestätigen diese Budgets.
+Boot nun 72 Instruktionen, weiterhin maximal 2 Datenzellen und 0 Returnframes.
+Spätere Interpreter-/Compilerframes müssen zusätzlich berücksichtigt werden.
 
 ### AP 4 – Texteingabe und Parser
 
@@ -224,13 +259,18 @@ Ergebnis: Nutzung und Weiterentwicklung ohne Kenntnis des ursprünglichen Chats.
 
 ## Letzte Prüfung und nächster Schritt
 
-- AP 2 vollständig unter forth/ umgesetzt; CPU, TokenForth und bestehende
-  Simulationshelfer unverändert. Tests siehe AP 2 und README.md.
-- Nächster AP: AP 3, Grundwörter und UART. Emitterschnittstelle: Image.define,
-  org, op, push(Ref(...)/Zahl), emit, resolve. Kernelaufbau in emit_kernel;
-  USER_START und Bootinitialisierung folgen derzeit direkt dem Bootcode.
-  Beim Hinzufügen von Wörtern Kernelende und kernel_latest entsprechend
-  nach hinten verlegen und Boottests auf das neue Wörterbuch anpassen.
-- Budget von acht temporären Datenzellen für weitere Kernelpfade nachweisen;
-  bisher ist nur Boot mit maximal zwei belegt. Keine stillschweigende
-  Stackvergrößerung. Falls nötig Architekturentscheidung explizit überarbeiten.
+- AP 3 vollständig unter forth/ umgesetzt; CPU, TokenForth und bestehende
+  Simulationshelfer unverändert. Alle oben genannten Tests bestanden.
+- Nächster AP: AP 4, Texteingabe/Parser und Zahlenkonvertierung. Öffentliche
+  KEY/EMIT zählen DEPTH für Benutzerwerte; interne Parser-I/O braucht rohe
+  Varianten ohne Änderung der logischen Benutzertiefe. Code-Emitter Code in
+  kernel/primitives.py wiederverwenden oder beim Erweitern sauber aufteilen.
+- Image bietet define/org/op/push/cell/emit/resolve. image.words enthält
+  Name, Header-/XT-Symbol und need/give; Map löst diese Symbole auf Adressen auf.
+  Kernelaufbau: Boot+idle, dann emit_primitives (Header, Wörter, Hilfsroutine,
+  Fehlerausgänge), danach kernel_end/user_start. Weitere Routinen vor kernel_end
+  einfügen; kernel_latest derzeit auf letzten Eintrag von image.words gesetzt.
+- error_exit führt derzeit nach idle. Zeilenverwerfen ab AP 5 und Rollback
+  ab AP 6 ergänzen; beim Fehler keine Rückkehr durch verworfene Frames.
+- Budget weiterer Kernelpfade einschließlich zusätzlicher Aufrufrahmen prüfen.
+  Keine stillschweigende Stackvergrößerung; Architekturänderungen dokumentieren.
