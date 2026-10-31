@@ -18,8 +18,9 @@ always @(posedge we) if(!reset&&!cs) memory[ram_addr[14:0]]=ram_data;
 reg [7:0] expected[0:1023], keys[0:1023], debug_bytes[0:4095], video_snapshot[0:4095];
 reg [7:0] received;
 integer cpu_count=0, debug_count=0, position=0, key_position=0, expected_count;
-integer k0,k1,k2,k3,k4,waitpc,keypc,idlepc,cycles=0,tx_file,irq_entries=0,pixels=0;
+integer k0,k1,k2,k3,k4,k5,waitpc,keypc,idlepc,cycles=0,tx_file,irq_entries=0,pixels=0;
 integer ds=0,rs=0,max_ds=0,max_rs=0;
+reg in_isr=0;
 reg [6:0] opcode;
 string image_path, expected_path, keys_path, output_path;
 
@@ -112,16 +113,22 @@ always @(posedge clk) if(!reset) begin
         if(opcode==OP_FROM_R || opcode==OP_RDROP) rs=rs-1;
         if(dut.cpu.r_ir[7] && opcode!=OP_CALL && opcode!=OP_JP && opcode!=OP_JZ && opcode!=OP_INT)
             rs=rs-1;
-        if(dut.cpu.r_int_enable && opcode!=OP_INTEI && opcode!=OP_INTDI && opcode!=OP_NOP)
-            $fatal(1,"interrupts enabled outside wait/return boundary opcode=%h",opcode);
+        if(in_isr) begin
+            if(opcode!=OP_INTDI && dut.cpu.r_int_enable)
+                $fatal(1,"interrupts enabled inside ISR opcode=%h",opcode);
+            if(dut.cpu.r_ir==(OP_INTEI|128)) in_isr=0;
+        end
     end
-    if(dut.cpu.w_phase_irq) begin rs=rs+1; irq_entries=irq_entries+1; end
-    if(ds<0 || ds>16 || rs<0 || rs>16) $fatal(1,"physical stack budget DS=%0d RS=%0d",ds,rs);
+    if(dut.cpu.w_phase_irq) begin
+        if(in_isr) $fatal(1,"nested ISR entry");
+        in_isr=1; rs=rs+1; irq_entries=irq_entries+1;
+    end
+    if(ds<0 || ds>32 || rs<0 || rs>32) $fatal(1,"physical stack budget DS=%0d RS=%0d",ds,rs);
     if(ds>max_ds) max_ds=ds;
     if(rs>max_rs) max_rs=rs;
 end
 
-integer saved_uart, final_uart;
+integer saved_uart, final_uart, saved_irq, saved_tail;
 reg [9:0] saved_h;
 initial begin
     if(!$value$plusargs("image=%s",image_path) || !$value$plusargs("expected=%s",expected_path) ||
@@ -129,10 +136,11 @@ initial begin
        !$value$plusargs("expected_count=%d",expected_count) || !$value$plusargs("waitpc=%d",waitpc) ||
        !$value$plusargs("keypc=%d",keypc) || !$value$plusargs("idlepc=%d",idlepc) ||
        !$value$plusargs("k0=%d",k0) || !$value$plusargs("k1=%d",k1) || !$value$plusargs("k2=%d",k2) ||
-       !$value$plusargs("k3=%d",k3) || !$value$plusargs("k4=%d",k4)) $fatal(1,"missing fixtures");
+       !$value$plusargs("k3=%d",k3) || !$value$plusargs("k4=%d",k4) ||
+       !$value$plusargs("k5=%d",k5)) $fatal(1,"missing fixtures");
     $readmemh(image_path,memory);
     $readmemh(expected_path,expected,0,expected_count-1);
-    $readmemh(keys_path,keys,0,k0+k1+k2+k3+k4-1);
+    $readmemh(keys_path,keys,0,k0+k1+k2+k3+k4+k5-1);
     memory['he000/2]=16'h1234; memory['he002/2]=16'h5678;
     tx_file=$fopen(output_path,"w");
     repeat(4) @(negedge clk); reset=0;
@@ -164,7 +172,22 @@ initial begin
     row_check(28,"ok"); row_check(29,"");
     if(!dut.io.video.display.row_offset || dut.io.video.display.cursor_y!=29)
         $fatal(1,"VGA scroll/cursor");
-    if(cpu_count!=saved_uart || cpu_count!=expected_count) $fatal(1,"UART final length");
+    if(cpu_count!=saved_uart) $fatal(1,"local scroll leaked to UART");
+    // A user word executes continuously while >16 physical PS/2 bytes arrive.
+    // No KEY or collector polling can service the hardware FIFO here.
+    memory['h5000/2]=0;
+    uart_text(": busy BEGIN 20480 @ UNTIL ;\015"); quiet();
+    uart_text("busy\015");
+    wait(dut.cpu.w_phase_memop && dut.cpu.T==16'h5000 && !dut.cpu.o_we);
+    snapshot(); saved_irq=irq_entries; saved_tail=memory['hf182/2];
+    keyboard_text(k5);
+    wait(!dut.io.keyboard.fifo.count && memory['hf182/2]==((saved_tail+k5)&63));
+    unchanged();
+    if(irq_entries<=saved_irq || memory['hf180/2]!=saved_tail || memory['hf184/2]!=0)
+        $fatal(1,"asynchronous input was not buffered during busy word");
+    @(negedge clk); memory['h5000/2]=1;
+    quiet(); row_check(28,"1234 ok"); row_check(29,"");
+    if(cpu_count!=expected_count) $fatal(1,"UART final length");
     if(memory['he000/2]!==16'h1234 || memory['he002/2]!==16'h5678 || dut.io.bank)
         $fatal(1,"VRAM mapping damaged SRAM or was left enabled");
     if(memory['h108/2]!==0 || memory['h112/2]!==0 || !irq_entries || !pixels)

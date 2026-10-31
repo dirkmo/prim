@@ -104,8 +104,8 @@ def compare_records(image, records, max_steps=1000, exit_code=0, uart=False, mem
                                      Op.DROP, Op.TO_R, Op.INTAD) else 0)
         rs_delta = (1 if op in (Op.CALL, Op.INT, Op.TO_R)
                     else -1 if op in (Op.FROM_R, Op.RDROP) else 0)
-        ds_depth = min(16, max(0, ds_depth + ds_delta))
-        rs_depth = min(16, max(0, rs_depth + rs_delta))
+        ds_depth = min(Prim.DS_SIZE, max(0, ds_depth + ds_delta))
+        rs_depth = min(Prim.RS_SIZE, max(0, rs_depth + rs_delta))
         # Apply push/pop and return in order, including saturation on overflow.
         if ir & 0x80 and op not in (Op.CALL, Op.JP, Op.JZ, Op.INT):
             rs_depth = max(0, rs_depth - 1)
@@ -116,8 +116,8 @@ def compare_records(image, records, max_steps=1000, exit_code=0, uart=False, mem
             equal(field, record[field], expected)
         # Ignore unused cells: Python clears popped cells; hardware may retain them.
         equal('ds', record['ds'][:ds_depth],
-              [cpu._ds[(cpu._dsp - i) % 16] for i in range(ds_depth)])
+              [cpu._ds[(cpu._dsp - i) % Prim.DS_SIZE] for i in range(ds_depth)])
         equal('rs', record['rs'][:rs_depth],
-              [cpu._rs[(cpu._rsp - i) % 16] for i in range(rs_depth)])
+              [cpu._rs[(cpu._rsp - i) % Prim.RS_SIZE] for i in range(rs_depth)])
         steps += 1
     raise RuntimeError(f'RTL trace ended without a BREAK/SIMEND marker (exit {exit_code})')

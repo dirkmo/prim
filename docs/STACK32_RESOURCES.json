@@ -1,0 +1,168 @@
+{
+  "artifact_sha256": {
+    "build/sim/forth-tests/artifacts/dual_system/image.hex": "1f777a126af9cd9e8c5c1e833d3f72ecc213dafc9ca754ac0ee97bc378093fa6",
+    "build/sim/forth-tests/artifacts/dual_system/simulation.log": "052e876f76af2b2e88afc4c5368fba1bfbacc670897d6d75fcb5a52df8c02e8a",
+    "build/sim/forth-tests/report.json": "03900e7da3655057773f34d3f50932d1654a26b59d03b462fdbf2aaa3f775df2",
+    "build/stack32/board/nextpnr.log": "87b0e5eaa5247995adc7d212c8bab773bb918954582c9e93d4c2478726f57807",
+    "build/stack32/board/prim.bin": "50971fb9163f74828ab8606a7671544a4e0e334171ff7794e097bc3851bc4ea5",
+    "build/stack32/board/prim.json": "9cc9169f52163e75f254e4a395db52f7bd253c8f301ca1b4563d1a86727a0e4a",
+    "build/stack32/board/synth.log": "de5e9234ce305b1d1ef9197c94735a3e5eaa312169cba6db57cbf3ce08c51e26",
+    "build/stack32/board/timing.json": "b001c77445f5ee790368bba483d5641917844f46eee0a5d7ea0a5d75322227c4",
+    "build/stack32/ctest.log": "aaa8729330a7dc4e64a029f7027e470c20a2504f7fa2832fccc1e007a1383461",
+    "build/stack32/forth/kernel.bin": "9022990450d40b94e9dfdd346403321cd45f8ff7b2fad4e54faf8c3f50f4bdf2",
+    "build/stack32/forth/kernel.map.json": "4c129ff91097ffa0592bd86d7dcc6ce299f5635bc7e2e6dc883a4da664db6084",
+    "build/stack32/uart-only/kernel.bin": "bc136180c50bbc01c6f57d5373d2e50c95970856dcc83aaaaa672bcc7e8074f9",
+    "build/stack32/uart-only/kernel.map.json": "9aa9c5caa22e0cfadd252e2c09eefc463de7a8798d119359b0d1b7ff0cc58338"
+  },
+  "board": {
+    "clock_mhz": 25,
+    "flip_flops": 1569,
+    "fmax": {
+      "clk_sys": {
+        "achieved": 30.33704376220703,
+        "constraint": 25
+      }
+    },
+    "seed": 1,
+    "synthesis_cells": {
+      "$_TBUF_": 16,
+      "$scopeinfo": 18,
+      "SB_CARRY": 340,
+      "SB_DFF": 56,
+      "SB_DFFE": 1090,
+      "SB_DFFESR": 293,
+      "SB_DFFESS": 11,
+      "SB_DFFSR": 109,
+      "SB_DFFSS": 10,
+      "SB_LUT4": 4934,
+      "SB_PLL40_CORE": 1,
+      "SB_RAM40_4K": 17
+    },
+    "utilization": {
+      "ICESTORM_LC": {
+        "available": 7680,
+        "used": 5872
+      },
+      "ICESTORM_PLL": {
+        "available": 2,
+        "used": 1
+      },
+      "ICESTORM_RAM": {
+        "available": 32,
+        "used": 17
+      },
+      "SB_GB": {
+        "available": 8,
+        "used": 4
+      },
+      "SB_IO": {
+        "available": 206,
+        "used": 56
+      },
+      "SB_WARMBOOT": {
+        "available": 1,
+        "used": 0
+      }
+    }
+  },
+  "date": "2026-10-31",
+  "forth_checked_user_cells": 8,
+  "general_stack_overflow_protection": false,
+  "git_parent": "d5e7bd0e9339fec6390118065664a052eb80df26",
+  "hardware_stack_cells_each": 32,
+  "irq_policy": "Enabled during normal Forth execution; masked in ISR, initialization and receive-loss recovery",
+  "profiles": {
+    "forth": {
+      "free_dictionary_bytes_after_boot": 44150,
+      "kernel_bytes": 16265,
+      "user_start": 17290
+    },
+    "uart-only": {
+      "free_dictionary_bytes_after_boot": 47534,
+      "kernel_bytes": 12881,
+      "user_start": 13906
+    }
+  },
+  "source_sha256": {
+    "boards/olimex_ice40hx8k_evb/board.pcf": "c87f246fe40164abc2ea2690066bd3eb55d0989650e6aa826cae8ab28f42ab0a",
+    "boards/olimex_ice40hx8k_evb/top.v": "3f804b2d8b42d0bf5a9e81f9d94fbbf15ca829e3761d527880f82a1ba0ba5d2c",
+    "cpu/rtl/opcodes.v": "61247f7126ce2e2392de889a973174d066764b51432b12b7e5e646581a232662",
+    "cpu/rtl/prim.v": "5a054da9093893b577cb466420ebbb2c0714e4e6a85a99bb44ff76664600f5f0",
+    "cpu/tests/sim.cpp": "e2d66fc5ebde89f6ee0a964b9690c1b43ca5194ce953420d53ac10733d6df98f",
+    "cpu/tests/test_compare.py": "022f5041320050a3500c7dc1b2cd0409226aa78d95f5fe924e7fb3aedd30ca3c",
+    "debug_uart/rtl/debug_uart.v": "0c1228ba28a5944e9a1746b7ef7d283bf58480a5940bed7ee3c168e6733d4648",
+    "debug_uart/rtl/debug_uart_link.v": "8594a2cb9a1f3d3dc7e131918728cff399d12e2ae331662b11275eeb8eda3c2b",
+    "debug_uart/rtl/uart_arbiter.v": "8e37db7a124d900729be6dacbe8ebb1d6cfc29ef8d5a4d96b142b6bb01c3fa26",
+    "debug_uart/rtl/uart_buffers.v": "d42fc0aa19e73ad8c09ef11389bf8c23c9b34c3760228a5e29695b3142a76941",
+    "debug_uart/rtl/uart_rx.v": "cc0c8da94cf7b951cb4bfc1a5101e5c0c3a8ebc4cc6222ec6ea28b725bc001bd",
+    "debug_uart/rtl/uart_tx.v": "bd2a408ac60c1e097c34abebc2fd453cc7212c9780d33f183bacfc546e757051",
+    "forth/build.py": "637d7a14015d8d8602358a1ef9dfbe299520525e4b0e25d02ac5890d499fe006",
+    "forth/image.py": "d6d32e20c94e9db6823d31f7580530aff0aeb3cd213e1922842d049999192c5c",
+    "forth/kernel/__init__.py": "82edb7212d6b27afbe253f3c7ed4cb8c2b96e6419c3f23a091813e165224df96",
+    "forth/kernel/boot.py": "b6270539b169feda9eec7402df47a2a8b1a97dd5e5dc288e25e5125889ede639",
+    "forth/kernel/compiler.py": "f3173a2027e7e5dc834ed0501a6c9a8cd52fc10da4c7d7aeeebfe9f75d541429",
+    "forth/kernel/console.py": "630a5312c7ffbacbd053776c3f3bd73c30c48c60c390f7eb48c0ed4ded8ba24c",
+    "forth/kernel/control.py": "a92dd822c000218fde5aece97f34fb68a8a2666682624a08ed5d415428425a61",
+    "forth/kernel/data.py": "88553b50848cc3eb241239c12d6e590d55678198a2a903a2582fb2d3f1045090",
+    "forth/kernel/frontend.py": "1959784e775a0972c91607a50690719e96ab29c67161ae0d26608c4fe8f05732",
+    "forth/kernel/interrupts.py": "1ef57d9331bad0dcf0c6a429ce36d1dc29d3278568ff9e51c83217c71c855a36",
+    "forth/kernel/io.py": "9e2cd21eaab3f5732d9f54c47a738a3be02ce7717fb8d7331b64d5553ad11683",
+    "forth/kernel/keyboard.py": "5aa50eb5c0df21f75edc51a39aa10dd4d9a25f40dca53305e47bd650e64802f7",
+    "forth/kernel/parser.py": "df39476d876224454cb5e158baed5594a29c8650e346673c8798122512867d55",
+    "forth/kernel/primitives.py": "bcf83b6231acd1fe45ccd8095ca3b35c196643a16df36545e554b2f172770f6f",
+    "forth/tests/dual_support.py": "49f9108d6212127dddc524550adbeb94a14b42da5892f8b04e3c57153226cf20",
+    "forth/tests/forth_sram.py": "bded30eab3e5896b2c6de6f8cb8f88775ffc48960896aba6fba68d8ad61b0c91",
+    "forth/tests/model.py": "621612abd731974471bf8d3c35a41a1863092e390cdba6d32c6e352657bcfc7b",
+    "forth/tests/rtl_console.py": "539060cdd663e22a75e6295dd941fae5ec151f4ac4dff6238aa7758ee1949e9e",
+    "forth/tests/tb_dual_system.sv": "7825c11fc715e390c3ac3dce48429228c75473de084a0983449fd122d3db5dfb",
+    "forth/tests/tb_key.sv": "bec6dd49cfb0f8d909ec78d8b3566dfc7af0ed694138ec4188fcdcb3b96a669b",
+    "forth/tests/tb_parser.sv": "df5077d90cb5b34a362e016fbd5074275125cdcca88117cdd303968be1c30fbf",
+    "forth/tests/tb_system.sv": "aabca8b51451e7c222829c8eb8d2b1682fa554ef1e39e87d90d21e39fc9286e3",
+    "forth/tests/test_boot.py": "0ad94a7351596d6e438540ed0ae4306066a48cce75a23b79abac932bffaa4923",
+    "forth/tests/test_compiler.py": "b041293b8ed842d751dd6835befebe4d2cf813b46f0e36c27930cbf9cb2eb3d8",
+    "forth/tests/test_console.py": "e65b8dcee2867d738dc9682433630ed18439f5d96a39ec49631a0d5e37773956",
+    "forth/tests/test_control.py": "12e7f516d7449fc6da3fcb9a5c2f14794fd4cf5907115cc72773a70b00874452",
+    "forth/tests/test_data.py": "16f47c506af2af2599145ae0485dd8ee701722ac0bc9508064fc7d54b134f219",
+    "forth/tests/test_dual.py": "0b14800423e73d5ba32c57852c26315d78db3d6281480a1842aecf659b70b310",
+    "forth/tests/test_dual_system.py": "2591bb5a71e506de0ff1191be399cdf424ae450f6faa0cf4606086447a5dc2bc",
+    "forth/tests/test_examples.py": "a6d009fa90ad501d9d934e2e923cba9c663b3c71fbc822d4a3650ed024f7462f",
+    "forth/tests/test_frontend.py": "b78be13b12ca5086683fed853f2a40cc7fdd8bed6eebfc16351087d5d2a3d6dd",
+    "forth/tests/test_irq.py": "88f7dc0cc93428258e712c066471c476ebbf12cb4e63c01cac962f8b766b816c",
+    "forth/tests/test_keyboard.py": "eda8d57d7d640b3d534c4a2b503c8ff314591b3cf3fbc910f82b864d06f71c80",
+    "forth/tests/test_parser.py": "6c56e719e6d35635d2d6cb8f4a4fd110724e33623b14bab70952931f90acbd47",
+    "forth/tests/test_primitives.py": "765c8426ac29dfde2fa11894b366cb91abee0fe98cfb0cef6dac05a5dccd926a",
+    "forth/tests/test_system.py": "e6fb9880c1be7e35cbf7ba99568d435c94eb8730ca0fdcc6326bc9907739b707",
+    "forth/tests/tools.py": "0f2d59751f83370168713c181795bb199f07701e0b9236adcef08be55c577ec4",
+    "ps2/rtl/ps2_fifo.v": "def3df1d6b029c939a2075a141cff0a3ba5783226cfe19ed0bdb3b6dab12d1e6",
+    "ps2/rtl/ps2_rx.v": "56849d28a26f8dba5869d20daf6066287124ee73bfd3304fc591c3177e351a74",
+    "src/prim/cpu.py": "ca9a86f586c2ecf697262feaa95ae882b0801ecc87b1d25b7756f52ec6114312",
+    "system/rtl/bus_mux.v": "010f1741b11800d5d8019d60427f3435eb15247af412e4564e018b8a8a0bebea",
+    "system/rtl/memory.v": "b916a19bb77aff461043295be5b4adf1f97b1011ba0034bdd7f585ce7969519e",
+    "system/rtl/memory_io.v": "41259a6d98c5fb8792a5e012c77ca39bfd71201b490d5d3475b1bbd05fd34757",
+    "system/rtl/prim_system.v": "690beabb023a480e3cfd394c4de4152a6540ac4c313e22c672a502ea49f57dd6",
+    "system/rtl/timer_mmio.v": "b013bdf5cbf929b328ba938c90e4f9e613debe451c180067d897ece717205047",
+    "system/tests/tb_memory.sv": "10d36edfbda86c197a7526864283d9c93da42a4461ac0a6e0ff03b44c0de76d0",
+    "tests/support/reference.py": "61b64e0cb9357ef5a8664b2c2f98f71ebd6aad38b637e2d65bc4511c13e25197",
+    "timer/rtl/timer.v": "c720ae2311ff2d5eabb322db83787c09f14b464ecef3c12ba0fbb5325630b45d",
+    "vga/rtl/vga_font.v": "e75c22841259fd8884e38418e9f3ae0dd9c5c1a7839d794f13077724d01a6514",
+    "vga/rtl/vga_text.v": "142e6cc71b535dd2fc41a54ec2c353c15e903d0219b9fad51ab8142521f6ac61"
+  },
+  "validation": {
+    "ctest_suites_passed": 21,
+    "ctest_suites_total": 21,
+    "forth_skipped": 0,
+    "forth_tests": 93,
+    "irq_boundary_cases": {
+      "banked_output": 117,
+      "division": 845
+    },
+    "physical_hardware": "Not programmed or measured",
+    "wire": {
+      "cycles": 6063685,
+      "irq_entries": 248,
+      "max_data_cells": 7,
+      "max_return_cells": 9,
+      "uart_bytes": 159
+    }
+  }
+}

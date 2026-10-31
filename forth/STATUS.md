@@ -1,3 +1,11 @@
+# Current update: 32/32 and asynchronous reception
+
+Hardware stacks now have 32 cells each; the checked Forth user limit remains
+eight. IRQs remain enabled during ordinary dual-console Forth execution, with
+masking inside the ISR and initialization/receive-loss recovery. No general
+stack overflow protection is added. See [validation](../docs/STACK32_IRQ.md).
+The AP history below records the earlier 16/16 implementation and its decisions.
+
 # Forth für Prim – kompakte Übergabe und Arbeitspakete
 
 Stand: 31. Oktober 2026. AP 1–10 abgeschlossen.

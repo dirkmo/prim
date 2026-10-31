@@ -82,7 +82,7 @@ class Runner:
                 return True
             op = opcode & 127
             physical_depth += stack_delta(op)
-            if not 0 <= physical_depth <= 16:
+            if not 0 <= physical_depth <= Prim.DS_SIZE:
                 raise AssertionError(f'physical stack violation in {word}: {physical_depth}')
             self.max_data = max(self.max_data, physical_depth)
             self.max_extra = max(self.max_extra, physical_depth - entry_depth)
@@ -92,7 +92,7 @@ class Runner:
 
     def values(self):
         depth = self.memory.read16(VARIABLES['depth'])
-        return [self.cpu._ds[(self.cpu._dsp - depth + 1 + n) % 16]
+        return [self.cpu._ds[(self.cpu._dsp - depth + 1 + n) % Prim.DS_SIZE]
                 for n in range(depth)]
 
 
@@ -115,7 +115,7 @@ def session(image, payload, prepare=None):
     for steps in range(2000000):
         if cpu._pc in (image.symbols['console_next'], image.symbols['raw_key']) and not memory.rx:
             depth = memory.read16(VARIABLES['depth'])
-            values = [cpu._ds[(cpu._dsp - depth + 1 + n) % 16] for n in range(depth)]
+            values = [cpu._ds[(cpu._dsp - depth + 1 + n) % Prim.DS_SIZE] for n in range(depth)]
             return bytes(memory.tx), values, memory, (max_data, max_frames)
         if cpu._pc == image.symbols['idle']:
             if prepare:
@@ -130,7 +130,7 @@ def session(image, payload, prepare=None):
         frames += int(op == Op.CALL)
         if opcode & 128 and op not in (Op.CALL, Op.JP, Op.JZ):
             frames -= 1
-        if not (0 <= physical <= 16 and 0 <= frames <= 16):
+        if not (0 <= physical <= Prim.DS_SIZE and 0 <= frames <= Prim.RS_SIZE):
             raise AssertionError(f'stack budget at {cpu._pc:04x}: DS={physical}, RS={frames}')
         max_data, max_frames = max(max_data, physical), max(max_frames, frames)
         cpu.step()

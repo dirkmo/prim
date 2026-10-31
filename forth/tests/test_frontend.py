@@ -66,7 +66,7 @@ class FrontendChecks(unittest.TestCase):
         r.until(lambda: not r.ps2_wire and not r.memory.ps2_rx
                 and r.cpu._pc == r.image.symbols['raw_key'])
         self.assertEqual(r.get('console_owner'), 0)
-        self.assertFalse(r.cpu._int_enable)
+        self.assertTrue(r.cpu._int_enable)
         self.assertNotIn(b'9 .', r.memory.screen())
         r.uart('A')
         r.quiet()
@@ -139,7 +139,7 @@ class FrontendChecks(unittest.TestCase):
         self.assertEqual(r.stack(), list(range(1, 9)))
         self.assertLessEqual(r.max_data, 16)
         self.assertLessEqual(r.max_frames, 16)
-        print(f'Dual model stack peak: DS={r.max_data}/16 RS={r.max_frames}/16')
+        print(f'Dual model stack peak: DS={r.max_data}/32 RS={r.max_frames}/32')
 
     def test_cpu_reset_discards_stale_input_and_rebuilds_dictionary(self):
         r = DualSession()

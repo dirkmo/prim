@@ -28,7 +28,7 @@ static vector<unsigned> cpu_state() {
     auto *cpu = pCore->Prim;
     vector<unsigned> state = {cpu->r_pc, cpu->r_dsp, cpu->r_rsp,
         cpu->r_carry, cpu->T, cpu->N, cpu->r_ir, cpu->r_phase};
-    for (unsigned i = 0; i < 16; ++i) {
+    for (unsigned i = 0; i < 32; ++i) {
         state.push_back(cpu->r_dstack[i]);
         state.push_back(cpu->r_rstack[i]);
     }
@@ -42,15 +42,15 @@ static void trace_step(unsigned pc, unsigned ir) {
     fprintf(json_trace,
         "{\"kind\":\"step\",\"at\":%u,\"ir\":%u,\"pc\":%u,\"dsp\":%u,\"rsp\":%u,\"carry\":%u,\"ds\":[",
         pc, ir, cpu->r_pc, cpu->r_dsp, cpu->r_rsp, cpu->r_carry);
-    // Default DSS/RSS=4. T and N cache the first two data stack cells.
-    for (unsigned i = 0; i < 16; ++i) {
+    // Default DSS/RSS=5. T and N cache the first two data stack cells.
+    for (unsigned i = 0; i < 32; ++i) {
         unsigned value = i == 0 ? cpu->T : i == 1 ? cpu->N :
-            cpu->r_dstack[(cpu->r_dsp + 16 - i) & 15];
+            cpu->r_dstack[(cpu->r_dsp + 32 - i) & 31];
         fprintf(json_trace, "%s%u", i ? "," : "", value);
     }
     fprintf(json_trace, "],\"rs\":[");
-    for (unsigned i = 0; i < 16; ++i)
-        fprintf(json_trace, "%s%u", i ? "," : "", cpu->r_rstack[(cpu->r_rsp + 16 - i) & 15]);
+    for (unsigned i = 0; i < 32; ++i)
+        fprintf(json_trace, "%s%u", i ? "," : "", cpu->r_rstack[(cpu->r_rsp + 32 - i) & 31]);
     fprintf(json_trace, "],\"reads\":[");
     for (size_t i = 0; i < reads.size(); ++i)
         fprintf(json_trace, "%s[%u,%u]", i ? "," : "", reads[i].first, reads[i].second);

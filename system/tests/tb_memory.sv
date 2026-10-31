@@ -264,11 +264,11 @@ always @(posedge clk) begin
             #1;
             $fwrite(trace_file, "{\"kind\":\"step\",\"at\":%0d,\"ir\":%0d,\"pc\":%0d,\"dsp\":%0d,\"rsp\":%0d,\"carry\":%0d,\"ds\":[",
                     at, ir, cpu.r_pc, cpu.r_dsp, cpu.r_rsp, cpu.r_carry);
-            for (j=0; j<16; j=j+1)
-                $fwrite(trace_file, "%s%0d", j ? "," : "", trace_value(j==0 ? cpu.T : j==1 ? cpu.N : cpu.r_dstack[(cpu.r_dsp-j)&15]));
+            for (j=0; j<(1<<cpu.DSS); j=j+1)
+                $fwrite(trace_file, "%s%0d", j ? "," : "", trace_value(j==0 ? cpu.T : j==1 ? cpu.N : cpu.r_dstack[(cpu.r_dsp-j)&((1<<cpu.DSS)-1)]));
             $fwrite(trace_file, "],\"rs\":[");
-            for (j=0; j<16; j=j+1)
-                $fwrite(trace_file, "%s%0d", j ? "," : "", trace_value(cpu.r_rstack[(cpu.r_rsp-j)&15]));
+            for (j=0; j<(1<<cpu.RSS); j=j+1)
+                $fwrite(trace_file, "%s%0d", j ? "," : "", trace_value(cpu.r_rstack[(cpu.r_rsp-j)&((1<<cpu.RSS)-1)]));
             $fwrite(trace_file, "],\"reads\":[%s],\"writes\":[%s]}\n", pending_reads, pending_writes);
             pending_reads = ""; pending_writes = "";
         end

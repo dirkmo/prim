@@ -49,29 +49,42 @@ cannot accidentally interpret bytes retained from the previous image/session.
 IRQ-private cells occupy F020..F02F. Rings reserve F100..F17F and F180..F1FF;
 each uses a six-byte head/tail/loss header followed by 64 bytes of storage.
 
-The stack constraint requires an explicit scheduling choice: **global IRQs are
-enabled only inside `irq_wait`**, called by the idle collector without data
-temporaries. Its INTEI/NOP/INTDI sequence bounds interruption to known kernel
-states. Arbitrary Forth execution remains masked; KEY and foreground collection
-call the same dispatcher synchronously. This preserves the existing eight
-user cells and 16-cell stacks without claiming safe asynchronous entry during
-an arbitrary 16-deep return stack or an arithmetic routine already using all
-data cells. During a long-running Forth word, buffering is limited to hardware
-(PS/2 16 bytes; UART one byte with host credit). Overflow is reported when
-control returns. A program that never returns/reads KEY blocks both consoles.
+The current CPU has **32 data and 32 return cells**. After initialization,
+IRQs remain enabled during ordinary Forth execution, compilation, output and
+KEY. `irq_wait` is now a simple collector return point, not an enable window.
+Only the ISR calls `irq_service`; foreground polling no longer reenters its
+scratch. The first ISR instruction is INTDI, and INTEI.RET reenables IRQs while
+returning. Prim tests IRQ acceptance after the instruction's updated enable
+state, so INTDI prevents nesting and INTEI.RET completes the return before a
+pending IRQ can enter again. No ISA change or hardware automatic masking is
+introduced.
 
 Dispatcher/handler/enqueue code adds at most three data cells and four return
-frames including CPU IRQ entry. The collector may have two call frames at
-`irq_wait`: total at most six return frames and eleven data cells with eight
-user cells. ISR scratch never aliases parser, arithmetic, VGA state or the
-banked window. This is a safe-window policy, not general Forth multitasking.
-AP7 connects these wait points; AP8 verifies injection across their boundaries.
+frames including CPU IRQ entry. IRQ-private scratch does not alias arithmetic,
+parser or VGA state, and all ISR SRAM accesses stay outside the banked window.
+Carry is restored before returning. These budgets leave at most 29 data and
+28 return cells for foreground use when IRQs are enabled. No general stack
+underflow/overflow guard or reserve enforcement is added; the checked Forth
+user data limit remains eight cells. Arbitrary deep calls can still corrupt
+the circular hardware stacks.
 
-`python3 forth/tests/test_irq.py` checks simultaneous sources, retained masked
-pending, FIFO/ring wrap/loss, errors, events during dispatch, unhandled-source
-masking, both carry values, eight preserved user cells and untouched arithmetic
-scratch under actual Prim IRQ entry. The measured IRQ path stays within the
-three-cell/four-frame additional budget.
+Receive rings have one ISR producer (tail) and one foreground consumer (head).
+Ordinary consumption needs no masking: the ISR publishes tail after storing
+the byte and the foreground publishes head after reading it; CPU memory
+instructions finish before IRQ entry. Loss recovery masks IRQs across clearing
+the loss flag and setting head=tail, then reenables with INTEI.RET. Initialization
+also masks IRQs until the vector, buffers and source enables are ready.
+
+Asynchronous reception continues during long-running Forth words. The rings
+remain finite (63 raw bytes per source); echo and interpretation resume in
+foreground. This does not introduce Forth multitasking or command preemption.
+
+`python3 forth/tests/test_irq.py` covers simultaneous sources, ring wrap/loss,
+non-nesting and ISR-return handoff, carry/scratch/stack preservation at every
+instruction boundary of division and banked VGA output, and IRQs with more than
+16 occupied stack cells. The full wire test receives more than 16 PS/2 bytes
+while a Forth word loops without KEY or collector polling. Current results:
+[32/32 validation](../docs/STACK32_IRQ.md).
 
 ## AP6: keyboard decoding
 
@@ -121,8 +134,7 @@ An open definition retains its owner across lines, including `[ ... ]` mode;
 the other endpoint can edit/queue a line but cannot execute it until `;`, error
 or ABORT releases the definition. Source buffers never mix characters.
 
-During execution, KEY polls the common dispatcher with global IRQs masked and
-reads only its command's receive ring. Other-source input is buffered; echo is
+During execution, KEY reads only its command's receive ring with IRQs enabled. Other-source input is buffered; echo is
 deferred until the collector resumes. CRLF suppression belongs to the endpoint
 and is also applied before KEY, so the LF of the command's CRLF is not mistaken
 for the requested key. KEY does not echo a key. Arbitrary programs run to
@@ -178,12 +190,13 @@ preserves SRAM behind banked VRAM, and verifies display/peripheral retention
 during HALT and CPU-only reset. It also counts occupied physical stack cells
 and includes IRQ PC pushes, independently of the Python model.
 
-Model checks additionally cover every IRQ wait boundary for both carry values,
+Model checks additionally cover foreground boundaries for both carry values,
 an event at ISR return, eight user cells during formatting/WORDS, input loss
 during KEY with Enter resynchronization, and cold restart with stale input.
 All default and UART-only profiles retain the same public word set.
 
-Builds, measurements and the reproducible physical acceptance checklist are in
+Current builds and measurements are in [STACK32_IRQ.md](../docs/STACK32_IRQ.md).
+The historical AP8 results and physical acceptance checklist are in
 [PS2_AP8_VALIDATION.md](../docs/PS2_AP8_VALIDATION.md). No physical FPGA
 programming, keyboard-level measurement or monitor acceptance is claimed by
 the automated tests. The board CMake dependency list now includes PS/2 RTL,

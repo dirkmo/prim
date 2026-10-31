@@ -1,7 +1,7 @@
 # Small Forth for Prim
 
 An independent on-CPU text interpreter and native-code compiler, with 90 kernel
-words. It uses the existing Prim ISA: **16-cell hardware data and return stacks,
+words. It uses the existing Prim ISA: **32-cell hardware data and return stacks,
 eight checked user data cells**. TokenForth remains a separate language/toolchain.
 
 The default FPGA image runs one shared interpreter on **UART and PS/2/VGA**.
@@ -184,12 +184,12 @@ words survive both. Arbitrary immediate-word side effects are not rolled back.
 A CPU reset rebuilds the dictionary pointers to kernel-only state; SRAM bytes
 may remain, but user words are forgotten. No persistence or image-save facility.
 
-The hardware stacks remain 16/16. The kernel checks eight user data cells,
+The hardware stacks have 32 cells each. The kernel checks eight user data cells,
 reserving the remainder for internal work. Returnstack overflow has no general
 trap: arbitrary call depth is unsupported. The UART-only profile's structural
 checks bound the original kernel paths to 12 physical data cells and six return
-frames; user nesting adds to these. The dual-console paths, safe interrupt
-windows and measured limits are described in [DUAL_CONSOLE.md](DUAL_CONSOLE.md).
+frames; user nesting adds to these. The dual-console paths, asynchronous interrupts
+and measured limits are described in [DUAL_CONSOLE.md](DUAL_CONSOLE.md).
 .S, S" and dynamic EXECUTE receive separate targeted checks.
 Tail calls reduce return depth but cannot remove every live caller frame.
 
@@ -199,9 +199,12 @@ string and arithmetic scratch have separate regions. There is no memory
 isolation: arbitrary !/C!/EXECUTE operands can corrupt the kernel. Nontermination,
 invalid XT and hardware-stack overflow are not recoverable Forth exceptions.
 The dual kernel reserves F000..F3FF for console state and buffers. Interrupts
-are enabled only at safe collector wait points; arbitrary Forth execution is
-masked and KEY services input synchronously. Hardware buffers can overflow
-during long-running code; input loss requires Enter to resynchronize.
+remain enabled during ordinary Forth execution and KEY. The ISR masks IRQs
+until its INTEI.RET; initialization and receive-loss recovery also use short
+masked sections. Input is buffered asynchronously, while interpretation and
+echo remain in foreground. Finite receive rings can overflow during long-running
+code; input loss requires Enter to resynchronize. See
+[32/32 validation](../docs/STACK32_IRQ.md) for current measurements.
 No floating point, files, user interrupt API, CATCH/THROW or standards compliance claim.
 
 Private `last_error` at 0126 retains the last code (zero after reset):

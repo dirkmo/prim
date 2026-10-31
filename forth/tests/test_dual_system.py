@@ -19,8 +19,9 @@ RTL = False
 EXPECTED = (b'ok\r\n7 twice .\r\n14 ok\r\n'
             b': take key . ;\r\nok\r\ntake\r\n65 ok\r\n'
             b'2 .\r\n2 ok\r\n'
-            b': scroll 35 BEGIN CR 1- DUP 0= UNTIL DROP ;\r\nok\r\n')
-LOCAL = (': twice dup + ;\r', 'nope\r', '9 .\r', '3 .\r', 'scroll\r')
+            b': scroll 35 BEGIN CR 1- DUP 0= UNTIL DROP ;\r\nok\r\n'
+            b': busy BEGIN 20480 @ UNTIL ;\r\nok\r\nbusy\r\nok\r\n')
+LOCAL = (': twice dup + ;\r', 'nope\r', '9 .\r', '3 .\r', 'scroll\r', '1234 .\r')
 
 
 def scan_sequence(text):

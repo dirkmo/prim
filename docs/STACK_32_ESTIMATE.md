@@ -1,6 +1,8 @@
 # Abschätzung: Hardwarestacks 32/32
 
-Stand: 31. Oktober 2026, aktueller Quellstand `322411a`.
+Historische Abschätzung vom 31. Oktober 2026 auf Quellstand `322411a`.
+Die anschließende Umsetzung und tatsächlichen Messwerte stehen in
+[STACK32_IRQ.md](STACK32_IRQ.md).
 Diese Abschätzung ändert weder Hardwarestacks noch Forth noch Bitstream.
 
 Die aktuelle AP8-Messung in [PS2_AP8_RESOURCES.json](PS2_AP8_RESOURCES.json)

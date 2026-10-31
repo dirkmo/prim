@@ -13,7 +13,7 @@ Bedienung: [README.md](README.md), [Wörter](WORDS.md), [Beispiele](examples/REA
 
 The default FPGA image now adds PS/2/VGA beside UART, sharing one interpreter,
 dictionary and user stack. [DUAL_CONSOLE.md](DUAL_CONSOLE.md) defines current
-routing, safe-window interrupts, input ownership and reserved SRAM at F000..F3FF.
+routing, asynchronous interrupts, input ownership and reserved SRAM at F000..F3FF.
 The original single-UART architecture below remains the baseline for the
 explicit `--uart-only` build and host model; the extension supersedes its
 single-console/no-interrupt restrictions for the default FPGA image.
@@ -25,8 +25,9 @@ Wörterbuchsuche, Interpreter und Compiler laufen auf Prim. Der Host baut und
 lädt lediglich das initiale Image und transportiert Konsolentext. TokenForth,
 seine Tokens und sein Wörterbuch sind keine Laufzeitabhängigkeit.
 
-Bestehende ISA und je 16 Hardware-Stackzellen bleiben unverändert. Keine neue
-Hardware, keine Stackvergrößerung. Kein Anspruch auf Standardkonformität.
+Die ISA bleibt unverändert. Seit der 32/32-Erweiterung haben Daten- und
+Returnstack je 32 Hardwarezellen; kein allgemeiner Hardware-Überlaufschutz.
+Kein Anspruch auf Standardkonformität.
 Erste Version: eine Konsole, ein Wörterbuch, keine Interruptbenutzung, keine
 Dateien, kein Multitasking, kein Persistieren selbst kompilierter Wörter.
 
@@ -109,8 +110,8 @@ sonst PUSH16. Primitive soweit sinnvoll inline, mit gleicher Forth-Semantik
 wie ihr aufrufbarer Stub. Kein separater innerer Thread-Interpreter.
 
 Der Forth-Datenstack liegt auf dem Hardware-Datenstack. Version 1 garantiert
-an öffentlichen Wortgrenzen **maximal 8 Benutzerzellen**; die übrigen 8 sind
-für Kernel-Zwischenwerte, Aufrufadressen und Prüfungen reserviert. Eine RAM-
+an öffentlichen Wortgrenzen **maximal 8 Benutzerzellen**; die übrigen Hardwarezellen
+dienen Kernel-Zwischenwerten, Aufrufadressen, Prüfungen und ISR-Reserve. Eine RAM-
 Variable DEPTH zählt ausschließlich Benutzerzellen. Interne Routinen ändern
 sie nicht; ihre Werte liegen vorübergehend oberhalb der Benutzerwerte.
 
@@ -124,7 +125,9 @@ ihre ausgeführten Primitive prüfen den jeweiligen aktuellen Stackzustand.
 
 Hardware-Returnstack für Aufrufe, nicht für Parser oder Compiler-Kontrollwerte.
 **Kein allgemeiner Laufzeitschutz gegen Returnstacküberlauf** in Version 1:
-höchstens 16 gleichzeitig lebende Rücksprungadressen einschließlich Kernel.
+32 physische Zellen, von denen die ISR bis zu vier zusätzlich braucht.
+Bei freigegebenen IRQs sind daher höchstens 28 Vordergrundzellen zulässig;
+dieses Budget wird nicht zur Laufzeit erzwungen.
 Kernel-Aufruftiefe messen, danach verbleibendes Benutzerbudget dokumentieren.
 Gezielte tiefe Rekursion ist nicht unterstützt; Überschreitung ist ein
 Programmierfehler mit möglichem Kontrollflussverlust, kein sicher abfangbarer

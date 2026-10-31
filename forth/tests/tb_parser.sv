@@ -84,7 +84,7 @@ always @(posedge clk) begin
             if (depth < 0 || depth > 8) $fatal(1, "invalid session DEPTH");
             stack_file = $fopen(stack_path, "w");
             for (index = 0; index < depth; index = index + 1)
-                $fwrite(stack_file, "%04x\n", cpu.r_dstack[(cpu.r_dsp - depth + 1 + index) & 15]);
+                $fwrite(stack_file, "%04x\n", cpu.r_dstack[(cpu.r_dsp - depth + 1 + index) & ((1<<cpu.DSS)-1)]);
             $fclose(stack_file);
         end
         if (SESSION && session_done && !tx_valid) begin

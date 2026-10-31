@@ -13,10 +13,10 @@ RING_SIZE = 64  # One slot stays empty: 63 bytes usable per source.
 def emit_interrupts(image):
     c = Code(image)
     c.mark('irq_wait')
-    # Called only by the idle collector, with no temporary data cells. No
-    # arbitrary user code or deeply nested output runs with interrupts enabled.
-    c.ops(Op.INTEI, Op.NOP, Op.INTDI, Op.NOP | 128)
+    # Collector rendezvous; IRQs also remain enabled during Forth execution.
+    c.ops(Op.NOP | 128)
     c.mark('irq_init')
+    c.ops(Op.INTDI)
     # CPU-only reset retains peripherals: discard input before enabling sources.
     for address, value in ((0xFFFE, 0), (0xFFF4, 0), (0xFFFB, 24)):
         c.push(value)
@@ -51,7 +51,7 @@ def emit_interrupts(image):
         c.push(4)
         c.push(address)
         c.ops(Op.BYTE_STORE)
-    c.ops(Op.NOP | 128)  # Global interrupts remain masked until a safe wait.
+    c.ops(Op.INTEI | 128)  # Vector, rings and source enables are now initialized.
 
     c.mark('irq_entry')
     c.ops(Op.INTDI, Op.CARRY)
@@ -62,7 +62,7 @@ def emit_interrupts(image):
     c.push(0xFFFF)
     c.ops(Op.ADD, Op.DROP, Op.INTEI | 128)
 
-    # Also callable with interrupts masked from KEY and the foreground collector.
+    # ISR-private: foreground code must not reenter the shared IRQ scratch.
     c.mark('irq_service')
     scan, done = c.label('irq_rescan'), c.label('irq_done')
     c.mark(scan)

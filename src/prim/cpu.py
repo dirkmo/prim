@@ -17,8 +17,8 @@ class MemoryIf:
 
 class Prim:
     # stack sizes
-    DS_SIZE = 16
-    RS_SIZE = 16
+    DS_SIZE = 32
+    RS_SIZE = 32
     LOG_LEVEL_MUTE = 0
     LOG_LEVEL_WARN = 1
     LOG_LEVEL_INF = 2

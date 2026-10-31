@@ -84,6 +84,8 @@ def emit_frontend(image):
     c.ops(Op.NOP | 128)
 
     c.mark('source_recover')
+    # Loss reset and head=tail must be atomic with respect to the ISR producer.
+    c.ops(Op.INTDI)
     set_cell(c, 'input_failed', 0)
     c.load('input_ring')
     c.push(4)
@@ -106,7 +108,7 @@ def emit_frontend(image):
     c.jz(no_loss)
     c.call('kbd_reset')
     c.mark(no_loss)
-    c.ops(Op.NOP | 128)
+    c.ops(Op.INTEI | 128)
 
     c.mark('ring_take')
     set_cell(c, 'input_available', 0)
@@ -179,7 +181,6 @@ def emit_frontend(image):
     c.mark('raw_key')  # Blocking KEY reads ONLY its command's owner.
     key_loop, key_read, key_return = (c.label('key_' + n) for n in ('loop', 'read', 'return'))
     c.mark(key_loop)
-    c.call('irq_service')  # Masked during arbitrary Forth execution.
     c.load('console_owner')
     c.store('poll_source')
     c.call('source_read')
@@ -306,7 +307,6 @@ def emit_frontend(image):
     c.mark('read_line')
     loop = c.label('front_collect')
     c.mark(loop)
-    c.call('irq_service')
     for source in (0, 1):
         set_cell(c, 'poll_source', source)
         c.call('collect_source')

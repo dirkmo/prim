@@ -1,6 +1,7 @@
 # CPU
 
-`rtl/prim.v` implements the Prim stack CPU. `rtl/opcodes.v` is generated from
+`rtl/prim.v` implements the Prim stack CPU. The default DSS/RSS=5 provides
+32 data and 32 return cells, with circular wraparound and no overflow trap. `rtl/opcodes.v` is generated from
 `prim.isa` with the root CMake target `genopcodes`.
 
 The CPU has no UART, MMIO decoder or SRAM controller. Its byte-addressed
@@ -82,7 +83,7 @@ the instruction; it does not model individual clock phases or debug stepping.
 simultaneous events, CALL/return collisions and debug controls. `src/test_interrupts.py`
 checks the Python model; the ISA comparison suite covers the new opcodes and `.RET`.
 
-A CPU-only Yosys `synth_ice40 -top Prim` comparison with default DSS/RSS=4
+A CPU-only Yosys `synth_ice40 -top Prim` comparison with the then-default DSS/RSS=4
 measured 2247 -> 2302 LUT4 and 604 -> 623 flip-flops (+55 LUT4, +19 FF).
 Carry cells remain at 87. The new architectural state is 18 bits; synthesis
 also adds one flip-flop when recoding the four-state phase machine. This is a

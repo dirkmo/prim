@@ -75,7 +75,7 @@ def main():
     assert memory.video[2560:] == b' ' * (4096-2560)
     assert memory.video_writes == 2560 + 35*80 + 7, memory.video_writes
     assert memory.data[0xe000:0xf000] == b'Z' * 4096, 'driver changed hidden SRAM'
-    print(f'PASS Forth VGA driver: scroll wrap, row clearing, text, backspace; DS={max_data}/16 RS={max_frames}/16')
+    print(f'PASS Forth VGA driver: scroll wrap, row clearing, text, backspace; DS={max_data}/32 RS={max_frames}/32')
 
 
 if __name__ == '__main__':

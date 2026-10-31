@@ -45,25 +45,25 @@ class ComparisonChecks(VerilatorHarness, unittest.TestCase):
 
     def test_stack_operations_at_every_depth(self):
         # Distinct values expose wrong ordering anywhere in the occupied stack.
-        for depth in range(3, 17):
+        for depth in range(3, Prim.DS_SIZE + 1):
             prefix = ' '.join(str(0x100 + i) for i in range(depth))
             for op, delta in [('swap', 0), ('over', 1), ('dup', 1),
                               ('nip', -1), ('rot', 0), ('-rot', 0), ('drop', -1),
                               ('>r r>', 0), ('>r rdrop', -1)]:
                 with self.subTest(depth=depth, op=op):
-                    count = min(16, depth + delta)
+                    count = min(Prim.DS_SIZE, depth + delta)
                     self.run_asm(f'{prefix} {op} ' + 'drop ' * count)
 
     def test_data_stack_wraparound(self):
         # Cross the ring boundary repeatedly, then drain and reuse all cells.
-        for count in (16, 17, 31, 32, 48):
+        for count in (16, 31, 32, 33, 63, 64, 96):
             with self.subTest(pushes=count):
                 prefix = ' '.join(str(i + 1) for i in range(count))
-                refill = ' '.join(str(0x8000 + i) for i in range(16))
-                self.run_asm(prefix + ' ' + 'drop ' * 16 + refill + ' ' + 'drop ' * 16)
+                refill = ' '.join(str(0x8000 + i) for i in range(Prim.DS_SIZE))
+                self.run_asm(prefix + ' ' + 'drop ' * Prim.DS_SIZE + refill + ' ' + 'drop ' * Prim.DS_SIZE)
 
     def test_stack_across_memory_and_branches(self):
-        for depth in (3, 8, 16):
+        for depth in (3, 8, 16, 32):
             prefix = ' '.join(str(0x100 + i) for i in range(depth))
             for suffix in ('0xabcd 0x1000 ! 0x1000 @ drop',
                            '0xab 0x1001 c! 0x1001 c@ drop', '1 0 jz'):
@@ -85,7 +85,7 @@ class ComparisonChecks(VerilatorHarness, unittest.TestCase):
                 if ds:
                     choices += [('dup', 1, 0), ('drop', -1, 0), ('not', 0, 0),
                                 ('sr', 0, 0), ('sl', 0, 0)]
-                    if rs < 14:
+                    if rs < Prim.RS_SIZE - 2:
                         choices += [('>r', -1, 1)]
                 if ds >= 2:
                     choices += [('swap', 0, 0), ('over', 1, 0), ('nip', -1, 0),
@@ -96,7 +96,7 @@ class ComparisonChecks(VerilatorHarness, unittest.TestCase):
                     choices += [('r>', 1, -1), ('rdrop', 0, -1)]
                 op, dd, rd = rng.choice(choices)
                 program.append(str(rng.randrange(65536)) if op == 'push' else op)
-                ds, rs = min(16, ds + dd), rs + rd
+                ds, rs = min(Prim.DS_SIZE, ds + dd), rs + rd
             program += ['drop'] * ds + ['rdrop'] * rs
             with self.subTest(seed=seed):
                 self.run_asm(' '.join(program))
@@ -127,30 +127,30 @@ class ComparisonChecks(VerilatorHarness, unittest.TestCase):
                 self.run_asm(asm)
 
     def test_return_stack_wraparound(self):
-        for count in (16, 17, 31, 32, 48):
+        for count in (16, 31, 32, 33, 63, 64, 96):
             prefix = ' '.join(f'{i + 1} >r' for i in range(count))
             with self.subTest(pushes=count):
-                self.run_asm(prefix + ' ' + 'r> drop ' * 16)
+                self.run_asm(prefix + ' ' + 'r> drop ' * Prim.RS_SIZE)
 
     def test_to_r_return_at_ring_boundary(self):
-        for count in (0, 1, 14, 15, 16, 17, 31, 32):
+        for count in (0, 1, 15, 16, 30, 31, 32, 33, 63, 64):
             prefix = ' '.join(f'{i + 1} >r' for i in range(count))
             target = len(PrimAsm.assemble(f'{prefix} 0 >r.ret 0xdead BREAK'))
-            remaining = min(count, 15)
+            remaining = min(count, Prim.RS_SIZE - 1)
             with self.subTest(pushes=count):
                 self.run_asm(f'{prefix} {target} >r.ret 0xdead BREAK ' +
                              'r> drop ' * remaining)
 
     def test_double_return_pop_at_ring_boundary(self):
-        prefix = ' '.join(f'{i + 1} >r' for i in range(14))
+        prefix = ' '.join(f'{i + 1} >r' for i in range(Prim.RS_SIZE - 2))
         for op in ('r>', 'rdrop'):
             body = f'0x1234 >r {op}.ret 0xdead BREAK'
             target = len(PrimAsm.assemble(f'{prefix} 0 >r {body}'))
             with self.subTest(op=op):
-                self.run_asm(f'{prefix} {target} >r {body} ' + 'rdrop ' * 14)
+                self.run_asm(f'{prefix} {target} >r {body} ' + 'rdrop ' * (Prim.RS_SIZE - 2))
 
     def test_nested_calls(self):
-        for depth in (1, 2, 15, 16):
+        for depth in (1, 2, 15, 16, 31, 32):
             program = ['4 call BREAK']
             program += [f'{8 + 4*i} call nop.ret' for i in range(depth - 1)]
             program += ['42.ret']

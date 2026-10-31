@@ -127,8 +127,8 @@ class PrimitiveChecks(unittest.TestCase):
                         pending.append((next_pc, depth, returns))
         self.assertLessEqual(budget_extra, 8)
         self.assertLessEqual(budget_return, 16)
-        print(f'Static kernel budgets (all branches): DS={budget_data}/16, '
-              f'RS={budget_return}/16, extra DS={budget_extra}/8')
+        print(f'Static kernel budgets (all branches): DS={budget_data}/32, '
+              f'RS={budget_return}/32, extra DS={budget_extra}/8')
 
     def test_stack_words_and_full_stack_preservation(self):
         cases = {
@@ -339,8 +339,8 @@ class PrimitiveChecks(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        print(f'Observed successful-word budgets: DS={cls.budget_data}/16, '
-              f'RS={cls.budget_return}/16, extra DS={cls.budget_extra}/8')
+        print(f'Observed successful-word budgets: DS={cls.budget_data}/32, '
+              f'RS={cls.budget_return}/32, extra DS={cls.budget_extra}/8')
 
 
 if __name__ == '__main__':

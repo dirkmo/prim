@@ -38,7 +38,7 @@ class PreviewCPU(Prim):
 
     def dpush(self, value):
         if self.depth >= self.DS_SIZE:
-            raise ValueError('Datenstack voll (16 Werte)')
+            raise ValueError(f'Datenstack voll ({Prim.DS_SIZE} Werte)')
         super().dpush(value)
         self.depth += 1
 

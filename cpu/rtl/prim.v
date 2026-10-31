@@ -19,8 +19,8 @@ module Prim(
 );
 
 parameter
-    DSS /* verilator public */ = 4, // data stack size: 2^DSS
-    RSS /* verilator public */ = 4; // return stack size: 2^RSS
+    DSS /* verilator public */ = 5, // data stack size: 2^DSS
+    RSS /* verilator public */ = 5; // return stack size: 2^RSS
 
 `include "opcodes.v"
 

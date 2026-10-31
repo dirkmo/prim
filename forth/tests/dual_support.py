@@ -100,6 +100,8 @@ class DualRunner:
         self.cpu = Prim(self.memory)
         self.memory.cpu = self.cpu
         self.physical = self.frames = self.max_data = self.max_frames = 0
+        self.in_isr = False
+        self.irq_entries = 0
         self.until(lambda: self.cpu._pc == self.image.symbols['idle'])
 
     def step(self):
@@ -108,14 +110,24 @@ class DualRunner:
             self.frames = 0  # Errors/ABORT abandon the old call frames.
         opcode = self.memory.data[self.cpu._pc]
         op = opcode & 127
+        if self.in_isr and self.cpu._pc != self.image.symbols['irq_entry']:
+            if self.cpu._int_enable:
+                raise AssertionError('IRQs enabled inside ISR')
+        leaving_isr = self.in_isr and opcode == (Op.INTEI | 128)
         self.physical += stack_delta(op)
         self.frames += int(op in (Op.CALL, Op.INT, Op.TO_R)) - int(op in (Op.FROM_R, Op.RDROP))
         if opcode & 128 and op not in (Op.CALL, Op.JP, Op.JZ, Op.INT):
             self.frames -= 1
         self.cpu.step()
+        if leaving_isr:
+            self.in_isr = False
         if self.cpu._pc == self.image.symbols.get('irq_entry'):
+            if self.in_isr:
+                raise AssertionError('nested ISR entry')
+            self.in_isr = True
+            self.irq_entries += 1
             self.frames += 1
-        if not (0 <= self.physical <= 16 and 0 <= self.frames <= 16):
+        if not (0 <= self.physical <= Prim.DS_SIZE and 0 <= self.frames <= Prim.RS_SIZE):
             raise AssertionError(f'stack budget: DS={self.physical} RS={self.frames} PC={self.cpu._pc:04x}')
         self.max_data = max(self.max_data, self.physical)
         self.max_frames = max(self.max_frames, self.frames)
@@ -198,7 +210,7 @@ class DualSession(DualRunner):
 
     def stack(self):
         depth = self.get('depth')
-        return [self.cpu._ds[(self.cpu._dsp - depth + 1 + n) % 16] for n in range(depth)]
+        return [self.cpu._ds[(self.cpu._dsp - depth + 1 + n) % Prim.DS_SIZE] for n in range(depth)]
 
 
 def run_tests():

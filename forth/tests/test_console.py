@@ -61,7 +61,7 @@ class ConsoleChecks(unittest.TestCase):
                 self.assertEqual(runner.memory.data[0x3B0:0x3B2], b'ok')
                 max_data = max(max_data, runner.max_data)
                 max_frames = max(max_frames, runner.max_return)
-        print(f'.S all depths/bases: DS={max_data}/16, RS={max_frames}/16')
+        print(f'.S all depths/bases: DS={max_data}/32, RS={max_frames}/32')
 
     def test_lookup_case_visibility_and_shadowing(self):
         for name in ('dup', 'DuP', 'DUP', '+', '-ROT', 'U.', '.S', '\\', '('):
@@ -137,7 +137,7 @@ class ConsoleChecks(unittest.TestCase):
         self.assertEqual(output.count(b'error: stack underflow'), 25)
         self.assertEqual(output.count(b'1 ok\r\n'), 25)
         self.assertEqual(values, [])
-        print(f'Console recovery across ring wrap: DS={budget[0]}/16, RS={budget[1]}/16')
+        print(f'Console recovery across ring wrap: DS={budget[0]}/32, RS={budget[1]}/32')
 
     def test_words_and_bad_output_base(self):
         runner = Runner(self.image, [1] * 8)

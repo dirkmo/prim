@@ -27,7 +27,7 @@ ERRORS = {
     'string': (21, 'unterminated string'),
 }
 
-# Software arithmetic scratch. No interrupts/reentrant arithmetic in version 1.
+# Foreground arithmetic scratch; the ISR uses separate IRQ-private cells.
 ARITHMETIC = dict(zip(('a', 'b', 'q', 'rem', 'count', 'qsign', 'rsign'),
                       range(0x0380, 0x038E, 2)))
 
