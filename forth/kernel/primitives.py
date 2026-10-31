@@ -23,6 +23,8 @@ ERRORS = {
     'control': (17, 'unresolved control'),
     'incomplete': (18, 'unfinished definition'),
     'control_overflow': (19, 'control stack overflow'),
+    'allot': (20, 'invalid allot'),
+    'string': (21, 'unterminated string'),
 }
 
 # Software arithmetic scratch. No interrupts/reentrant arithmetic in version 1.

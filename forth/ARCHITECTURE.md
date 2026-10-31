@@ -2,7 +2,7 @@
 
 Stand: 31. Oktober 2026. Zielarchitektur; AP 2 implementiert Build und Boot,
 AP 3 die Grundwörter, AP 4 Texteingabe/Parser/Zahlen und AP 5 den interaktiven
-Interpreter. AP 6 implementiert den Laufzeitcompiler, AP 7 die Kontrollstrukturen. Änderungen hier begründen;
+Interpreter. AP 6 implementiert den Laufzeitcompiler, AP 7 die Kontrollstrukturen und AP 8 Daten/Strings. Änderungen hier begründen;
 aktuellen Stand und Messwerte in STATUS.md nachlesen.
 Arbeitsstand und APs: [STATUS.md](STATUS.md).
 
@@ -83,8 +83,9 @@ Jedes öffentliche Wort hat eine aufrufbare Implementierung, auch bei Inline-
 Kompilierung. EXECUTE führt ein XT aus. Bei normalem Forth-Programmieren
 werden niemals Rücksprungadressen als Daten verwendet.
 
-CREATE erzeugt einen Stub `PUSH16 body; NOP.RET`, danach beginnt body ohne
-Padding hinter dem Stub; HERE zeigt darauf. VARIABLE reserviert dort eine
+CREATE erzeugt einen acht Byte langen Stub
+`PUSH16 literal_guard; CALL; PUSH16 body; NOP.RET`; body beginnt direkt dahinter,
+HERE zeigt darauf. Der Guard prüft/zählt das Adressergebnis zur Laufzeit. VARIABLE reserviert dort eine
 mit null initialisierte Zelle. CONSTANT erzeugt einen Stub für den Wert.
 Keine DOES>-Semantik in Version 1. Alle Wortzugriffe dürfen ungerade Adressen
 verwenden; Header werden nur zur Übersicht ausgerichtet.
@@ -206,7 +207,7 @@ PUSH8/16. Damit greifen dieselben Stackgrenzen auch in neuem Code. Keine
 Opcode-Inline-Klasse wird benötigt. `:` ist IMMEDIATE, um verschachtelte
 Definitionsanfänge unmittelbar abzuweisen; `]` ist ebenfalls IMMEDIATE und
 benötigt eine offene Definition. `;`, `[`, LITERAL und `[']` sind zusätzlich
-COMPILE_ONLY. Interne Byte-/Zellemitter sind vor AP 8 noch keine öffentlichen Wörter.
+COMPILE_ONLY. Die Byte-/Zellemitter werden ab AP 8 über C, und , öffentlich nutzbar.
 
 Unaufgelöste Sprünge liegen in einem eigenen RAM-Kontrollstack, nicht auf dem
 Daten-/Returnstack: 32 Einträge mit 16-Bit-Typ und 16-Bit-Adresse. IF/ELSE/THEN
@@ -243,7 +244,7 @@ Return-Bit-Folding betrifft die unmittelbar erzeugten Literale:
 
 ## Öffentlicher Wortumfang der ersten Version
 
-Dies ist der Zielumfang nach AP 8; Zeilen für AP 3–7 sind implementiert,
+Dies ist der Zielumfang nach AP 8; Zeilen für AP 3–8 sind implementiert,
 die übrigen Wörter noch geplant. Aktuelle Wortliste und Prüfungen in README.md.
 Stubs/Inline-Emitter müssen jeweils dieselben dokumentierten Stackeffekte haben.
 

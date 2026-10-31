@@ -1,8 +1,9 @@
 # Forth für Prim – kompakte Übergabe und Arbeitspakete
 
-Stand: 31. Oktober 2026. AP 1–7 abgeschlossen; AP 8–10 offen.
+Stand: 31. Oktober 2026. AP 1–8 abgeschlossen; AP 9–10 offen.
 Letzter Nutzerauftrag: AP 7 und 8 umsetzen, jeweils committen. Dieser Stand wird mit dem
-Commit dieser Übergabe festgehalten. AP 8 nicht begonnen.
+Commit dieser Übergabe festgehalten. AP 9/10 noch offen.
+AP-7-Commit: `79db3df`; AP 8 wird mit diesem Dokument committet.
 AP-5-Commit: `d0ff968`, AP 4: `cf739a7`.
 Weitere Historie: AP 3 `1e77c88`, AP 1/2 `b620a9e`.
 
@@ -14,8 +15,8 @@ CPU/ISA, Stackgrößen und bestehende Tests/Simulationshelfer unverändert.
 Multiplikation/Division/variable Schiebeweiten in Software. Keine beschlossenen
 Hardware-Erweiterungen. Return-Bit-Folding und Tail-CALL→JP sind implementiert.
 
-79 Kernelwörter, interaktiver Interpreter und Laufzeitcompiler für `:`/`;`.
-Kontrollstrukturen implementiert; Daten-Definitionswörter folgen in AP 8.
+89 Kernelwörter, interaktiver Interpreter und Laufzeitcompiler für `:`/`;`.
+Kontrollstrukturen, Daten-Definitionswörter und Strings sind implementiert.
 Start: ` .venv/bin/python forth/run.py ` (Prim-Modell mit Terminal-UART).
 Build: ` .venv/bin/python forth/build.py `; reproduzierbare kernel.bin/map.json/
 disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
@@ -44,7 +45,7 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
   Code und emit_word in kernel/primitives.py sind gemeinsame Codegeneratoren.
   imageweiter Labelzähler; Image: define/org/op/push/cell/emit/resolve.
 - Composition in kernel/boot.py: Boot+idle, emit_primitives, emit_parser,
-  emit_console, emit_compiler, kernel_end/user_start. Routinen vor kernel_end
+  emit_console, emit_compiler, emit_control, emit_data, kernel_end/user_start. Routinen vor kernel_end
   einfügen, Headerkette am letzten image.words-Eintrag verankern.
 - DEPTH zählt nur Benutzerzellen, maximal acht. Geprüfte Wörter/Inline-Emitter
   müssen Bedarf und Wachstum vor Eingriff prüfen. Interne Stackwerte nicht zählen.
@@ -138,7 +139,7 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
 7. **AP 7 – Kontrollstrukturen: abgeschlossen.** Abhängig AP6. IF ELSE THEN BEGIN UNTIL
    AGAIN WHILE REPEAT, getrennter RAM-Kontrollstack, Typ-/Grenzprüfung.
    Maximal ein offenes WHILE pro BEGIN. DO/LOOP nicht im ersten Umfang.
-8. **AP 8 – Daten/Alltagswörter: offen.** Abhängig AP6/teilweise7. HERE ALLOT ,
+8. **AP 8 – Daten/Alltagswörter: abgeschlossen.** Abhängig AP6/teilweise7. HERE ALLOT ,
    C, CREATE VARIABLE CONSTANT TYPE S" ."; Stringsyntax/Lebensdauer gemäß
    Architektur. Interne Emitter werden bereits AP6 benötigt. Kein DOES>.
 9. **AP 9 – Integration/Regression: offen, begleitet laufend.** Nach AP8 abschließen.
@@ -159,14 +160,15 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
 .venv/bin/python forth/tests/test_console.py --rtl -v
 .venv/bin/python forth/tests/test_compiler.py --rtl -v
 .venv/bin/python forth/tests/test_control.py --rtl -v
+.venv/bin/python forth/tests/test_data.py --rtl -v
 ```
 
-AP7: alle 50 Testmethoden bestanden (4+9+8+9+13+7). Darin 57 instruktionsweise
+AP8: alle 60 Testmethoden bestanden (4+9+8+9+13+7+10). Darin 60 instruktionsweise
 Python/CPU/SRAM-Vergleiche über drei Timings, gerichtete KEY-/Eingabeprüfung
-sowie 22 komplette UART-Puffer-Konsolensitzungen. Alle Basen, alle .S-Tiefen,
+sowie 30 komplette UART-Puffer-Konsolensitzungen. Alle Basen, alle .S-Tiefen,
 Puffergrenzen, versteckte/überschriebene/compile-only Einträge, Suche vor Zahl,
 Fehler-/ABORT-Wiederaufnahme und zyklisches Zeiger-Wraparound geprüft.
-Strukturell maximal 12 Datenzellen (vier temporäre) und fünf Returnframes; .S separat
+Strukturell maximal 12 Datenzellen (vier temporäre) und sechs Returnframes; .S separat
 315 Tiefen/Basenfälle, maximal elf Datenzellen und drei Returnframes. Keine seriellen
 RX- oder Boardtests. Konsolen-RTL speist Bytes vor uart_buffers ein.
 
@@ -189,5 +191,30 @@ Rollback, acht Benutzerdaten während Kompilierung und SRAM-Codeausführung.
 forth/tests/forth_sram.py erweitert nur den Watchdog in einer temporären Kopie
 auf 1.000.000 Takte; keine Änderung an CPU, Timing oder vorhandenen Helfern.
 
-Nächstes AP8 noch nicht begonnen. Datenwörter und Strings gemäß Architektur,
-mit Bounds/Transaktionen und korrekten Laufzeit-Stackprüfungen ergänzen.
+AP8: kernel/data.py ergänzt HERE ALLOT , C, CREATE VARIABLE CONSTANT TYPE S" .".
+ALLOT nur0..32767, Null auch bei vollem Bereich erlaubt. Code-/Datenemitter
+reservieren vor Schreiben. Daten-Definitionen nutzen colon_xt für die bestehende
+Transaktion und publish_definition erst nach Stub/Variable-Initialisierung.
+Stub8: Literalguard-CALL + PUSH16 Wert/Body + NOP.RET, VARIABLE Body2 initial0.
+S"/." sind Immediate; parse_string nutzt input_pos nach einem Trennzeichen.
+Interpretiertes S" kopiert nach0280, liefert zwei Benutzerwerte mit Wachstumsprüfung.
+." interpretiert ohne Bufferänderung. Kompilierte Strings: PUSH16 Ende;JP;Daten;
+danach geprüfte Adress-/Längenliterale (S") oder rohe Argumente+raw_type (.").
+So arbeitet ." auch bei acht Benutzerzellen. S" mode_effects in der Map;
+strukturelle Prüfung ausgenommen (0 oder+2), gezielt Tiefen0..8 getestet.
+TYPE prüft zwei Benutzerargumente und ruft raw_type (addr len--, ohne DEPTH) auf.
+Fehler20 ungültiges ALLOT,21 offene Stringquote; Rollback wie sonst.
+
+Aktueller Snapshot: idle0571, console_start285D, console_next2875,
+KERNEL_END3623, USER_START3624, kernel_latest3566. Boot186 Instruktionen.
+Neue Zellen: control_type0162,addr0164,slot0166,patch0168; data_kind016A,
+data_value016C,string_addr016E,string_index0170,string_code_addr0172.
+Andere Adressen oben sind historische Snapshots; generierte Map ist maßgeblich.
+Zusätzliche Daten-/Stringtests inkl. Grenzen, Anfangs-RAM mit A5, Konstanten,
+versteckte Transaktionen, volle Stacks, Lifetime und SRAM-Stringausführung.
+Forth-SRAM-Adapter: Watchdog1M, Kontroll-Quelltexttest jetzt bis50k Instruktionen,
+da mehr Kernelwörter die Suche verlängern; tatsächliches Timing unverändert.
+
+Nächste AP9/10: Gesamtintegration/Regressionen und abschließende Anleitung/
+Beispiele vervollständigen. Bestehende Wort-/Compiler- und Stackverträge wahren.
+Keine neue ISA oder Stackvergrößerung voraussetzen. Kein Boardtest erfolgt.

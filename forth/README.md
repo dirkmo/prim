@@ -1,8 +1,8 @@
 # Eigenständiges Forth für Prim
 
-Stand AP 7: **interaktives Forth mit Laufzeitcompiler und 79 Kernelwörtern**.
+Stand AP 8: **interaktives Forth mit Laufzeitcompiler und 89 Kernelwörtern**.
 Parser, Namenssuche, Übersetzung neuer Definitionen und Ausführung laufen auf Prim.
-Kontrollstrukturen sind vorhanden; Daten-Definitionswörter folgen in AP 8.
+Kontrollstrukturen, Daten-Definitionswörter und Strings sind implementiert.
 CPU und TokenForth wurden nicht verändert.
 
 Architektur: [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -73,6 +73,7 @@ BASE DECIMAL HEX \ (
 . U. DEPTH .S WORDS ABORT
 : ; STATE IMMEDIATE [ ] LITERAL ' ['] EXECUTE
 IF ELSE THEN BEGIN UNTIL AGAIN WHILE REPEAT
+HERE ALLOT , C, CREATE VARIABLE CONSTANT TYPE S" ."
 ```
 
 Namen werden ohne Unterscheidung von ASCII-Groß-/Kleinschreibung gesucht;
@@ -160,7 +161,8 @@ last_error (0126), 0 nach Reset, danach zuletzt gemeldeter Fehler:
 6 Zeile zu lang, 7 Kommentar offen, 8 BASE, 9 Text-Steuerzeichen,
 10 Zahlüberlauf, 11 unbekanntes Wort, 12 compile-only Wort, 13 Compilerkontext,
 14 Name, 15 Wörterbuch voll, 16 kein Benutzerwort für IMMEDIATE, 17 offener
-Kontrollstack, 18 unvollständige Definition bei Simulator-EOF, 19 Kontrollstack voll. ABORT lässt ihn stehen.
+Kontrollstack, 18 unvollständige Definition bei Simulator-EOF, 19 Kontrollstack voll, 20 ungültiges ALLOT, 21 offene String-Anführungszeichen.
+ABORT lässt ihn stehen.
 
 ## Compiler (AP 6)
 
@@ -235,6 +237,49 @@ Die Forth-eigene SRAM-Testkopie erhöht ausschließlich den Watchdog von 100.000
 auf 1.000.000 Takte, damit ganze Quelltexte auf der CPU kompiliert werden können.
 CPU, SRAM-Timings und bestehende Simulationshelfer bleiben unverändert.
 
+## Daten und Strings (AP 8)
+
+HERE liefert das nächste freie Byte. ALLOT reserviert 0..32767 Bytes, negative
+Werte sind Fehler. `,` schreibt eine Zelle, `C,` das niederwertige Byte und
+rückt HERE vor. Alle Schreib-/Reservierungswege prüfen USER_START..F000.
+
+CREATE name erzeugt einen geprüften Stub, der die Body-Adresse zurückgibt;
+HERE zeigt danach auf den Body. VARIABLE reserviert dort eine mit null
+initialisierte Zelle. CONSTANT nimmt einen Wert vom Stack und erzeugt einen
+geprüften konstanten Stub. Die acht Byte langen Stubs enthalten den Literal-
+Guard, PUSH16 und NOP.RET; Body-Daten werden vor der Veröffentlichung angelegt.
+Diese Wörter laufen nur außerhalb offener Definitionen. Sie können in einem
+Definierwort aufgerufen werden (z. B. `: var VARIABLE ; var x`). Kein DOES>.
+
+TYPE `( addr len -- )` gibt einen Bytebereich aus; bei Länge null ohne Lesezugriff.
+`S" text"` liefert interpretiert Adresse/Länge eines temporären Puffers,
+kompiliert Adresse/Länge eingebetteter Daten. `." text"` gibt den Text direkt
+bzw. beim Ausführen der Definition aus. Beide sind IMMEDIATE und in beiden
+Modi verfügbar. Genau ein Trennzeichen nach dem öffnenden Wort gehört zur
+Syntax; zusätzliche Leerzeichen zum Text. Keine Escapes, Zeilenwechsel oder
+Kommentarauswertung im Text; ein fehlendes Schlusszeichen verwirft die Zeile
+und ggf. die Definition. Die gesamte Eingabezeile bleibt auf 127 Bytes begrenzt.
+
+Der temporäre Puffer liegt an 0280..02FF mit Abschlussbyte; seine Daten sind
+bis zum nächsten interpretierten S" oder Reset gültig. ." überschreibt ihn
+nicht. Eingebettete Strings bleiben mit der Definition erhalten. Ein Sprung
+überspringt die Datenbytes, danach folgen geprüfte Literale für S". Kompiliertes
+." nutzt rohe temporäre Argumente statt Benutzerzellen und funktioniert mit
+acht bereits belegten Zellen. Interpretiertes/kompiliertes S" prüft dagegen
+Platz für seine beiden tatsächlichen Ergebnisse. Die Map annotiert seinen
+modusabhängigen Stackeffekt in mode_effects. Alle Wörter behalten die bestehende
+sieben Bit breite UART-Ausgabe; TYPE akzeptiert auch NUL innerhalb des Bereichs.
+
+Beispiele:
+
+```forth
+VARIABLE zaehler 7 zaehler ! zaehler @ .
+CREATE daten 123 , daten @ .
+42 CONSTANT antwort antwort .
+: hallo ." Hallo!" ; hallo
+: text S" dauerhaft" ; text TYPE
+```
+
 ## Prüfungen
 
 ```sh
@@ -244,15 +289,16 @@ CPU, SRAM-Timings und bestehende Simulationshelfer bleiben unverändert.
 .venv/bin/python forth/tests/test_console.py --rtl -v
 .venv/bin/python forth/tests/test_compiler.py --rtl -v
 .venv/bin/python forth/tests/test_control.py --rtl -v
+.venv/bin/python forth/tests/test_data.py --rtl -v
 ```
 
 Ohne `--rtl` entfallen die entsprechenden RTL-Tests. Dafür mit `--rtl` werden
 iverilog und vvp im PATH benötigt; Simulatoren entstehen in temporären Verzeichnissen.
 Vorhandene Helfer aus tests/support/ bleiben unverändert.
 
-Stand AP 7: 50 Testmethoden bestanden. Enthalten sind 57 instruktionsweise
+Stand AP 8: 60 Testmethoden bestanden. Enthalten sind 60 instruktionsweise
 CPU/SRAM/Python-Vergleiche in drei SRAM-Timings (1/1/3 ns, 2/2/12 ns, 3/4/19 ns),
-gerichtete UART-Puffer-Tests für KEY und Zeileneingabe sowie 22 komplette
+gerichtete UART-Puffer-Tests für KEY und Zeileneingabe sowie 30 komplette
 Konsolensitzungen mit RX-Pacing, TX-Rückstau und verzögertem ACK. Erwartete Ausgabe
 und Stackwerte werden unabhängig vorgegeben. Serielle TX-Dekodierung wird in
 den SRAM-Tests geprüft, serielle RX-Leitung und echte Hardware hier nicht.
@@ -260,7 +306,7 @@ den SRAM-Tests geprüft, serielle RX-Leitung und echte Hardware hier nicht.
 Zahlenausgabe in allen Basen 2..36 und .S bei jeder Tiefe 0..8 sind geprüft,
 einschließlich Puffergrenzen und Stackwiederherstellung. Strukturelle Prüfung
 aller übrigen Wort-/Parser-/Such-/Compilerpfade: maximal 12 physische Datenzellen,
-höchstens vier zusätzlich zur Eingabetiefe, fünf Returnframes einschließlich
+höchstens vier zusätzlich zur Eingabetiefe, sechs Returnframes einschließlich
 Wortaufruf. .S hat zählerabhängige Stack-Schleifen: separat alle Tiefen/Basen,
 maximal elf Datenzellen und drei Returnframes. Fehlerwiederaufnahme ist auch
 über mehrfaches zyklisches Wraparound der Hardwarezeiger geprüft. Weitere
@@ -272,3 +318,8 @@ optimierte Wrapper benötigt direkt ausgeführt zwei Returnframes, der
 mit Operandbyte 80 auf der CPU aus und prüfen Rollback nach unbekanntem Wort.
 Wörterbuchgrenzen, verborgene Header, Immediate-Ausführung und Opcode-/
 Operandgrenzen sind ebenfalls geprüft.
+
+AP 8 prüft außerdem atomare Daten-Definitionen auf bereits benutztem RAM,
+Allocation-/Puffergrenzen, String-Lebensdauer, Überspringen eingebetteter Bytes,
+fehlende Schlusszeichen, beide Stringmodi und volle Benutzerstacks. Ein
+übersetztes Stringwort wird mit allen drei physischen SRAM-Timings ausgeführt.

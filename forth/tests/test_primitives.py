@@ -167,7 +167,7 @@ class PrimitiveChecks(unittest.TestCase):
             for name in ('read_line', 'parse_name', 'parse_number', 'find_word')
         ]
         for word in entries:
-            if word['name'] in ('.S', 'EXECUTE'):
+            if word['name'] in ('.S', 'EXECUTE', 'S"'):
                 # Data-stack traversal loops have DEPTH-bounded iteration
                 # counts; EXECUTE has an arbitrary target. Both receive
                 # dedicated data/target-dependent checks instead.

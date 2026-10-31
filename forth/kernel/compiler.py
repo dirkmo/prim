@@ -228,6 +228,7 @@ def emit_compiler(image):
             set_cell(name, value)
     # Immediate so a nested colon is rejected instead of silently compiled.
     word(':', 0, 0, colon, flags=1)
+    image.define('colon_xt', image.symbols[image.words[-1]['xt']])
 
     def semicolon():
         c.call('require_compiling')
@@ -304,6 +305,7 @@ def emit_compiler(image):
         c.mark(fallback)
         byte(Op.NOP | 128)
         c.mark(publish)
+        c.mark('publish_definition')  # Shared transaction commit; caller emitted its own return.
         c.load('pending_header')
         c.push(2)
         c.ops(Op.ADD, Op.DUP, Op.BYTE_FETCH)

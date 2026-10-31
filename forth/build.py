@@ -25,7 +25,7 @@ def build_image():
 def memory_map(image):
     return {
         'format': 'prim-forth-map-v1',
-        'stage': 'AP7 interpreter, transactional compiler and control structures',
+        'stage': 'AP8 interpreter/compiler, control, data definitions and strings',
         'image': {'file': 'kernel.bin', 'start': 0, 'size': RAM_END,
                   'endianness': 'little', 'entry': 0},
         'symbols': dict(sorted(image.symbols.items())),

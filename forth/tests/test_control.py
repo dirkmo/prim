@@ -136,7 +136,8 @@ class ControlChecks(unittest.TestCase):
             sim = SramSimulation(directory, Tools(), with_uart=True)
             sim.build()
             for timing in TIMINGS:
-                result = sim.compare_image(image.memory, timing, max_steps=20000)
+                # Dictionary traversal grows as subsequent APs add kernel words.
+                result = sim.compare_image(image.memory, timing, max_steps=50000)
                 self.assertEqual(result.serial, b'ok\r\n')
                 last = next(r for r in reversed(result.records) if r['kind'] == 'step')
                 self.assertEqual(last['ds'][0], 2)
