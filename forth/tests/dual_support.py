@@ -103,6 +103,9 @@ class DualRunner:
         self.until(lambda: self.cpu._pc == self.image.symbols['idle'])
 
     def step(self):
+        if self.cpu._pc == self.image.symbols['idle']:
+            self.physical = self.get('depth')
+            self.frames = 0  # Errors/ABORT abandon the old call frames.
         opcode = self.memory.data[self.cpu._pc]
         op = opcode & 127
         self.physical += stack_delta(op)
@@ -144,4 +147,56 @@ class DualRunner:
             self.physical += 1
         self.cpu._pc = 0xFF80
         self.until(lambda: self.memory.data[self.cpu._pc] == Op.BREAK)
+
+
+class DualSession(DualRunner):
+    def __init__(self):
+        super().__init__()
+        self.uart_wire, self.ps2_wire = deque(), deque()
+        self.clock = 0
+        self.until(lambda: self.cpu._pc == self.image.symbols['read_line'] and self.get('console_initialized'))
+
+    def step(self):
+        # Host UART credit and physical keyboard pacing are independent. The
+        # hardware slot/FIFO still have finite capacities; no model-side decoder.
+        if hasattr(self, 'clock'):
+            self.clock += 1
+            if self.uart_wire and not self.memory.uart_rx and self.clock % 500 == 0:
+                self.memory.receive_uart(self.uart_wire.popleft())
+            if self.ps2_wire and self.clock % 1000 == 0:
+                self.memory.receive_ps2(self.ps2_wire.popleft())
+        super().step()
+
+    def uart(self, text):
+        self.uart_wire.extend(text.encode() if isinstance(text, str) else text)
+
+    def keyboard(self, text):
+        # Fixture encoding only; expected text/results are literal in tests.
+        # Decoder correctness itself is checked by independent scan sequences.
+        from forth.kernel.keyboard import key_tables
+        normal, shifted, altgr = key_tables()
+        for byte in text.encode() if isinstance(text, str) else text:
+            if byte in normal and byte:
+                self.ps2_wire.append(normal.index(byte))
+            elif byte in shifted and byte:
+                self.ps2_wire.extend([0x12, shifted.index(byte), 0xF0, 0x12])
+            elif byte in altgr and byte:
+                self.ps2_wire.extend([0xE0, 0x11, altgr.index(byte), 0xE0, 0xF0, 0x11])
+            else:
+                raise ValueError(f'fixture cannot encode {byte}')
+
+    def drained(self):
+        return (not self.uart_wire and not self.ps2_wire and not self.memory.uart_rx
+                and not self.memory.ps2_rx
+                and self.memory.read16(0xF100) == self.memory.read16(0xF102)
+                and self.memory.read16(0xF180) == self.memory.read16(0xF182))
+
+    def quiet(self):
+        self.until(lambda: self.drained() and not self.memory.read16(0xF202)
+                   and not self.memory.read16(0xF302)
+                   and self.cpu._pc == self.image.symbols['irq_wait'], limit=2000000)
+
+    def stack(self):
+        depth = self.get('depth')
+        return [self.cpu._ds[(self.cpu._dsp - depth + 1 + n) % 16] for n in range(depth)]
 

@@ -11,6 +11,7 @@ from forth.kernel.data import emit_data
 from forth.kernel.io import IO_VARIABLES, emit_io
 from forth.kernel.interrupts import IRQ_VARIABLES, emit_interrupts
 from forth.kernel.keyboard import KBD_VARIABLES, emit_keyboard
+from forth.kernel.frontend import FRONT_VARIABLES, emit_frontend
 
 # Private RAM cells; public Forth words will expose selected cells later.
 VARIABLES = {
@@ -40,7 +41,7 @@ def emit_kernel(image):
     for name, address in VARIABLES.items():
         image.define(name, address)
     if dual:
-        for name, address in {**IO_VARIABLES, **IRQ_VARIABLES, **KBD_VARIABLES}.items():
+        for name, address in {**IO_VARIABLES, **IRQ_VARIABLES, **KBD_VARIABLES, **FRONT_VARIABLES}.items():
             image.define(name, address)
     for name, address in {
         'input_buffer': 0x0200, 'string_buffer': 0x0280,
@@ -75,7 +76,7 @@ def emit_kernel(image):
         image.op(Op.BYTE_STORE)
 
     if dual:
-        for name in (*IO_VARIABLES, *IRQ_VARIABLES, *KBD_VARIABLES):
+        for name in (*IO_VARIABLES, *IRQ_VARIABLES, *KBD_VARIABLES, *FRONT_VARIABLES):
             image.push(0)
             image.push(Ref(name))
             image.op(Op.STORE)
@@ -90,6 +91,7 @@ def emit_kernel(image):
         emit_io(image)
         emit_interrupts(image)
         emit_keyboard(image)
+        emit_frontend(image)
     emit_primitives(image)
     emit_parser(image)
     emit_console(image)

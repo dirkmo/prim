@@ -103,3 +103,61 @@ The ASCII/dead-key restrictions above are this kernel's explicit choices.
 `python3 forth/tests/test_keyboard.py` executes literal scan sequences on Prim
 and compares independent expected ASCII strings, modifier release, typematic,
 Caps, AltGr, Ctrl/NUL, startup, unsupported sequences and recovery.
+
+## AP7: two editors, one interpreter
+
+Default FPGA images now boot both endpoints: initialize/clear VGA, discard
+pre-prompt input and issue one `ok` prompt on each endpoint. UART stays UART;
+PS/2 echo, results, prompts and errors go only to VGA. There is one shared
+parser/compiler, dictionary, BASE, STATE and user stack. Switching endpoints
+does not reset them or create a second session/interpreter.
+
+Each endpoint has its own 127-byte line editor, ready/error state and CR/LF
+suppression. BS/DEL edits only that endpoint; an invalid/overlong line is drained
+and rejected. Partial lines cannot acquire interpreter ownership. The collector
+services both endpoints in foreground and alternates complete ready lines when
+both are available. It saves/restores the active owner around editing echo.
+An open definition retains its owner across lines, including `[ ... ]` mode;
+the other endpoint can edit/queue a line but cannot execute it until `;`, error
+or ABORT releases the definition. Source buffers never mix characters.
+
+During execution, KEY polls the common dispatcher with global IRQs masked and
+reads only its command's receive ring. Other-source input is buffered; echo is
+deferred until the collector resumes. CRLF suppression belongs to the endpoint
+and is also applied before KEY, so the LF of the command's CRLF is not mistaken
+for the requested key. KEY does not echo a key. Arbitrary programs run to
+completion and cannot be preempted by console commands; debug UART remains
+available independently of the interpreter.
+
+Input loss conservatively discards that source's queued bytes and pending
+line, resets keyboard modifiers/prefixes if local, and resynchronizes at the
+next Enter. It never executes a shortened command. The damaged line reports
+`error: input too long` on its own endpoint. Loss during KEY aborts the current
+command immediately and silently drains the resynchronizing Enter afterward,
+avoiding a duplicate error. This message covers both buffer overflow and
+PS/2 frame/protocol loss; it is deliberately a small shared error path.
+
+Reserved SRAM allocation (user dictionary still ends at F000):
+
+| Region | Use |
+| --- | --- |
+| F000..F07F | Output, IRQ, keyboard and collector cells; 82 initialized bytes |
+| F080..F0FF | Reserved padding for console globals |
+| F100..F17F | UART raw ring: six-byte header + 64-byte storage |
+| F180..F1FF | PS/2 raw ring: six-byte header + 64-byte storage |
+| F200..F2FF | UART editor: ten bytes of state, buffer at +16, 128 bytes |
+| F300..F3FF | Local editor: same layout |
+| F400..FFEF | Remaining reserved SRAM |
+
+The total reservation is 1024 bytes from existing reserved SRAM, with 498
+bytes of actual state/buffer storage. The existing 0200..027F buffer remains
+the single parser input: a selected completed line is copied there. Sharing
+it avoids duplicating parser/compiler state. Generated maps report the profile,
+console variable addresses and console-runtime region. Kernel build rejects
+any dual-console image whose kernel could execute in the banked VRAM window.
+
+`python3 forth/tests/test_frontend.py` checks strict routing, shared definitions
+and stack, concurrent/partial input, alternating ready lines, multiline locks,
+KEY isolation, edit/error/ABORT behavior, overflows and decoder recovery using
+the real Prim interpreter/compiler. Hardware-serial/VGA integration follows in
+AP8; a Python peripheral model alone is not a board validation.

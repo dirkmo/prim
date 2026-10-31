@@ -29,7 +29,7 @@ def memory_map(image):
         'console_profile': 'dual' if image.dual_console else 'uart-only',
         'console_variables': {name: address for name, address in image.symbols.items()
                               if 0xF000 <= address < 0xFF00 and name != 'user_limit'},
-        'stage': 'AP8 interpreter/compiler, control, data definitions and strings',
+        'stage': 'PS2 AP7 dual console' if image.dual_console else 'UART-only interpreter/compiler',
         'image': {'file': 'kernel.bin', 'start': 0, 'size': RAM_END,
                   'endianness': 'little', 'entry': 0},
         'symbols': dict(sorted(image.symbols.items())),
@@ -45,7 +45,9 @@ def memory_map(image):
                 ('kernel', KERNEL_START, image.symbols['kernel_end']),
                 ('alignment', image.symbols['kernel_end'], image.symbols['user_start']),
                 ('user', image.symbols['user_start'], USER_LIMIT),
-                ('reserved', USER_LIMIT, RAM_END), ('mmio', RAM_END, 0x10000),
+                *([('console_runtime', USER_LIMIT, 0xF400), ('reserved', 0xF400, RAM_END)]
+                  if image.dual_console else [('reserved', USER_LIMIT, RAM_END)]),
+                ('mmio', RAM_END, 0x10000),
             )
         ],
     }

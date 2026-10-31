@@ -289,7 +289,10 @@ def emit_console(image):
 
     # Entry from cold boot and non-returning errors/ABORT. No call frame here.
     c.mark('console_start')
-    output(b'ok\r\n')
+    if getattr(image, 'dual_console', False):
+        c.call('frontend_start')
+    else:
+        output(b'ok\r\n')
     c.mark('console_next')
     c.call('read_line')
     token, number, execute, line_done = (
