@@ -16,6 +16,12 @@ ERRORS = {
     'number_overflow': (10, 'number overflow'),
     'unknown': (11, 'unknown word'),
     'compile_only': (12, 'compile-only word'),
+    'compiler': (13, 'compiler context'),
+    'name': (14, 'invalid name'),
+    'memory': (15, 'dictionary full'),
+    'immediate': (16, 'no user definition'),
+    'control': (17, 'unresolved control'),
+    'incomplete': (18, 'unfinished definition'),
 }
 
 # Software arithmetic scratch. No interrupts/reentrant arithmetic in version 1.
@@ -369,6 +375,7 @@ def emit_primitives(image):
         c.mark('error_' + name)
         c.push(number)
         c.store('last_error')
+        c.call('rollback_definition')
         for slot in ('depth', 'state', 'control_depth', 'definition_open'):
             c.push(0)
             c.store(slot)

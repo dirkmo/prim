@@ -74,6 +74,7 @@ def main():
     memory = ConsoleMemory(image.memory, sys.stdin.buffer, sys.stdout.buffer)
     cpu = Prim(memory)
     saved = None
+    exit_code = 0
     try:
         if sys.stdin.isatty():
             import termios
@@ -87,7 +88,11 @@ def main():
             termios.tcsetattr(fd, termios.TCSANOW, active)
         while True:
             if memory.eof and cpu._pc == image.symbols['raw_key']:
-                return 0
+                if memory.read16(image.symbols['definition_open']):
+                    cpu._pc = image.symbols['error_incomplete']
+                    exit_code = 1
+                else:
+                    return exit_code
             cpu.step()
     except KeyboardInterrupt:
         return 0

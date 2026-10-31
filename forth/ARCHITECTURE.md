@@ -2,7 +2,7 @@
 
 Stand: 31. Oktober 2026. Zielarchitektur; AP 2 implementiert Build und Boot,
 AP 3 die Grundwörter, AP 4 Texteingabe/Parser/Zahlen und AP 5 den interaktiven
-Interpreter. Laufzeitcompiler noch geplant. Änderungen hier begründen;
+Interpreter. AP 6 implementiert den Laufzeitcompiler. Änderungen hier begründen;
 aktuellen Stand und Messwerte in STATUS.md nachlesen.
 Arbeitsstand und APs: [STATUS.md](STATUS.md).
 
@@ -199,6 +199,15 @@ LITERAL ist compile-only/immediate und kompiliert die oberste Benutzerzelle.
 IMMEDIATE markiert die zuletzt abgeschlossene Benutzerdefinition; keine
 Kernelheader oder offene Definition verändern.
 
+AP-6-Umsetzung: Alle Header bleiben in Klasse 0. Normale Wörter werden als
+geprüfte Stub-Aufrufe kompiliert. Ein Literal erzeugt einen Aufruf von
+literal_guard (Wachstumsprüfung und DEPTH+1 ohne Ergebniszelle), danach erst
+PUSH8/16. Damit greifen dieselben Stackgrenzen auch in neuem Code. Keine
+Opcode-Inline-Klasse wird benötigt. `:` ist IMMEDIATE, um verschachtelte
+Definitionsanfänge unmittelbar abzuweisen; `]` ist ebenfalls IMMEDIATE und
+benötigt eine offene Definition. `;`, `[`, LITERAL und `[']` sind zusätzlich
+COMPILE_ONLY. Interne Byte-/Zellemitter sind vor AP 8 noch keine öffentlichen Wörter.
+
 Unaufgelöste Sprünge liegen in einem eigenen RAM-Kontrollstack, nicht auf dem
 Daten-/Returnstack: 32 Einträge mit 16-Bit-Typ und 16-Bit-Adresse. IF/ELSE/THEN
 und BEGIN/UNTIL/AGAIN/WHILE/REPEAT prüfen Typ und Grenzen. Version 1 unterstützt
@@ -213,7 +222,9 @@ prüfen. ALLOT akzeptiert nur nichtnegative Größen. Kein FORGET/MARKER.
 
 ### Return-Bit und Tail-Aufrufe
 
-AP 6 implementiert beide Optimierungen ohne ISA-Änderung:
+AP 6 implementiert beide Optimierungen ohne ISA-Änderung. Da Primitive derzeit
+als geprüfte Aufrufe kompiliert werden, werden sie am Ende zu Tail-Sprüngen;
+Return-Bit-Folding betrifft die unmittelbar erzeugten Literale:
 
 - Sicheres letztes Primitiv/Literal: Return-Bit an dessen Opcode setzen,
   separates NOP.RET entfällt. Laufzeit-Stackprüfungen davor müssen erhalten bleiben.
@@ -232,7 +243,7 @@ AP 6 implementiert beide Optimierungen ohne ISA-Änderung:
 
 ## Öffentlicher Wortumfang der ersten Version
 
-Dies ist der Zielumfang nach AP 8; Zeilen für AP 3–5 sind implementiert,
+Dies ist der Zielumfang nach AP 8; Zeilen für AP 3–6 sind implementiert,
 die übrigen Wörter noch geplant. Aktuelle Wortliste und Prüfungen in README.md.
 Stubs/Inline-Emitter müssen jeweils dieselben dokumentierten Stackeffekte haben.
 

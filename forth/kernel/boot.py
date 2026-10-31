@@ -5,6 +5,7 @@ from forth.image import KERNEL_START, USER_LIMIT, Ref
 from forth.kernel.primitives import emit_primitives
 from forth.kernel.parser import emit_parser
 from forth.kernel.console import emit_console
+from forth.kernel.compiler import emit_compiler
 
 # Private RAM cells; public Forth words will expose selected cells later.
 VARIABLES = {
@@ -21,6 +22,8 @@ VARIABLES = {
         'find_header', 'find_index', 'found_header', 'found_xt', 'found_flags',
         'print_addr', 'print_left', 'format_count', 'dump_count', 'dump_index',
         'word_cursor',
+        'last_kind', 'emit_value', 'compiler_needed', 'compile_value',
+        'compiler_index',
     ))
 }
 
@@ -67,6 +70,7 @@ def emit_kernel(image):
     emit_primitives(image)
     emit_parser(image)
     emit_console(image)
+    emit_compiler(image)
     image.define('kernel_end')
     image.define('kernel_latest', image.symbols[image.words[-1]['header']])
     user_start = (image.pc + 1) & ~1

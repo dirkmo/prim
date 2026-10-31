@@ -12,7 +12,7 @@ for directory in (ROOT, ROOT / 'src', ROOT / 'tests'):
     sys.path.insert(0, str(directory))
 
 from forth.build import build_image
-from forth.image import Image
+from forth.image import Image, USER_LIMIT
 from forth.kernel.boot import VARIABLES
 from forth.kernel.primitives import ERRORS
 from prim.cpu import Prim
@@ -81,11 +81,11 @@ class Runner:
 
     def invoke(self, target, word='private routine', limit=200000):
         program = Image()
-        program.org(self.image.symbols['user_start'])
+        program.org(USER_LIMIT)  # Reserved RAM, outside the compiling dictionary.
         program.push(target)
         program.op(Op.CALL)
         program.op(Op.BREAK)
-        start, end = self.image.symbols['user_start'], program.pc
+        start, end = USER_LIMIT, program.pc
         self.memory.data[start:end] = program.memory[start:end]
         self.cpu._pc = start
         physical_depth = self.memory.read16(VARIABLES['depth'])
@@ -167,9 +167,10 @@ class PrimitiveChecks(unittest.TestCase):
             for name in ('read_line', 'parse_name', 'parse_number', 'find_word')
         ]
         for word in entries:
-            if word['name'] == '.S':
+            if word['name'] in ('.S', 'EXECUTE'):
                 # Data-stack traversal loops have DEPTH-bounded iteration
-                # counts; test every 0..8 depth in test_console instead.
+                # counts; EXECUTE has an arbitrary target. Both receive
+                # dedicated data/target-dependent checks instead.
                 continue
             for initial in range(word['need'], 9 - max(0, word['give'] - word['need'])):
                 pending = [(image.symbols[word['xt']], initial, (None,))]

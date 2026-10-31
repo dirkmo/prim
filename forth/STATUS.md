@@ -1,8 +1,9 @@
 # Forth für Prim – kompakte Übergabe und Arbeitspakete
 
-Stand: 31. Oktober 2026. AP 1–5 abgeschlossen; AP 6–10 offen.
-Letzter Nutzerauftrag: geprüften AP-5-Stand committen. AP 6 nicht begonnen.
-AP-4-Commit: `cf739a7`. AP 5 wird mit dem Commit dieser Übergabe festgehalten.
+Stand: 31. Oktober 2026. AP 1–6 abgeschlossen; AP 7–10 offen.
+Letzter Nutzerauftrag: AP 6 umsetzen und committen. Dieser Stand wird mit dem
+Commit dieser Übergabe festgehalten. AP 7 nicht begonnen.
+AP-5-Commit: `d0ff968`, AP 4: `cf739a7`.
 Weitere Historie: AP 3 `1e77c88`, AP 1/2 `b620a9e`.
 
 ## Aktueller Stand und Leitplanken
@@ -11,9 +12,10 @@ Eigenständiges Text-Forth unter forth/, vollständig auf der CPU; kein TokenFor
 Umbau, keine Hosttokenisierung. Nicht standardkonform, bewusst kleiner Umfang.
 CPU/ISA, Stackgrößen und bestehende Tests/Simulationshelfer unverändert.
 Multiplikation/Division/variable Schiebeweiten in Software. Keine beschlossenen
-Hardware-Erweiterungen. Return-Bit-Folding und Tail-CALL→JP sind AP 6.
+Hardware-Erweiterungen. Return-Bit-Folding und Tail-CALL→JP sind implementiert.
 
-61 Wörter, interaktive Interpretation, noch kein `:`/`;` oder Laufzeitcompiler.
+71 Kernelwörter, interaktiver Interpreter und Laufzeitcompiler für `:`/`;`.
+Kontrollstrukturen und Daten-Definitionswörter folgen erst in AP 7/8.
 Start: ` .venv/bin/python forth/run.py ` (Prim-Modell mit Terminal-UART).
 Build: ` .venv/bin/python forth/build.py `; reproduzierbare kernel.bin/map.json/
 disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
@@ -27,13 +29,13 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
   Kontrollstack 0300..037F (32 Einträge à vier Bytes), Scratch 0380..03FF,
   Kernel ab 0400, Benutzerbereich ab align2(KERNEL_END) bis exklusiv F000.
   F000..FFEF Reserve, FFF0..FFFF MMIO. Keine Speicherisolation.
-- AP 5: idle=051D, console_start=2025, console_next=203D,
-  KERNEL_END=USER_START=20C6, kernel_latest=1FE2. Boot bis idle: 144 Instruktionen,
+- AP 6: idle=053B, console_start=2587, console_next=259F,
+  KERNEL_END=USER_START=2BC6, kernel_latest=2B9A. Boot bis idle: 159 Instruktionen,
   maximal zwei Datenzellen, kein Returnframe. Generierte Map ist maßgeblich.
 - Boot setzt BASE=10, STATE/DEPTH/Metadaten=0, HERE=USER_START, LATEST=Kernelende
   der Headerkette; Interrupts CPU/UART aus. idle springt zu console_start.
   Dort `ok`/CRLF, danach read_line; jeder erfolgreiche Zeilenabschluss ebenfalls
-  `ok`/CRLF. Kein äußerer CALL-Rahmen. Kein Compiler oder Definitionenrollback.
+  `ok`/CRLF bzw. `compiled`/CRLF bei offener Definition. Kein äußerer CALL-Rahmen.
 - Header +0 Link16, +2 Flags8, +3 Namenslänge8, +4 XT16, +6 Klasse8,
   +7 Inline-Opcode8, +8 ASCII-Name; Padding gerade. Flags 1 immediate,
   2 compile-only, 4 hidden. Alle aktuellen Klassen 0. Namen 1..31,
@@ -42,7 +44,7 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
   Code und emit_word in kernel/primitives.py sind gemeinsame Codegeneratoren.
   imageweiter Labelzähler; Image: define/org/op/push/cell/emit/resolve.
 - Composition in kernel/boot.py: Boot+idle, emit_primitives, emit_parser,
-  emit_console, kernel_end/user_start. Zusätzliche Routinen vor kernel_end
+  emit_console, emit_compiler, kernel_end/user_start. Routinen vor kernel_end
   einfügen, Headerkette am letzten image.words-Eintrag verankern.
 - DEPTH zählt nur Benutzerzellen, maximal acht. Geprüfte Wörter/Inline-Emitter
   müssen Bedarf und Wachstum vor Eingriff prüfen. Interne Stackwerte nicht zählen.
@@ -64,8 +66,9 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
   number_status0 Syntax/kein Zahlentoken,1 Erfolg,2 Überlauf. number_value sonst0.
   Invalides BASE ist Fehler. Zahlkonvertierung nutzt eigene Verwaltungszellen.
 - find_word: Token nach found_header/xt/flags (0 bei Misserfolg); keine Ausführung.
-  Interpreter prüft COMPILE_ONLY, ruft sonst XT indirekt auf. Bei nicht gefundenem
-  Wort Zahl konvertieren, mit Code.guard(0,1) prüfen, erst dann Wert ablegen.
+  STATE=0: COMPILE_ONLY ablehnen, sonst XT ausführen. STATE=1: nicht-immediate
+  Wörter kompilieren, Immediate ausführen. Zahlen nach erfolgloser Suche entweder
+  mit Code.guard(0,1) interpretieren oder als geprüfte Laufzeitliterale übersetzen.
 - . signed, U. unsigned, BASE2..36, nachfolgendes Leerzeichen. .S zeigt `<n> `
   plus Werte unten→oben und stellt alle Zellen wieder her; auch n in BASE.
   WORDS sichtbar/neueste zuerst. DEPTH liefert Tiefe vor Ablegen des Ergebnisses.
@@ -74,15 +77,42 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
   Gemeinsamer Rechenkern für signed Division und Zahlenausgabe, kein UM/MOD.
 - Fehler: Grund/ggf.Token ausgeben, restliche Zeile/Stack verwerfen, über
   error_exit→idle neue logische Basis etablieren. Hardwarezeiger bleiben beliebig;
-  alte Frames niemals zurückkehren lassen. HERE/LATEST bleiben erhalten.
+  alte Frames niemals zurückkehren lassen. Bei offener Definition vorher
+  HERE/LATEST auf saved_here/saved_latest zurückrollen, sonst erhalten.
   ABORT analog ohne Fehlertext, last_error bleibt stehen.
 - last_error0126: 1 Unterlauf,2 Überlauf,3 Shift,4 Division0,5 Divisionsüberlauf,
   6 Eingabelänge,7 Kommentar,8 BASE,9 Steuerzeichen,10 Zahlüberlauf,
-  11 unbekannt,12 compile-only. Token erst nach Fehlerausgabe löschen.
+  11 unbekannt,12 compile-only,13 Compilerkontext,14 Name,15 Speicher,
+  16 kein Benutzerwort für IMMEDIATE,17 offener Kontrollstack,18 EOF bei offener
+  Definition (nur Simulator). Token erst nach Fehlerausgabe löschen.
 - Neue Variablen AP5: find_header0142,find_index0144,found_header0146,
   found_xt0148,found_flags014A,print_addr014C,print_left014E,format_count0150,
   dump_count0152,dump_index0154,word_cursor0156. number_status013E,
   number_value0140. Vollständige Zuordnung in boot.py und Map.
+- Neue AP6-Zellen: last_kind0158 (1 CALL,2 Literal), emit_value015A,
+  compiler_needed015C,compile_value015E,compiler_index0160. last_opcode/last_end
+  und fold_safe aus der ursprünglichen Variablenliste verfolgen Instruktionsgrenzen.
+- kernel/compiler.py: compiler_reserve nutzt compiler_needed und prüft
+  USER_START<=HERE<=F000 sowie Platz ohne Adressüberlauf; compile_byte/cell
+  verbrauchen je einen rohen Wert. Header-/Tokenblöcke vorab reservieren.
+  compile_word nutzt found_xt; compile_literal nutzt compile_value. Beides ohne
+  Benutzerstackeffekt. Literale erzeugen PUSH16 literal_guard;CALL;PUSH8/16 Wert.
+  literal_guard prüft/zählt die neue Benutzerzelle vor dem eigentlichen PUSH.
+- `:` IMMEDIATE, Header verborgen, alte gleichnamige Definition weiter sichtbar.
+  `;` IMMEDIATE/COMPILE_ONLY, nur STATE=1+definition_open+leerer Kontrollstack.
+  `[`, LITERAL und `[']` ebenfalls Flags3; `]` Flags1, braucht offene Definition.
+  STATE als Adresse lesbar; direktes STATE! nicht unterstützt. IMMEDIATE nur
+  für das letzte fertige Benutzerwort. `'` parst zur Laufzeit, `[']` kompiliert XT.
+  EXECUTE: geprüfter XT-Verbrauch und tail JP auf Ziel, kein eigener Zusatzframe.
+- Abschluss: sicheres letztes CALL→JP, letztes Literal-PUSH mit Bit7; übrige
+  Fälle NOP.RET. Adresse muss im aktuellen Körper liegen und last_end=HERE sein.
+  Immediate-Ausführung außer `;` invalidiert fold_safe für die ganze Definition.
+  Alle Header Klasse0; keine ungeprüften Inline-Opcodes. Leere Wörter NOP.RET.
+- rollback_definition erhält Benutzerwerte, stellt bei offener Definition
+  HERE/LATEST wieder her, dann Zustandsfelder zurück. Fehler und ABORT rufen
+  dies vor dem Löschen von definition_open auf. Keine Rücknahme beliebiger
+  Immediate-Seiteneffekte. EOF im Simulator führt bei offener Definition über
+  error_incomplete zum CPU-Rollback und Exitcode1; Hardware wartet auf UART.
 
 ## Arbeitspakete
 
@@ -99,12 +129,12 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
 5. **AP 5 – Wörterbuch/Interpreter: abgeschlossen.** kernel/console.py;
    Namenssuche, äußere Schleife, . U. .S DEPTH WORDS ABORT, sechs zusätzliche
    Wörter. run.py führt den echten Kernel im CPU-Modell aus, keine Hostauswertung.
-6. **AP 6 – Compiler: offen.** Abhängig AP5. `: name ... ;`, STATE, IMMEDIATE,
+6. **AP 6 – Compiler: abgeschlossen.** kernel/compiler.py. `: name ... ;`, STATE, IMMEDIATE,
    `[ ] LITERAL ' ['] EXECUTE`; neue Definitionen auf CPU kompilieren, Header
    bis Abschluss verstecken, HERE/LATEST bei Fehler/ABORT zurückrollen.
-   Fehler/ABORT zuerst Rollback, danach definition_open löschen! Konservative
-   Return-Bit-/Tail-CALL→JP-Optimierung, Instruktionsgrenzen/Sprungziele wahren.
-   Inline-Klasse nur mit denselben Stackprüfungen wie aufrufbare Wörter.
+   Fehler/ABORT zuerst Rollback, danach definition_open löschen. Konservative
+   Return-Bit-/Tail-CALL→JP-Optimierung mit geprüften Wortaufrufen/Literalen.
+   Keine Opcode-Inline-Klasse notwendig. Zehn neue Kernelwörter.
 7. **AP 7 – Kontrollstrukturen: offen.** Abhängig AP6. IF ELSE THEN BEGIN UNTIL
    AGAIN WHILE REPEAT, getrennter RAM-Kontrollstack, Typ-/Grenzprüfung.
    Maximal ein offenes WHILE pro BEGIN. DO/LOOP nicht im ersten Umfang.
@@ -127,18 +157,28 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
 .venv/bin/python forth/tests/test_primitives.py --rtl -v
 .venv/bin/python forth/tests/test_parser.py --rtl -v
 .venv/bin/python forth/tests/test_console.py --rtl -v
+.venv/bin/python forth/tests/test_compiler.py --rtl -v
 ```
 
-AP5: alle 30 Testmethoden bestanden (4+9+8+9). Darin 48 instruktionsweise
+AP6: alle 43 Testmethoden bestanden (4+9+8+9+13). Darin 54 instruktionsweise
 Python/CPU/SRAM-Vergleiche über drei Timings, gerichtete KEY-/Eingabeprüfung
-sowie sechs komplette UART-Puffer-Konsolensitzungen. Alle Basen, alle .S-Tiefen,
+sowie 14 komplette UART-Puffer-Konsolensitzungen. Alle Basen, alle .S-Tiefen,
 Puffergrenzen, versteckte/überschriebene/compile-only Einträge, Suche vor Zahl,
 Fehler-/ABORT-Wiederaufnahme und zyklisches Zeiger-Wraparound geprüft.
-Strukturell maximal 12 Datenzellen (vier temporäre) und drei Returnframes; .S separat
+Strukturell maximal 12 Datenzellen (vier temporäre) und fünf Returnframes; .S separat
 315 Tiefen/Basenfälle, maximal elf Datenzellen und drei Returnframes. Keine seriellen
 RX- oder Boardtests. Konsolen-RTL speist Bytes vor uart_buffers ein.
 
-Nächstes AP6 noch nicht begonnen. Erst Compilertransaktionen/STATE-Fluss in
-console.py ergänzen, Fehler/ABORT um Rollback erweitern, Compilerwörter und
-sichere Emitter implementieren. Zusätzliche Aufrufrahmen budgetieren. Kein
-stillschweigendes Vergrößern der Hardwarestacks und keine neue ISA voraussetzen.
+AP6 zusätzlich: Multiline, Immediate, Tick/EXECUTE, Neudefinitionen, Header-Hiding,
+Namen bis31, Speicherende/Wraparound und atomare Fehler, Operanden mit Bit7,
+40er Tail-Kette, kontrollierter zusätzlicher Returnframe ohne Optimierung.
+EXECUTE separat geprüft (dynamisches Ziel, aus struktureller Prüfung ausgenommen).
+Kompilierung/Ausführung und Rollback im physischen SRAM-Modell bei allen drei
+Timings geprüft, keine Hosttokenisierung. CPU und bestehende Infrastruktur unverändert.
+
+Nächstes AP7 noch nicht begonnen. Immediate/COMPILE_ONLY-Kontrollwörter mit
+RAM-Kontrollstack ergänzen, private Byte-/Zellemitter und Reservierung nutzen.
+Immediate-Pfade invalidieren die Optimierung bereits automatisch; gemeinsames
+NOP.RET am Ende und korrekte Sprungziele erhalten. JZ verbraucht Flag und Ziel;
+auch den logischen DEPTH-Effekt des Flags abbilden. Zusätzliche Aufrufrahmen
+budgetieren, keine Stackvergrößerung und keine neue ISA voraussetzen.
