@@ -1,0 +1,134 @@
+{
+  "artifact_sha256": {
+    "build/ps2-ap1-baseline/board/nextpnr.log": "dd2295c45909fe1743f9015902b0b5d43bd719190c5cafb8b6f3f1aa9072cc8b",
+    "build/ps2-ap1-baseline/board/prim.bin": "322604d66de466e3db2d63a75d9dce87719de8d6b7bbf146631d460dc90bfc15",
+    "build/ps2-ap1-baseline/board/prim.json": "719b81d004a1834f504e3d752f7025f3ee0618a6c773f5f53a565b2b61a3ccd3",
+    "build/ps2-ap1-baseline/board/synth.log": "692e21b205bf90d71f1bddbd293c75872516457f2d0d68951ea97e2a6643cba4",
+    "build/ps2-ap1-baseline/board/timing.json": "1366771bc2d6b791c8d956ac619cc52206eefbac9e8c56b8acd7483db70f552e",
+    "build/ps2-ap1-baseline/forth/kernel.bin": "56a71371e6ca780f48b8ed511256755842d9890994cfba1164617bd800c4479c",
+    "build/ps2-ap1-baseline/forth/kernel.map.json": "da3aedc785b7d8122a54b1d561fcf3deed483b461bc5e57642959d1a3a6967e8"
+  },
+  "board": {
+    "flip_flops": 973,
+    "fmax": {
+      "clk_sys": {
+        "achieved": 30.5278263092041,
+        "constraint": 25
+      }
+    },
+    "synthesis_cells": {
+      "$_TBUF_": 16,
+      "$scopeinfo": 16,
+      "SB_CARRY": 361,
+      "SB_DFF": 47,
+      "SB_DFFE": 578,
+      "SB_DFFESR": 254,
+      "SB_DFFESS": 10,
+      "SB_DFFSR": 78,
+      "SB_DFFSS": 6,
+      "SB_LUT4": 3330,
+      "SB_PLL40_CORE": 1,
+      "SB_RAM40_4K": 16
+    },
+    "utilization": {
+      "ICESTORM_LC": {
+        "available": 7680,
+        "used": 4020
+      },
+      "ICESTORM_PLL": {
+        "available": 2,
+        "used": 1
+      },
+      "ICESTORM_RAM": {
+        "available": 32,
+        "used": 16
+      },
+      "SB_GB": {
+        "available": 8,
+        "used": 4
+      },
+      "SB_IO": {
+        "available": 206,
+        "used": 54
+      },
+      "SB_WARMBOOT": {
+        "available": 1,
+        "used": 0
+      }
+    }
+  },
+  "commands": [
+    "python3 forth/build.py --output build/ps2-ap1-baseline/forth",
+    "python3 boards/olimex_ice40hx8k_evb/build.py build --output build/ps2-ap1-baseline/board"
+  ],
+  "date": "2026-10-31",
+  "forth": {
+    "control_reserved_bytes": 128,
+    "image_bytes": 65520,
+    "input_reserved_bytes": 128,
+    "interrupt_headroom": "not yet proven; AP5 acceptance requirement",
+    "interrupts_enabled": false,
+    "kernel_end_exclusive": 13859,
+    "kernel_start": 1024,
+    "kernel_words": 89,
+    "scratch_reserved_bytes": 128,
+    "string_reserved_bytes": 128,
+    "user_dictionary_bytes": 47580,
+    "user_limit": 61440,
+    "user_start": 13860,
+    "variable_cells": 58,
+    "variables_reserved_bytes": 256
+  },
+  "git_head": "4e7b0d912c171b6b96d7043b72f216cae6699a26",
+  "purpose": "AP1 pre-PS2 hardware and standalone Forth baseline",
+  "settings": {
+    "clock_mhz": 25,
+    "data_stack_cells": 16,
+    "device": "hx8k",
+    "package": "ct256",
+    "return_stack_cells": 16,
+    "seed": 1,
+    "vga_enable": true
+  },
+  "source_sha256": {
+    "boards/netlists/ICE40-IO_Rev_A.net": "a048c4d3ec83bd46fd28c1ef439291e34f2dd1a331e92b962535408a2a8226a1",
+    "boards/netlists/iCE40HX8K-EVB_Rev_B.net": "af507cc52effc0e7ddb7c0c9baef41a4e8d73d2ba9fddcd7c95d4cfb34690b19",
+    "boards/olimex_ice40hx8k_evb/board.pcf": "c5b40f4585ae4ce6b04e109a072cda01c39bf475ce80dcb83b112f561bfc2bf8",
+    "boards/olimex_ice40hx8k_evb/build.py": "f7ae556d8acac05e571cbcab6fdf5dd9736164b01cf2d9aed37e494bf842cf9f",
+    "boards/olimex_ice40hx8k_evb/top.v": "68187b41861618f1b6c26564afd02b9efcdaf4a805d9a07730e6a24630daa9fe",
+    "cpu/rtl/prim.v": "87be916b5380fd0eea848db2a62a15d3335fedd95634a2bed154a57b0050beaf",
+    "debug_uart/rtl/debug_uart.v": "0c1228ba28a5944e9a1746b7ef7d283bf58480a5940bed7ee3c168e6733d4648",
+    "debug_uart/rtl/debug_uart_link.v": "aa882984cede46c7eae04ae517de79c3f3026d60207e910f7272471df71c654c",
+    "debug_uart/rtl/uart_arbiter.v": "8e37db7a124d900729be6dacbe8ebb1d6cfc29ef8d5a4d96b142b6bb01c3fa26",
+    "debug_uart/rtl/uart_buffers.v": "0d75d68cbf7b3bc7f7a3604defbda58128201bcd7b03ec9c2424c0e8ec3564d0",
+    "debug_uart/rtl/uart_rx.v": "cc0c8da94cf7b951cb4bfc1a5101e5c0c3a8ebc4cc6222ec6ea28b725bc001bd",
+    "debug_uart/rtl/uart_tx.v": "bd2a408ac60c1e097c34abebc2fd453cc7212c9780d33f183bacfc546e757051",
+    "forth/__init__.py": "5443058758c78780658959d8eff73af98d578f9e95f62ad7f174471c376cc4ff",
+    "forth/build.py": "94fc06d8ad2663ec287dea90ff38d1c4dc31a50f5c02a139f714cf29fced5979",
+    "forth/image.py": "d6d32e20c94e9db6823d31f7580530aff0aeb3cd213e1922842d049999192c5c",
+    "forth/kernel/__init__.py": "82edb7212d6b27afbe253f3c7ed4cb8c2b96e6419c3f23a091813e165224df96",
+    "forth/kernel/boot.py": "6965b1d99f2307b294d0c55fcdae197734220eb5c2f94378e8b0d391aa699f34",
+    "forth/kernel/compiler.py": "f3173a2027e7e5dc834ed0501a6c9a8cd52fc10da4c7d7aeeebfe9f75d541429",
+    "forth/kernel/console.py": "35857a0481c7979f632764fa64251d03f9ad26e9891b0a4065441acdeb4a3c21",
+    "forth/kernel/control.py": "a92dd822c000218fde5aece97f34fb68a8a2666682624a08ed5d415428425a61",
+    "forth/kernel/data.py": "4e3eaaf76ac2084caaef6df6ea6a7ad43d97100511e9711bbd28de3f4bb8a33f",
+    "forth/kernel/parser.py": "9187bcda0ce5c8442543b5aa9ec4ccf7236b192b58066b23826bb2045b54f521",
+    "forth/kernel/primitives.py": "cede6a1517539789502dd9ab19613d4fbb9c17df369ed39f71f28e3301321f83",
+    "forth/run.py": "a9f9614f4acfe4b4a198b06cf89c8c1ac40eb3b6116567253eb5e040541ced94",
+    "forth/test.py": "257b2e8589e2f25ba7862f2ae5270eb45e2e748595fef5858d1f5b68b37ebb20",
+    "src/prim/isa.py": "ba6b2075941f8930e40cff1540d53ace41ce33b758e72c2cb486e6665459d83b",
+    "system/rtl/bus_mux.v": "010f1741b11800d5d8019d60427f3435eb15247af412e4564e018b8a8a0bebea",
+    "system/rtl/memory.v": "b916a19bb77aff461043295be5b4adf1f97b1011ba0034bdd7f585ce7969519e",
+    "system/rtl/memory_io.v": "809fd2aa5193915efd5ca7f4b8750e1529b41b14aae08c2bed54e8df2d1cbe9e",
+    "system/rtl/prim_system.v": "ef6816ee1bfd75b0db5e6f1884b737f1447a7fd0186c7f71f8cb4501c9b26720",
+    "system/rtl/timer_mmio.v": "1a4c4874e85becb497be56e6794473122f5b470bd79cd03e63f6fd38b33f8c65",
+    "timer/rtl/timer.v": "7b24e898c9d8eb59b5014e7f0db28983b0c852103f3133f1824e646c800e9fba",
+    "vga/rtl/vga_font.v": "e75c22841259fd8884e38418e9f3ae0dd9c5c1a7839d794f13077724d01a6514",
+    "vga/rtl/vga_text.v": "142e6cc71b535dd2fc41a54ec2c353c15e903d0219b9fad51ab8142521f6ac61"
+  },
+  "tools": {
+    "nextpnr": "\"nextpnr-ice40\" -- Next Generation Place and Route (Version nextpnr-0.11.1-18-gdec04b3b)",
+    "python": "3.14.8",
+    "yosys": "Yosys 0.68+136 (git sha1 c30457480, RelWithDebInfo, GNU /usr/bin/c++ 16.2.1) [/home/dirk/.cache/yay/yosys-nightly/yosys at makepkg]"
+  }
+}
