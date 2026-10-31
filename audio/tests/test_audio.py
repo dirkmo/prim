@@ -2,6 +2,8 @@
 """Audio core and system bus behavioral checks."""
 import argparse
 import sys
+import json
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -35,6 +37,32 @@ class AudioTests(unittest.TestCase):
 
     def test_core(self):
         self.simulate('tb_audio',['audio/rtl/audio.v','audio/tests/tb_audio.sv'])
+    def test_port_contract(self):
+        self.simulate('tb_audio_contract',['audio/rtl/audio.v','audio/tests/tb_audio_contract.sv'])
+
+    @unittest.skipUnless(shutil.which('yosys') and shutil.which('yosys-config'),
+                         'Yosys iCE40 cells needed for mapped RAM check')
+    def test_mapped_ebr_contract(self):
+        # Check actual inferred EBR count and run the same port scoreboard on
+        # the technology-mapped circuit, not a second behavioral RAM model.
+        with tempfile.TemporaryDirectory(prefix='prim-audio-ebr-') as directory:
+            d=Path(directory)
+            script=(f'read_verilog "{ROOT / "audio/rtl/audio.v"}"; '
+                    f'synth_ice40 -top audio -json "{d / "audio.json"}"; '
+                    f'write_verilog -noattr "{d / "audio.v"}"')
+            result=subprocess.run(['yosys','-Q','-T','-p',script],capture_output=True,text=True,timeout=90)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            cells=json.loads((d/'audio.json').read_text())['modules']['audio']['cells']
+            self.assertEqual(sum(c['type']=='SB_RAM40_4K' for c in cells.values()),1)
+            datdir=subprocess.check_output(['yosys-config','--datdir'],text=True).strip()
+            result=subprocess.run([IVERILOG,'-g2012','-s','tb_audio_contract','-o',str(d/'sim'),
+                str(ROOT/'audio/tests/tb_audio_contract.sv'),str(d/'audio.v'),
+                str(Path(datdir)/'ice40/cells_sim.v')],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            result=subprocess.run([VVP,str(d/'sim')],capture_output=True,text=True,timeout=60)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertIn('PASS',result.stdout)
+
     def test_mmio(self):
         for enabled in (0,1):
             self.simulate('tb_audio_mmio', ['audio/tests/tb_audio_mmio.sv','audio/rtl/audio.v',

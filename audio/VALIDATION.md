@@ -1,5 +1,8 @@
 # Audio validation and measured resources
 
+Historical register-based implementation. The current RAM-based design and
+measured optimization are documented in [BRAM_VALIDATION.md](BRAM_VALIDATION.md).
+
 Implementation checked on 2026-10-31. Hardware playback has not been tested and
 no FPGA or flash programming was performed.
 

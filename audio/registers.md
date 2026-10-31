@@ -21,8 +21,15 @@ FFE0..FFEF remains reserved when disabled (reads zero, ignores writes).
 | FFEB | STATUS | R | 00 | Bits 3:0 playing voices; bits 7:4 pending commands for voices 0..3 |
 | FFEC..FFEF | Reserved | R/ignored W | 00 | Always read zero |
 
-Unused bits always read zero and ignore writes. MODE through DECAY are separate
-**staging banks per voice**. VOICE selects the bank for both reads and writes.
+Unused bits always read zero and ignore writes. MODE through DECAY form **one
+shared staging bank**. VOICE selects the target for APPLY/TRIGGER/STOP only.
+Changing VOICE neither loads the target's active parameters nor clears or swaps
+the staging bank. Reads always return the same prepared configuration.
+Active parameters and oscillator/envelope state remain independent per voice.
+Software must prepare every field it wants to change before APPLY/TRIGGER;
+fields left untouched are inherited from the last prepared configuration,
+including configuration prepared for another voice. This intentionally replaces
+the earlier per-voice staging banks; addresses and field encodings are unchanged.
 Voice 3 always uses noise; its waveform and duty fields have no sound effect.
 
 ## Commands, timing and atomicity
@@ -38,16 +45,18 @@ Voice 3 always uses noise; its waveform and duty fields have no sound effect.
    STOP ALL does this for all four voices. Staging and active parameters remain.
 
 Command priority within a byte is STOP ALL > STOP > TRIGGER > APPLY. A zero
-command does nothing. Pending commands commit at the next 256-clock frame
-boundary. Mixer output becomes PWM duty at the following boundary, so audible
+command does nothing. Pending commands are captured at the next 256-clock frame
+boundary, then applied as each voice is visited by the RAM sequencer. Mixer output becomes PWM duty at the following boundary, so audible
 changes can take up to two frames (20.48 us at 25 MHz), excluding envelope time.
 
 To save FPGA registers, **all audio writes wait while any command is pending**.
 The bus must hold its request/data until ACK; the normal CPU and debug adapters
-already do this. Reads, including STATUS, do not wait for pending commands.
+already do this. Reads, including STATUS, do not wait for pending commands. After system
+reset all accesses wait for a 32-clock RAM clear.
 This preserves command configuration without a third bank of snapshot registers.
 Later commands execute in order; there is no overwrite/cancel queue. At the
-board clock a blocked write waits at most one frame plus normal bus overhead.
+board clock a blocked write waits less than two frames plus normal bus overhead. Pending
+bits clear only after the complete updated voice state has been stored in RAM.
 This supersedes the original plan's nonblocking latest-command-wins queue.
 
 A multi-byte RATE write changes staging only. No intermediate frequency reaches
@@ -83,8 +92,11 @@ its **update rate**, not a pitched fundamental. The recurrence is
 Output is +127 or -127 according to bit 0. No carry means hold the noise value.
 
 Envelope steps use a dedicated global millisecond tick (`CLK_HZ / 1000`, integer
-cycles). Four voices are serviced in consecutive clocks after each tick. At the
-board clock this adds at most 160 ns service latency. Each nonzero interval
+cycles). A global 8-bit millisecond epoch and a saved epoch per voice let the
+frame sequencer recognize each new tick, including epoch wraparound. Each voice
+is serviced once per audio frame, adding less than 10.24 us tick-service latency
+at the board clock. Supported CLK_HZ values are multiples of 1000 and at least
+256000, so the frame visits every voice at least once per millisecond. Each nonzero interval
 counts global ticks; the first tick after a trigger can arrive in less than one
 millisecond. Attack rises from 0 to VOLUME, then decay falls to zero. Attack=0
 starts immediately at peak; decay=0 skips decay immediately on reaching peak.
@@ -97,10 +109,15 @@ shared signed shift/add datapath applies the 4-bit level and sums all voices in
 saturate to -128..127, and add 128 for PWM. Negative shifts round toward minus
 infinity. Maximum configured amplitude fits with headroom; arithmetic cannot
 wrap. Envelope service, phase addition and amplitude scaling are shared; no
-hardware multipliers or block RAM are required.
+hardware multipliers are required. One 4-Kibit EBR stores active parameters and
+per-voice phase, level, envelope, elapsed time and last serviced epoch. A shared
+112-bit shift register loads/stores seven 16-bit words for each voice. Voice
+processing takes 29 clocks, 116 clocks for four voices, within each 256-clock
+frame. The other 140 clocks provide idle/bus-update headroom.
 
 MASTER enable/mute affects output only: phase/envelopes continue. Disabled/muted
-output uses midpoint duty 128, not a static low GPIO. System reset clears all
-configuration, phase, levels and pending commands, seeds noise and restores
-midpoint PWM. CPU halt, single-step and CPU-only debug reset preserve audio.
+output uses midpoint duty 128, not a static low GPIO. System reset immediately clears staging, levels/status and pending commands,
+seeds noise and restores midpoint PWM. A sequenced 32-clock RAM clear removes
+all saved configuration and state before accesses resume; FPGA EBR contents do
+not need asynchronous reset or power-up initialization. CPU halt, single-step and CPU-only debug reset preserve audio.
 No audio IRQ is generated; software can poll STATUS or use the existing timer.

@@ -7,5 +7,11 @@
     "reports": "build/audio-after",
     "resource_report": "Resources: /vol/dev/prim/build/audio-after\nResource                    Used    Total     Free    Usage\nLogic cells (routed)        7630     7680       50    99.3%\nLUT4 (synthesized)          6015     7680     1665    78.3%\nFlip-flops (synth.)         2279     7680     5401    29.7%\nBlock RAM (4 Kibit)           17       32       15    53.1%\nPLLs                           1        2        1    50.0%\nGlobal buffers                 7        8        1    87.5%\nI/O pins                      57      206      149    27.7%\nCarry cells (synthesized): 547\nLUT/FF/carry are parts of logic cells; do not add these rows together.\nclk_sys: target 25.00 MHz, reported maximum 28.17 MHz (PASS)\nInternal timing report; physical UART/SRAM behavior requires board verification.\n"
   },
-  "audio_rtl_sha256": "3a37924a4c4e9bd36f7784e992c92dfe5e2f5d5f95af724e864f2884c269af9e"
+  "audio_rtl_sha256": "0f624234cf9262845c38f69a3b0e20fdfedb94877c3516a9d2c75d9d132edabc",
+  "register_based_audio_rtl_sha256": "3a37924a4c4e9bd36f7784e992c92dfe5e2f5d5f95af724e864f2884c269af9e",
+  "optimized": {
+    "reports": "build/audio-bram",
+    "resource_report": "Resources: /vol/dev/prim/build/audio-bram\nResource                    Used    Total     Free    Usage\nLogic cells (routed)        6733     7680      947    87.7%\nLUT4 (synthesized)          5573     7680     2107    72.6%\nFlip-flops (synth.)         1923     7680     5757    25.0%\nBlock RAM (4 Kibit)           18       32       14    56.2%\nPLLs                           1        2        1    50.0%\nGlobal buffers                 5        8        3    62.5%\nI/O pins                      57      206      149    27.7%\nCarry cells (synthesized): 568\nLUT/FF/carry are parts of logic cells; do not add these rows together.\nclk_sys: target 25.00 MHz, reported maximum 28.67 MHz (PASS)\nInternal timing report; physical UART/SRAM behavior requires board verification.\n",
+    "changes": "One shared 55-bit staging bank; one EBR stores four active configurations and oscillator/envelope states."
+  }
 }

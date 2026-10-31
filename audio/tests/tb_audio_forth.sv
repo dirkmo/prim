@@ -33,6 +33,13 @@ memory_io #(.AUDIO_ENABLE(1),.CLK_HZ(25000000)) io(
  .o_input_read(input_read),.o_output_data(output_data),.o_output_valid(output_valid),
  .i_ps2_clk(1'b1),.i_ps2_data(1'b1),.i_uart_rx_irq(1'b0),.i_uart_tx_irq(1'b0),
  .ram_addr(ram_addr),.ram_data(ram_data),.ram_cs_n(cs),.ram_oe_n(oe),.ram_we_n(wr),.o_audio_pwm(pwm));
+wire [111:0] voice_state [0:3];
+genvar v,w;
+generate for(v=0;v<4;v=v+1)begin: inspect_voice
+ for(w=0;w<7;w=w+1)begin: inspect_word
+  assign voice_state[v][w*16+:16] = io.sound.generator.state_ram[v*8+w];
+ end
+end endgenerate
 always @(negedge clk) begin
  rx_valid=0;
  if(!reset && !csr[0] && rx_index<count) begin
@@ -46,12 +53,12 @@ always @(posedge clk) if(!reset) begin
  if(tx_valid)$fwrite(tx_file,"%02x\n",tx_data);
  if(halted)quiet=quiet+1;
  if(quiet==1024)begin
-  if(io.sound.generator.active[0][30:7]!==24'd75590)$fatal(1,"440 Hz driver rate %d",io.sound.generator.active[0][30:7]);
-  if(io.sound.generator.active[0][1:0]!==1)$fatal(1,"triangle driver");
-  if(io.sound.generator.active[1][30:7]!==24'd89849)$fatal(1,"523 Hz driver rate %d",io.sound.generator.active[1][30:7]);
-  if(io.sound.generator.active[2][30:7]!==24'h123456)$fatal(1,"24-bit raw rate");
-  if(io.sound.generator.active[3][30:7]!==24'd687187)$fatal(1,"noise rate %d, staging=%d pending=%b",io.sound.generator.active[3][30:7],io.sound.generator.staging[3][30:7],io.sound.generator.pending);
-  if(io.sound.generator.active[3][2]!==1)$fatal(1,"noise envelope");
+  if(voice_state[0][30:7]!==24'd75590)$fatal(1,"440 Hz driver rate %d",voice_state[0][30:7]);
+  if(voice_state[0][1:0]!==1)$fatal(1,"triangle driver");
+  if(voice_state[1][30:7]!==24'd89849)$fatal(1,"523 Hz driver rate %d",voice_state[1][30:7]);
+  if(voice_state[2][30:7]!==24'h123456)$fatal(1,"24-bit raw rate");
+  if(voice_state[3][30:7]!==24'd687187)$fatal(1,"noise rate %d, staging=%d pending=%b",voice_state[3][30:7],io.sound.generator.staging[30:7],io.sound.generator.pending);
+  if(voice_state[3][2]!==1)$fatal(1,"noise envelope");
   ram_file=$fopen(ram_path,"w");
   for(i=0;i<32768;i=i+1)$fwrite(ram_file,"%04x\n",ram[i]);
   $fclose(ram_file);$fclose(tx_file);

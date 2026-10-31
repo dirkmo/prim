@@ -2,13 +2,14 @@
 
 Three independent pulse/triangle/saw tone voices plus one rate-controlled noise
 voice, 4-bit volume, constant or attack/decay envelopes, mixed into an 8-bit PWM
-output. No wavetables, samples, EBRs, extra PLLs or audio IRQs.
+output. One EBR holds parameters and voice state. No wavetables, samples, extra
+PLLs or audio IRQs.
 
 - [Register interface](registers.md): addresses, commands, clocking and reset.
 - [Forth driver](forth/audio.fs): load this optional library into the existing
   on-CPU Forth interpreter, line by line using the normal UART console/pacing.
 - [Examples](forth/demo.fs): scale, chord, laser and siren.
-- [Validation and resources](VALIDATION.md): measured implementation results.
+- [Validation and resources](BRAM_VALIDATION.md): measured implementation results.
 
 The system integration necessarily changes files outside `audio/`: system bus,
 board ports/constraints/source lists, image/loader limits, regression references
@@ -42,7 +43,7 @@ An amplifier shutdown GPIO is not needed. Startup clicks remain a hardware check
 ## Build, load and use
 
 ```sh
-make bitstream FPGA_BUILD_DIR=build/audio-after
+make bitstream FPGA_BUILD_DIR=build/audio-bram
 make forth-image
 # Flash/program the bitstream through the normal explicit hardware workflow.
 # Then upload the freshly rebuilt CPU image and open its normal console.
@@ -50,6 +51,11 @@ make forth-image
 
 Load `audio/forth/audio.fs` first. It creates ordinary Forth dictionary words;
 it does not change the initial kernel vocabulary. Number base is left DECIMAL.
+All voices now share one preparation buffer: `AUDIO-VOICE` changes the target
+only. Configuration getters return the shared preparation buffer, not a saved
+bank for the selected voice. Active playback remains independent. The existing
+helpers and demos work with this behavior; custom drivers that relied on
+per-voice staging must explicitly prepare their configuration.
 For example:
 
 ```forth
@@ -117,7 +123,9 @@ ctest --test-dir build/audio-checks --output-on-failure -R audio
 
 Core tests cover phase tuning, waveform endpoints, pulse width, noise period,
 constant/envelope modes, command write backpressure, reset, mix headroom and
-PWM average. Bus tests cover enabled/disabled operation, masks, byte lanes,
+PWM average. A separate port-only scoreboard runs on both behavioral RTL and
+the synthesized iCE40 primitives, verifies exactly one inferred audio EBR, and
+checks shared staging, independent playback and clearing dirty RAM on reset. Bus tests cover enabled/disabled operation, masks, byte lanes,
 unaligned RATE writes, SRAM/audio/timer boundaries and address wrapping. The
 Forth check compiles the optional sources with the actual interpreter on the
 Python CPU, then executes a compiled test word on CPU, SRAM bus, system MMIO
