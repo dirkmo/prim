@@ -1,0 +1,159 @@
+{
+  "after": {
+    "clock_mhz": 25,
+    "flip_flops": 896,
+    "fmax": {
+      "clk_sys": {
+        "achieved": 27.87067985534668,
+        "constraint": 25
+      }
+    },
+    "reports": "build/stack-bram/board",
+    "seed": 1,
+    "synthesis_cells": {
+      "$_TBUF_": 16,
+      "$print": 1,
+      "$scopeinfo": 19,
+      "SB_CARRY": 569,
+      "SB_DFF": 90,
+      "SB_DFFE": 66,
+      "SB_DFFESR": 567,
+      "SB_DFFESS": 14,
+      "SB_DFFSR": 147,
+      "SB_DFFSS": 12,
+      "SB_LUT4": 2816,
+      "SB_PLL40_CORE": 1,
+      "SB_RAM40_4K": 22
+    },
+    "utilization": {
+      "ICESTORM_LC": {
+        "available": 7680,
+        "used": 3458
+      },
+      "ICESTORM_PLL": {
+        "available": 2,
+        "used": 1
+      },
+      "ICESTORM_RAM": {
+        "available": 32,
+        "used": 22
+      },
+      "SB_GB": {
+        "available": 8,
+        "used": 5
+      },
+      "SB_IO": {
+        "available": 206,
+        "used": 57
+      },
+      "SB_WARMBOOT": {
+        "available": 1,
+        "used": 0
+      }
+    }
+  },
+  "artifact_sha256": {
+    "build/sim/forth-tests/report.json": "eeb69f35b2f1122c8781d77ca45d1c2cddd1addcb94d7d93eed7fee1f3c13d49",
+    "build/stack-bram/board/nextpnr.log": "09861952150d27ab56810be766307709f85ea43e0b69e07213bd8c3a06397174",
+    "build/stack-bram/board/prim.asc": "afe68c8e06645295a3ad2fd426e7a4ebfed190777476ff829559098ce80c1290",
+    "build/stack-bram/board/prim.bin": "e0ba7fc0dc8dc7cc52ea10f766da97e664e0e12a936223e353282aeba17b9a8b",
+    "build/stack-bram/board/prim.json": "6e6ec12bfeb189f6ff70e0f15978c94a0a55b4d06022bc1e5c7f25ff21672792",
+    "build/stack-bram/board/synth.log": "ae78dff953c3421a165533899495b9ca787825500d1b63cb797df7d47fe14811",
+    "build/stack-bram/board/timing.json": "2da43b926e4a09b2bafd36db6ae910ace6c55951f7dc72c1b866ad92efe103c8",
+    "build/stack-bram/ctest.log": "bedbea823dbd3811768a75023980da3094d60c28e73d913b948af8c501b53185",
+    "build/stack-bram/mapped-stack-ctest.log": "3673a976738df12fb2816813fee0f680f0a6530c85f824998627adeeac5f3c8c"
+  },
+  "before": {
+    "clock_mhz": 25,
+    "flip_flops": 1923,
+    "fmax": {
+      "clk_sys": {
+        "achieved": 28.67383575439453,
+        "constraint": 25
+      }
+    },
+    "reports": "build/audio-bram",
+    "seed": 1,
+    "synthesis_cells": {
+      "$_TBUF_": 16,
+      "$scopeinfo": 19,
+      "SB_CARRY": 568,
+      "SB_DFF": 88,
+      "SB_DFFE": 1090,
+      "SB_DFFESR": 567,
+      "SB_DFFESS": 14,
+      "SB_DFFSR": 152,
+      "SB_DFFSS": 12,
+      "SB_LUT4": 5573,
+      "SB_PLL40_CORE": 1,
+      "SB_RAM40_4K": 18
+    },
+    "utilization": {
+      "ICESTORM_LC": {
+        "available": 7680,
+        "used": 6733
+      },
+      "ICESTORM_PLL": {
+        "available": 2,
+        "used": 1
+      },
+      "ICESTORM_RAM": {
+        "available": 32,
+        "used": 18
+      },
+      "SB_GB": {
+        "available": 8,
+        "used": 5
+      },
+      "SB_IO": {
+        "available": 206,
+        "used": 57
+      },
+      "SB_WARMBOOT": {
+        "available": 1,
+        "used": 0
+      }
+    }
+  },
+  "cpu_stack_ebr_blocks": 4,
+  "date": "2026-10-31",
+  "extra_cycles_per_instruction": "One CLEAN clock for data-stack pops and ROT/-ROT; otherwise unchanged.",
+  "hardware_stack_cells_each": 32,
+  "irq_policy": "Forth ISR starts with INTDI and returns with INTEI.RET; no nested handlers.",
+  "physical_hardware": "Not programmed or measured",
+  "source_sha256": {
+    "CMakeLists.txt": "5cd659d4367132ab4905ff5ae62ebe0ecd398b58f158d9bd452869be17dc34d3",
+    "audio/rtl/audio.v": "0f624234cf9262845c38f69a3b0e20fdfedb94877c3516a9d2c75d9d132edabc",
+    "boards/olimex_ice40hx8k_evb/board.pcf": "152ababe6b92f32d7e10257edb08ad9b4add89fb799be2c2dc1eba8910ab3c21",
+    "boards/olimex_ice40hx8k_evb/top.v": "3a66191bb100e255968d02a6ef3aaba8400492104991b5670ae1adf11d2d7593",
+    "cpu/rtl/prim.v": "8ced3dec051f6708c6a49ae5d534da98c50a411086cf1b4c5273be1bc61a34ce",
+    "cpu/tests/tb_stack_bram.sv": "f5bd224b79b9c370fa470f201e96393219b6e1efb3912ff5b0facb99da09adf1",
+    "cpu/tests/test_stack_bram.py": "bc2b3643f547b222bbb429fa6beb12879262bd358d3787effb3b42d6add68660",
+    "debug_uart/rtl/debug_uart.v": "0c1228ba28a5944e9a1746b7ef7d283bf58480a5940bed7ee3c168e6733d4648",
+    "debug_uart/rtl/debug_uart_link.v": "8594a2cb9a1f3d3dc7e131918728cff399d12e2ae331662b11275eeb8eda3c2b",
+    "debug_uart/rtl/uart_arbiter.v": "8e37db7a124d900729be6dacbe8ebb1d6cfc29ef8d5a4d96b142b6bb01c3fa26",
+    "debug_uart/rtl/uart_buffers.v": "d42fc0aa19e73ad8c09ef11389bf8c23c9b34c3760228a5e29695b3142a76941",
+    "debug_uart/rtl/uart_rx.v": "cc0c8da94cf7b951cb4bfc1a5101e5c0c3a8ebc4cc6222ec6ea28b725bc001bd",
+    "debug_uart/rtl/uart_tx.v": "bd2a408ac60c1e097c34abebc2fd453cc7212c9780d33f183bacfc546e757051",
+    "ps2/rtl/ps2_fifo.v": "def3df1d6b029c939a2075a141cff0a3ba5783226cfe19ed0bdb3b6dab12d1e6",
+    "ps2/rtl/ps2_rx.v": "56849d28a26f8dba5869d20daf6066287124ee73bfd3304fc591c3177e351a74",
+    "system/rtl/bus_mux.v": "010f1741b11800d5d8019d60427f3435eb15247af412e4564e018b8a8a0bebea",
+    "system/rtl/memory.v": "b916a19bb77aff461043295be5b4adf1f97b1011ba0034bdd7f585ce7969519e",
+    "system/rtl/memory_io.v": "fde26b65bd1bb1fa50cf5ab5cdfe7cb616a4937c4227977ce7d484b423d09ff9",
+    "system/rtl/prim_system.v": "55d82ed83fa0f8d622eaadcff9ee84f6dc100826d9be70aae4824cf302e7891d",
+    "system/rtl/timer_mmio.v": "b013bdf5cbf929b328ba938c90e4f9e613debe451c180067d897ece717205047",
+    "tests/support/verilator.py": "cee2434af22a78dbf9426553d9c86bd1fd79368be04f3c3e22466712b01113ed",
+    "timer/rtl/timer.v": "c720ae2311ff2d5eabb322db83787c09f14b464ecef3c12ba0fbb5325630b45d",
+    "vga/rtl/vga_font.v": "e75c22841259fd8884e38418e9f3ae0dd9c5c1a7839d794f13077724d01a6514",
+    "vga/rtl/vga_text.v": "142e6cc71b535dd2fc41a54ec2c353c15e903d0219b9fad51ab8142521f6ac61"
+  },
+  "validation": {
+    "ctest_runs": "23 existing suites plus the added stack_bram_checks suite; all passed.",
+    "ctest_suites_passed": 24,
+    "ctest_suites_total": 24,
+    "forth_skipped": 0,
+    "forth_tests": 99,
+    "mapped_netlist": "Four SB_RAM40_4K cells; bus trace matches Python ISA with varied ACK delays, stack wraparound, combined returns and pending IRQ handoff.",
+    "test_support_python_tests": 16
+  }
+}

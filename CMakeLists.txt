@@ -155,11 +155,20 @@ add_custom_target(iverilog
         -s Prim -o ${CMAKE_BINARY_DIR}/prim.vvp ${PROJECT_SOURCE_DIR}/cpu/rtl/prim.v)
 
 find_program(YOSYS_EXECUTABLE yosys)
+find_program(YOSYS_CONFIG_EXECUTABLE yosys-config)
 if(YOSYS_EXECUTABLE)
     add_custom_target(yosys
         COMMAND ${YOSYS_EXECUTABLE} -s ${PROJECT_SOURCE_DIR}/system/synth.ys
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         VERBATIM)
+endif()
+
+if(YOSYS_EXECUTABLE AND YOSYS_CONFIG_EXECUTABLE)
+    add_test(NAME stack_bram_checks
+        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/cpu/tests/test_stack_bram.py
+            --yosys ${YOSYS_EXECUTABLE} --yosys-config ${YOSYS_CONFIG_EXECUTABLE}
+            --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE})
+    set_tests_properties(stack_bram_checks PROPERTIES TIMEOUT 180)
 endif()
 
 include(boards/olimex_ice40hx8k_evb/cmake.cmake)

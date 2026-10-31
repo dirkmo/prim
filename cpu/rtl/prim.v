@@ -35,10 +35,32 @@ reg [15:0] N /* verilator public */; // 2nd on dstack
 reg [7:0] r_ir /* verilator public */; // instruction register
 reg r_carry /* verilator public */;
 
-// Stack storage is intentionally not reset; unused cells are undefined.
-reg [15:0] r_dstack[0:2**DSS-1] /* verilator public */;
-reg [15:0] r_rstack[0:2**RSS-1] /* verilator public */;
-wire [15:0] R /* verilator public */ = r_rstack[r_rsp]; // top of rstack
+// Each stack has two parity banks: adjacent cells can be read/written
+// together using one synchronous read and one write port per iCE40 EBR.
+// Storage is intentionally not reset; unused cells remain undefined.
+reg [15:0] d_even [0:2**(DSS-1)-1];
+reg [15:0] d_odd  [0:2**(DSS-1)-1];
+reg [15:0] r_even [0:2**(RSS-1)-1];
+reg [15:0] r_odd  [0:2**(RSS-1)-1];
+reg [15:0] d_even_data, d_odd_data, r_even_data, r_odd_data;
+wire [15:0] w_rtop = r_rsp[0] ? r_odd_data : r_even_data;
+wire [15:0] w_rbelow = r_rsp[0] ? r_even_data : r_odd_data;
+`ifndef SYNTHESIS
+// Read-only architectural views for existing simulation scoreboards. They
+// add no asynchronous read ports to the synthesized memories.
+wire [15:0] r_dstack[0:2**DSS-1] /* verilator public */;
+wire [15:0] r_rstack[0:2**RSS-1] /* verilator public */;
+genvar stack_cell;
+generate
+    for (stack_cell=0; stack_cell<2**DSS; stack_cell=stack_cell+1) begin: ds_view
+        assign r_dstack[stack_cell] = ((stack_cell % 2) != 0) ? d_odd[stack_cell/2] : d_even[stack_cell/2];
+    end
+    for (stack_cell=0; stack_cell<2**RSS; stack_cell=stack_cell+1) begin: rs_view
+        assign r_rstack[stack_cell] = ((stack_cell % 2) != 0) ? r_odd[stack_cell/2] : r_even[stack_cell/2];
+    end
+endgenerate
+wire [15:0] R /* verilator public */ = r_rstack[r_rsp];
+`endif
 
 //
 wire [DSS-1:0] w_dsp_dec2_amt = {{(DSS-2){1'b0}}, 2'b10};
@@ -48,12 +70,13 @@ wire w_popop;
 
 //
 localparam
-    PHASE_FETCH = 2'h0,
-    PHASE_MEMWAIT = 2'h1,
-    PHASE_EXECUTE = 2'h2,
-    PHASE_IRQ = 2'h3;
+    PHASE_FETCH = 3'h0,
+    PHASE_MEMWAIT = 3'h1,
+    PHASE_EXECUTE = 3'h2,
+    PHASE_IRQ = 3'h3,
+    PHASE_CLEAN = 3'h4;
 
-reg [1:0] r_phase /* verilator public */;
+reg [2:0] r_phase /* verilator public */;
 wire w_phase_fetch = (r_phase == PHASE_FETCH) && !o_halted;
 wire w_phase_execute = (r_phase == PHASE_EXECUTE);
 wire w_phase_memop = (r_phase == PHASE_MEMWAIT);
@@ -159,8 +182,10 @@ always @(*) begin
 end
 
 // r_phase
-// Instruction flow with optional interrupt entry after retirement:
-//   FETCH -> (optional MEMWAIT) -> EXECUTE -> (optional IRQ) -> FETCH
+// Instruction flow with optional stack cleanup and interrupt entry:
+//   FETCH -> (optional MEMWAIT) -> (optional CLEAN) -> EXECUTE -> (optional IRQ)
+// Reads use the existing fetch/memory clocks. Only pops and rotations need
+// CLEAN to serialize their extra writes before the architectural retirement.
 // The phase transition is driven together with the fetch latch so the decision
 // to enter MEMWAIT is based on the opcode that was just fetched, not a stale
 // value from a separate combinational path.
@@ -171,6 +196,19 @@ wire w_fetch_memop = (i_dat[6:0] == OP_PUSH) ||
                     (i_dat[6:0] == OP_BYTE_STORE) ||
                     (i_dat[6:0] == OP_STORE);
 
+function stack_cleanup;
+    input [6:0] opcode;
+    begin
+        case (opcode)
+            OP_DROP, OP_NIP, OP_CALL, OP_JP, OP_AND, OP_OR, OP_XOR,
+            OP_ADD, OP_SUB, OP_LTS, OP_LTU, OP_TO_R, OP_INTAD,
+            OP_STORE, OP_BYTE_STORE, OP_JZ, OP_ROT, OP_NROT:
+                stack_cleanup = 1'b1;
+            default: stack_cleanup = 1'b0;
+        endcase
+    end
+endfunction
+
 always @(posedge i_clk)
 begin
     if (cpu_reset) begin
@@ -179,10 +217,13 @@ begin
         case (r_phase)
             PHASE_FETCH:
                 if (i_ack)
-                    r_phase <= w_fetch_memop ? PHASE_MEMWAIT : PHASE_EXECUTE;
+                    r_phase <= w_fetch_memop ? PHASE_MEMWAIT :
+                               stack_cleanup(i_dat[6:0]) ? PHASE_CLEAN : PHASE_EXECUTE;
             PHASE_MEMWAIT:
                 if (i_ack)
-                    r_phase <= PHASE_EXECUTE;
+                    r_phase <= stack_cleanup(r_ir[6:0]) ? PHASE_CLEAN : PHASE_EXECUTE;
+            PHASE_CLEAN:
+                r_phase <= PHASE_EXECUTE;
             PHASE_EXECUTE:
                 r_phase <= w_take_irq ? PHASE_IRQ : PHASE_FETCH;
             PHASE_IRQ:
@@ -210,9 +251,9 @@ wire [RSS-1:0] w_rsp_next = w_rpush ? (w_return ? r_rsp : w_rsp_inc1) :
                           w_rpop ? (w_return ? w_rsp_dec2 : w_rsp_dec1) :
                           w_return ? w_rsp_dec1 : r_rsp;
 // Return happens after the opcode: >R returns through T, R>/RDROP through
-// the cell below the old R. Neither case needs an additional execution cycle.
+// the cell below the old R. Both values were prefetched together.
 wire [15:0] w_return_addr = (r_ir[6:0] == OP_TO_R) ? T :
-                           w_rpop ? r_rstack[w_rsp_dec1] : R;
+                           w_rpop ? w_rbelow : w_rtop;
 always @(*)
 begin
     if (w_return) begin
@@ -240,7 +281,7 @@ begin
         // PC is advanced only after the instruction has fully completed its
         // fetch / memory wait sequence. This keeps immediate operands and memory
         // transactions aligned with the execute phase.
-        $display("EXEC pc=%0d ir=%02x next=%04x T=%04x N=%04x R=%04x dsp=%0d rsp=%0d", r_pc, r_ir, r_pc_next, T, N, R, r_dsp, r_rsp);
+        $display("EXEC pc=%0d ir=%02x next=%04x T=%04x N=%04x R=%04x dsp=%0d rsp=%0d", r_pc, r_ir, r_pc_next, T, N, w_rtop, r_dsp, r_rsp);
         r_pc <= r_pc_next;
     end
 end
@@ -271,8 +312,8 @@ wire [DSS-1:0] w_dsp_inc1 = r_dsp + {{(DSS-1){1'b0}}, 1'b1};
 // The array uses the same circular indices as Python: T at dsp, N at dsp-1.
 wire [DSS-1:0] w_third_idx = r_dsp - 2;
 wire [DSS-1:0] w_fourth_idx = r_dsp - 3;
-wire [15:0] w_stack_third = r_dstack[w_third_idx];
-wire [15:0] w_stack_fourth = r_dstack[w_fourth_idx];
+wire [15:0] w_stack_third = w_third_idx[0] ? d_odd_data : d_even_data;
+wire [15:0] w_stack_fourth = w_third_idx[0] ? d_even_data : d_odd_data;
 reg [15:0] t_next, n_next;
 reg [DSS-1:0] dsp_next;
 always @(*) begin
@@ -298,7 +339,7 @@ always @(*) begin
         OP_SWAP, OP_OVER, OP_NROT, OP_DROP, OP_CALL, OP_JP, OP_TO_R, OP_INTAD:
             t_next = N;
         OP_ROT, OP_STORE, OP_BYTE_STORE, OP_JZ: t_next = w_stack_third;
-        OP_FROM_R: t_next = R;
+        OP_FROM_R: t_next = w_rtop;
         OP_AND, OP_OR, OP_XOR, OP_NOT, OP_SR, OP_SRW, OP_SL, OP_SLW,
         OP_ADD, OP_SUB, OP_LTS, OP_LTU, OP_CARRY: t_next = r_alu[15:0];
         default: ;
@@ -314,40 +355,54 @@ always @(*) begin
     endcase
 end
 
-// Keep the cached top cells and the circular array coherent at retirement.
-// Clearing consumed cells preserves Python's behavior across pointer wraparound.
+// Fetch/MEMWAIT prefetch the cells needed for execution. CLEAN holds the
+// read outputs while updating consumed/rotated cells; EXECUTE writes T/N.
+// No read/write collision is used, including when either pointer wraps.
+wire stack_read = !cpu_reset && !o_halted &&
+                  (w_phase_fetch || w_phase_memop);
+wire [DSS-2:0] d_read_even = w_third_idx[0] ? w_fourth_idx[DSS-1:1] : w_third_idx[DSS-1:1];
+wire [DSS-2:0] d_read_odd = w_third_idx[0] ? w_third_idx[DSS-1:1] : w_fourth_idx[DSS-1:1];
+wire [RSS-2:0] r_read_even = r_rsp[0] ? w_rsp_dec1[RSS-1:1] : r_rsp[RSS-1:1];
+wire [RSS-2:0] r_read_odd = r_rsp[0] ? r_rsp[RSS-1:1] : w_rsp_dec1[RSS-1:1];
+wire d_pop1 = dsp_next == w_dsp_dec1;
+wire d_pop2 = dsp_next == w_dsp_dec2;
+wire d_rotate = r_ir[6:0] == OP_ROT || r_ir[6:0] == OP_NROT;
+wire clean = r_phase == PHASE_CLEAN && !o_halted;
+wire execute = w_phase_execute && !o_halted;
+wire [DSS-1:0] d_next_below = dsp_next - 1'b1;
+wire d_write_a = !cpu_reset && (execute || (clean && (d_pop1 || d_pop2 || d_rotate)));
+wire d_write_b = !cpu_reset && (execute || (clean && d_pop2));
+wire [DSS-1:0] d_addr_a = execute ? dsp_next : d_rotate ? w_third_idx : r_dsp;
+wire [DSS-1:0] d_addr_b = execute ? d_next_below : w_dsp_dec1;
+wire [15:0] d_data_a = execute ? t_next : d_rotate ? (r_ir[6:0] == OP_ROT ? N : T) : 16'b0;
+wire [15:0] d_data_b = execute ? n_next : 16'b0;
+wire d_even_we = (d_write_a && !d_addr_a[0]) || (d_write_b && !d_addr_b[0]);
+wire d_odd_we = (d_write_a && d_addr_a[0]) || (d_write_b && d_addr_b[0]);
+wire [DSS-2:0] d_even_addr = d_addr_a[0] ? d_addr_b[DSS-1:1] : d_addr_a[DSS-1:1];
+wire [DSS-2:0] d_odd_addr = d_addr_a[0] ? d_addr_a[DSS-1:1] : d_addr_b[DSS-1:1];
+wire [15:0] d_even_value = d_addr_a[0] ? d_data_b : d_data_a;
+wire [15:0] d_odd_value = d_addr_a[0] ? d_data_a : d_data_b;
+wire r_write = !cpu_reset && (w_phase_irq || (execute && w_rpush && !w_return));
+wire [15:0] r_value = w_phase_irq ? r_pc : (r_ir[6:0] == OP_TO_R ? T : pc_plus_1);
+always @(posedge i_clk) begin
+    if (stack_read) begin
+        d_even_data <= d_even[d_read_even];
+        d_odd_data <= d_odd[d_read_odd];
+        r_even_data <= r_even[r_read_even];
+        r_odd_data <= r_odd[r_read_odd];
+    end
+    if (d_even_we) d_even[d_even_addr] <= d_even_value;
+    if (d_odd_we) d_odd[d_odd_addr] <= d_odd_value;
+    if (r_write && !w_rsp_inc1[0]) r_even[w_rsp_inc1[RSS-1:1]] <= r_value;
+    if (r_write && w_rsp_inc1[0]) r_odd[w_rsp_inc1[RSS-1:1]] <= r_value;
+end
 always @(posedge i_clk) begin
     if (cpu_reset) begin
         T <= 16'h0;
         N <= 16'h0;
-    end else if (w_phase_execute) begin
+    end else if (execute) begin
         T <= t_next;
         N <= n_next;
-        if (dsp_next == w_dsp_dec1 || dsp_next == w_dsp_dec2)
-            r_dstack[r_dsp] <= 16'h0;
-        if (dsp_next == w_dsp_dec2)
-            r_dstack[w_dsp_dec1] <= 16'h0;
-        case (r_ir[6:0])
-            OP_ROT: r_dstack[w_third_idx] <= N;
-            OP_NROT: r_dstack[w_third_idx] <= T;
-            default: ;
-        endcase
-        r_dstack[dsp_next] <= t_next;
-        r_dstack[(dsp_next - 1'b1) & ((1 << DSS)-1)] <= n_next;
-    end
-end
-
-// return stack
-// Push first increments the circular pointer, then writes the new top.
-// >R.RET consumes the pushed value immediately as the return address, so it
-// needs no array write. Popped cells remain unused and are not cleared.
-always @(posedge i_clk)
-begin
-    if (!cpu_reset) begin
-        if (w_phase_irq)
-            r_rstack[w_rsp_inc1] <= r_pc;
-        else if (w_phase_execute && w_rpush && !w_return)
-            r_rstack[w_rsp_inc1] <= (r_ir[6:0] == OP_TO_R) ? T : pc_plus_1;
     end
 end
 

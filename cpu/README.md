@@ -4,6 +4,21 @@
 32 data and 32 return cells, with circular wraparound and no overflow trap. `rtl/opcodes.v` is generated from
 `prim.isa` with the root CMake target `genopcodes`.
 
+Both stacks use synchronous even/odd banks, mapped to four iCE40 block RAMs
+in total. T/N remain cached in registers. Stack operands are prefetched during
+FETCH/MEMWAIT; instructions that consume data cells or rotate the data stack
+take one additional internal CLEAN clock before retirement. Other instructions
+keep their previous cycle count. CLEAN does not issue bus transactions and
+does not accept interrupts or halt midway through the instruction. Clearing
+consumed data cells preserves the previous circular-stack behavior.
+
+The `r_dstack`, `r_rstack` and `R` hierarchical views are read-only simulation
+signals, excluded from synthesis. The datapath always uses synchronous RAM
+outputs. With Yosys and yosys-config installed, `stack_bram_checks` checks that
+four EBRs were inferred and simulates the mapped iCE40 cells against the Python
+ISA, including pointer wraparound and combined return operations. See
+[measured board results](../docs/STACK_BRAM.md).
+
 The CPU has no UART, MMIO decoder or SRAM controller. Its byte-addressed
 16-bit bus uses BS/WE/ACK; requests stay stable until ACK. Debug control uses
 synchronous `i_halt`, `i_run`, `i_step`, `i_debug_reset` inputs and
@@ -58,7 +73,7 @@ Software `INT` uses the same vector, ignores the return bit and works even while
 hardware interrupts are disabled. Address 0004 has no special meaning.
 
 A request is accepted after an instruction fully retires, using that instruction's
-updated enable state. A fourth state in the existing two-bit phase register then
+updated enable state. A dedicated IRQ phase then
 pushes the updated PC onto the existing return stack and jumps to the vector.
 The entry takes one clock, performs no bus transaction and leaves the data stack,
 carry and interrupt enable unchanged. This also preserves CALL/return stack effects

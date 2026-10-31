@@ -16,8 +16,9 @@ def compare(image, simulator, max_steps=1000, wait_cycles=0, wait_seed=None):
         directory = Path(directory)
         binary, trace = directory / 'image.bin', directory / 'retirement.jsonl'
         binary.write_bytes(image)
+        # Worst case: fetch + memory transfer + stack CLEAN + retirement.
         command = [simulator, '-i', binary, '-j', trace,
-                   '-c', max_steps * (2 * wait_cycles + 3) + wait_cycles + 20,
+                   '-c', max_steps * (2 * wait_cycles + 4) + wait_cycles + 20,
                    '-w', wait_cycles]
         if wait_seed is not None:
             command += ['-s', wait_seed]
