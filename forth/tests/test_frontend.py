@@ -4,6 +4,33 @@ from dual_support import DualSession
 
 
 class FrontendChecks(unittest.TestCase):
+    def test_twenty_four_cell_display_with_interrupt(self):
+        r = DualSession()
+        values = list(range(1, 25))
+        r.uart(' '.join(map(str, values)) + '\r')
+        r.quiet()
+        self.assertEqual(r.stack(), values)
+        r.memory.data[0x3E0:0x3E2] = b'ok'
+        original = r.step
+        sent = False
+
+        def interrupt():
+            nonlocal sent
+            # Interrupt the last restored value's formatting, with the larger
+            # user stack back in hardware and .S scratch still in use.
+            if r.cpu._pc == r.image.symbols['print_signed'] and r.get('dump_index') == 0 and not sent:
+                sent = True
+                r.memory.receive_ps2(0x12)  # Shift: queued without adding text.
+            original()
+        r.step = interrupt
+        r.uart('.S\r')
+        r.quiet()
+        self.assertTrue(sent)
+        self.assertIn(b'<24> ' + ' '.join(map(str, values)).encode() + b' ', bytes(r.memory.tx))
+        self.assertEqual(r.stack(), values)
+        self.assertEqual(r.memory.data[0x3E0:0x3E2], b'ok')
+        self.assertTrue(r.cpu._int_enable)
+
     def test_boot_and_strict_routing(self):
         r = DualSession()
         self.assertEqual(bytes(r.memory.tx), b'ok\r\n')

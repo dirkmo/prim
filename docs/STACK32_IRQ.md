@@ -1,5 +1,8 @@
 # 32/32 stacks and asynchronous Forth reception
 
+Historical baseline saved in commit `bb0eb19`; the subsequent removal of Forth
+data-stack guards is documented in [FORTH_UNCHECKED.md](FORTH_UNCHECKED.md).
+
 Date: 2026-10-31. This change supersedes the 16/16 stack and interrupt-window
 policy documented in the historical AP8 results. The existing ISA and public
 Forth word set are preserved. No general stack overflow protection is added;

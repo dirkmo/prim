@@ -19,7 +19,9 @@ path, 16-bit addresses and 8-bit opcodes. Both the data stack and return stack
 hold 32 cells of 16-bit values by default (DSS/RSS=5), without a hardware
 overflow trap. The Forth dual console enables IRQs during normal execution
 and masks them inside the ISR and short initialization/loss-recovery sections;
-see [32/32 validation](STACK32_IRQ.md). Opcode bit 7 requests an additional return; exceptions and
+see [32/32 validation](STACK32_IRQ.md). The Forth data-stack guards and fixed
+eight-cell user limit were subsequently removed; DEPTH/.S retain bookkeeping
+([unchecked-stack results](FORTH_UNCHECKED.md)). Opcode bit 7 requests an additional return; exceptions and
 the order of stack effects are described in the RTL documentation.
 
 | Path | Responsibility |

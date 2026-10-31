@@ -64,9 +64,10 @@ frames including CPU IRQ entry. IRQ-private scratch does not alias arithmetic,
 parser or VGA state, and all ISR SRAM accesses stay outside the banked window.
 Carry is restored before returning. These budgets leave at most 29 data and
 28 return cells for foreground use when IRQs are enabled. No general stack
-underflow/overflow guard or reserve enforcement is added; the checked Forth
-user data limit remains eight cells. Arbitrary deep calls can still corrupt
-the circular hardware stacks.
+underflow/overflow guard or reserve enforcement is added; the former eight-cell
+user limit and data-stack guards have also been removed
+(see [unchecked stacks](../docs/FORTH_UNCHECKED.md)). Arbitrary deep calls can
+still corrupt the circular hardware stacks.
 
 Receive rings have one ISR producer (tail) and one foreground consumer (head).
 Ordinary consumption needs no masking: the ISR publishes tail after storing

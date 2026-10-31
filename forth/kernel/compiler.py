@@ -102,9 +102,9 @@ def emit_compiler(image):
         advance('here', size)
         c.ops(Op.NOP | 128)
 
-    # The compiled guard runs BEFORE the literal PUSH, with no user result yet.
-    c.mark('literal_guard')
-    c.guard(0, 1)
+    # Count a compiled literal before its PUSH, with no user result yet.
+    c.mark('literal_depth')
+    c.adjust_depth(0, 1)
     c.ops(Op.NOP | 128)
 
     c.mark('compile_word')  # ( -- ), found_xt -> PUSH16 xt; CALL.
@@ -119,7 +119,7 @@ def emit_compiler(image):
     record(1)
     c.ops(Op.NOP | 128)
 
-    c.mark('compile_literal')  # ( -- ), compile_value -> guard call; PUSH8/16.
+    c.mark('compile_literal')  # ( -- ), compile_value -> depth update call; PUSH8/16.
     large, prefix, small_value, finished = (
         c.label('literal_' + x) for x in ('large', 'prefix', 'small_value', 'finished'))
     c.load('compile_value')
@@ -133,7 +133,7 @@ def emit_compiler(image):
     c.mark(prefix)
     c.call('compiler_reserve')
     byte(Op.PUSH)
-    cell('literal_guard')
+    cell('literal_depth')
     byte(Op.CALL)
     c.load('here')
     c.store('last_opcode')

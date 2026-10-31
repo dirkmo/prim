@@ -42,17 +42,22 @@ class ControlChecks(unittest.TestCase):
                 self.assertLessEqual(budget[0], 16)
                 self.assertLessEqual(budget[1], 16)
 
-    def test_flags_are_consumed_and_checked_at_runtime(self):
+    def test_flags_are_consumed_at_runtime(self):
         for flag in (0, 1, 65535, 32768):
             source = f': test IF 9 THEN ; 1 2 3 4 5 6 7 #{flag} test\n'.encode()
             out, stack, _, _ = session(self.image, source)
             self.assertNotIn(b'error:', out)
             self.assertEqual(stack, list(range(1, 8)) + ([9] if flag else []))
-        for source in (b': test IF THEN ; test\n', b': test BEGIN UNTIL ; test\n'):
-            out, stack, memory, _ = session(self.image, source)
-            self.assertIn(b'error: stack underflow', out)
-            self.assertEqual(stack, [])
-            self.assertGreater(cell(memory, VARIABLES['here']), self.image.symbols['user_start'])
+        # Different branch effects and a growing loop update DEPTH on the
+        # executed path, without enforcing the former eight-cell limit.
+        source = b': choose IF 9 ELSE 10 11 THEN ; 1 2 3 4 5 6 7 8 0 choose\n'
+        out, stack, _, _ = session(self.image, source)
+        self.assertNotIn(b'error:', out)
+        self.assertEqual(stack, list(range(1, 9)) + [10, 11])
+        source = b': grow 0 BEGIN 1+ DUP DUP 12 = UNTIL DROP ; grow DEPTH\n'
+        out, stack, _, _ = session(self.image, source)
+        self.assertNotIn(b'error:', out)
+        self.assertEqual(stack, list(range(1, 13)) + [12])
 
     def test_bad_nesting_and_context_roll_back(self):
         bad = [b'ELSE', b'THEN', b'UNTIL', b'AGAIN', b'WHILE', b'REPEAT',

@@ -73,9 +73,9 @@ def emit_data(image):
     set_cell('compiler_needed', 10)
     c.mark(write)
     c.call('compiler_reserve')
-    # Fixed eight-byte checked stub, regardless of constant value magnitude.
+    # Fixed eight-byte depth-tracked stub, regardless of constant value magnitude.
     byte(Op.PUSH)
-    cell('literal_guard')
+    cell('literal_depth')
     byte(Op.CALL)
     byte(Op.PUSH)
     c.load('data_value')
@@ -218,7 +218,7 @@ def emit_data(image):
                 c.load('string_length')
                 c.call('raw_type')
             else:
-                c.guard(0, 2)
+                c.adjust_depth(0, 2)
                 c.call('copy_string_buffer')
                 c.push('string_buffer')
                 c.load('string_length')

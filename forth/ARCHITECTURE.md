@@ -49,8 +49,8 @@ Alle Bereiche sind Byteadressen; Zellen sind 16 Bit Little Endian.
 | `FFF0..FFFF` | System-MMIO, kein normaler RAM |
 
 Scratch 0380..038D ist für nicht reentrante Software-Arithmetik belegt;
-ab AP 5 zusätzlich 038E..039D als 16-Byte-Ziffernpuffer und 03A0..03AF für
-acht gesicherte .S-Zellen. 039E..039F und 03B0..03FF bleiben frei. Kein
+ab AP 5 zusätzlich 038E..039D als 16-Byte-Ziffernpuffer und 03A0..03DF für
+32 .S-Sicherungszellen. 039E..039F und 03E0..03FF bleiben frei. Kein
 anderer Kernelpfad darf diese Daten über überschreibende Aufrufe hinweg
 als erhalten voraussetzen.
 
@@ -86,7 +86,7 @@ und Kleinschreibung. Neuere Definition überschattet ältere; keine Warnpflicht.
 | +8 | Name, anschließend ggf. ein Paddingbyte bis zur geraden Adresse |
 
 Flags: Bit 0 IMMEDIATE, Bit 1 COMPILE_ONLY, Bit 2 HIDDEN; andere Bits null.
-Kompilierklasse 0 erzeugt normalen Aufruf, Klasse 1 einen geprüften Inline-
+Kompilierklasse 0 erzeugt normalen Aufruf, Klasse 1 einen Inline-
 Primitiv-Emitter. Klasse 1 ist Kernelwörtern vorbehalten. Name hinter dem
 Header, Code normalerweise direkt hinter Name/Padding; XT bleibt ausdrücklich
 gespeichert, damit Kernelheader auch separate Routinen bezeichnen können.
@@ -97,7 +97,7 @@ Kompilierung. EXECUTE führt ein XT aus. Bei normalem Forth-Programmieren
 werden niemals Rücksprungadressen als Daten verwendet.
 
 CREATE erzeugt einen acht Byte langen Stub
-`PUSH16 literal_guard; CALL; PUSH16 body; NOP.RET`; body beginnt direkt dahinter,
+`PUSH16 literal_depth; CALL; PUSH16 body; NOP.RET`; body beginnt direkt dahinter,
 HERE zeigt darauf. Der Guard prüft/zählt das Adressergebnis zur Laufzeit. VARIABLE reserviert dort eine
 mit null initialisierte Zelle. CONSTANT erzeugt einen Stub für den Wert.
 Keine DOES>-Semantik in Version 1. Alle Wortzugriffe dürfen ungerade Adressen
@@ -109,19 +109,18 @@ Subroutine-Threaded Code: `PUSH16 xt; CALL`. Literale als PUSH8 für 0..255,
 sonst PUSH16. Primitive soweit sinnvoll inline, mit gleicher Forth-Semantik
 wie ihr aufrufbarer Stub. Kein separater innerer Thread-Interpreter.
 
-Der Forth-Datenstack liegt auf dem Hardware-Datenstack. Version 1 garantiert
-an öffentlichen Wortgrenzen **maximal 8 Benutzerzellen**; die übrigen Hardwarezellen
-dienen Kernel-Zwischenwerten, Aufrufadressen, Prüfungen und ISR-Reserve. Eine RAM-
-Variable DEPTH zählt ausschließlich Benutzerzellen. Interne Routinen ändern
-sie nicht; ihre Werte liegen vorübergehend oberhalb der Benutzerwerte.
+Der Forth-Datenstack liegt auf dem Hardware-Datenstack. Es gibt keine feste
+Acht-Zellen-Benutzergrenze und keine Laufzeitprüfung auf Datenstack-Unter- oder
+Überlauf. Eine RAM-Variable DEPTH zählt die Benutzerzellen für DEPTH und .S.
+Öffentliche Wörter und Literale aktualisieren diesen Zähler; interne Routinen
+ändern ihn nicht. Es wird kein Gesamtstackeffekt eines Colon-Wortes berechnet:
+Die ausgeführten Wörter und Bedingungen führen die Buchführung selbst aus.
 
-Öffentliche Primitive prüfen ihren Bedarf und ihre resultierende Tiefe vor
-dem Eingriff und aktualisieren DEPTH. Inline-Emitter müssen dieselben Prüfungen
-erzeugen. Ausführung über XT umgeht diese Prüfungen nicht. Jeder Kernelpfad
-muss nachweislich höchstens acht zusätzliche Datenzellen beanspruchen;
-CALL-Ziel und Prüfcode zählen dazu. Das ist ein Abnahmekriterium, keine bereits
-verifizierte Eigenschaft. Colon-Wörter erhalten keinen festen Gesamteffekt;
-ihre ausgeführten Primitive prüfen den jeweiligen aktuellen Stackzustand.
+Kernel-Zwischenwerte, CALL-Ziele und ISR benötigen zusätzliche physische Zellen.
+Die ISR allein braucht bis zu drei Datenzellen. Dieses Budget muss das Programm
+frei lassen; 32 Hardwarezellen sind daher keine Zusage über 32 Benutzerzellen.
+Unterlauf oder Überschreiben des Ringstacks sind Programmierfehler und werden
+nicht als Forth-Fehler abgefangen. Der .S-Puffer fasst 32 Zellen, ohne Tiefenprüfung.
 
 Hardware-Returnstack für Aufrufe, nicht für Parser oder Compiler-Kontrollwerte.
 **Kein allgemeiner Laufzeitschutz gegen Returnstacküberlauf** in Version 1:
@@ -216,9 +215,9 @@ IMMEDIATE markiert die zuletzt abgeschlossene Benutzerdefinition; keine
 Kernelheader oder offene Definition verändern.
 
 AP-6-Umsetzung: Alle Header bleiben in Klasse 0. Normale Wörter werden als
-geprüfte Stub-Aufrufe kompiliert. Ein Literal erzeugt einen Aufruf von
-literal_guard (Wachstumsprüfung und DEPTH+1 ohne Ergebniszelle), danach erst
-PUSH8/16. Damit greifen dieselben Stackgrenzen auch in neuem Code. Keine
+Stub-Aufrufe mit DEPTH-Buchführung kompiliert. Ein Literal erzeugt einen Aufruf
+von literal_depth (DEPTH+1 ohne Ergebniszelle), danach erst PUSH8/16.
+Auch kompilierter Code enthält keine Datenstack-Grenzprüfung. Keine
 Opcode-Inline-Klasse wird benötigt. `:` ist IMMEDIATE, um verschachtelte
 Definitionsanfänge unmittelbar abzuweisen; `]` ist ebenfalls IMMEDIATE und
 benötigt eine offene Definition. `;`, `[`, LITERAL und `[']` sind zusätzlich
@@ -239,11 +238,11 @@ prüfen. ALLOT akzeptiert nur nichtnegative Größen. Kein FORGET/MARKER.
 ### Return-Bit und Tail-Aufrufe
 
 AP 6 implementiert beide Optimierungen ohne ISA-Änderung. Da Primitive derzeit
-als geprüfte Aufrufe kompiliert werden, werden sie am Ende zu Tail-Sprüngen;
+als Aufrufe mit DEPTH-Buchführung kompiliert werden, werden sie am Ende zu Tail-Sprüngen;
 Return-Bit-Folding betrifft die unmittelbar erzeugten Literale:
 
 - Sicheres letztes Primitiv/Literal: Return-Bit an dessen Opcode setzen,
-  separates NOP.RET entfällt. Laufzeit-Stackprüfungen davor müssen erhalten bleiben.
+  separates NOP.RET entfällt. DEPTH-Buchführung davor muss erhalten bleiben.
 - Sicherer letzter Wortaufruf: CALL durch JP ersetzen; Callee verwendet den
   bestehenden Rücksprung. CALL.RET ist kein Ersatz, da CALL das Return-Bit ignoriert.
 - CALL, JP, JZ, INT und BREAK ignorieren Bit 7. Returnstack-Operationen haben
@@ -297,9 +296,8 @@ TYPE `( addr len -- )` gibt Bytes aus; EMIT/UART beschränken auf sieben Bit.
 ## Fehler und Grenzen
 
 Erkennbare Fehler: unbekanntes Wort, ungültige/überlaufende Zahl, ungültige
-BASE, Eingabe-/Namens-/Stringgrenze, Datenstack-Unter-/Überlauf an Wortgrenzen,
-Compilerkontext oder Kontrollstruktur falsch, Speicher erschöpft, ungültiges
-ALLOT/Shift, Division durch null/Quotientenüberlauf.
+BASE, Eingabe-/Namens-/Stringgrenze, Compilerkontext oder Kontrollstruktur falsch,
+Speicher erschöpft, ungültiges ALLOT/Shift, Division durch null/Quotientenüberlauf.
 
 Fehlerausgabe `error: <kurzer Grund>` plus ggf. betroffenem Wort und CRLF.
 Ab AP 5 folgt `ok`/CRLF als erneute Bereitschaftsmeldung, ebenso beim Kaltstart.

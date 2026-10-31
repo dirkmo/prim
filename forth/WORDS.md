@@ -8,8 +8,9 @@ Flags are `I` (immediate) and `C` (compile-only); a dash means neither.
 For control words the table shows the compile-time effect; their runtime flag
 effects are stated in the description. `S"` changes effect with STATE.
 
-There are eight checked user data cells. The hardware data and return stacks
-remain 16 cells each. Returnstack overflow has no general software trap.
+The hardware data and return stacks have 32 cells each, with no runtime
+underflow/overflow checks or fixed eight-cell user limit. Leave space for kernel
+temporaries and interrupts. DEPTH/.S retain logical depth bookkeeping.
 Errors clear user data, discard the line and rollback an open definition;
 see [the guide](README.md) for the complete input/memory contracts.
 
@@ -82,9 +83,9 @@ see [the guide](README.md) for the complete input/memory contracts.
 | `IMMEDIATE` | `--` | - | Mark the latest completed user definition; kernel words are protected. |
 | `[` | `--` | IC | Temporarily interpret within an open definition. |
 | `]` | `--` | I | Resume compilation within an open definition. |
-| `LITERAL` | `a --` | IC | Compile a checked runtime literal from the compile-time top cell. |
+| `LITERAL` | `a --` | IC | Compile a depth-tracked runtime literal from the compile-time top cell. |
 | `'` | `-- xt` | - | Parse the next name at execution time and return its execution token. |
-| `[']` | `--` | IC | Parse the next name now and compile its XT as a checked runtime literal. |
+| `[']` | `--` | IC | Parse the next name now and compile its XT as a depth-tracked runtime literal. |
 | `EXECUTE` | `... xt -- ...` | - | Consume an XT and tail-invoke it; its stack effects and checks apply. |
 | `IF` | `--` | IC | Compile a forward conditional branch; runtime consumes one flag. |
 | `ELSE` | `--` | IC | Compile the alternative branch and resolve the preceding IF. |
@@ -99,11 +100,11 @@ see [the guide](README.md) for the complete input/memory contracts.
 | `ALLOT` | `n --` | - | Reserve 0..32767 bytes; negative values are rejected, memory is not cleared. |
 | `,` | `cell --` | - | Store a cell at HERE and advance by two bytes. |
 | `C,` | `cell --` | - | Store the low byte at HERE and advance by one. |
-| `CREATE` | `--` | - | Parse a name and define a checked body-address word; HERE points at the uninitialized body. |
+| `CREATE` | `--` | - | Parse a name and define a body-address word with DEPTH bookkeeping; HERE points at the uninitialized body. |
 | `VARIABLE` | `--` | - | Parse a name, define a body-address word, allocate and zero one cell. |
-| `CONSTANT` | `cell --` | - | Parse a name and define a checked constant-value word. |
+| `CONSTANT` | `cell --` | - | Parse a name and define a constant-value word with DEPTH bookkeeping. |
 | `TYPE` | `addr u --` | - | Emit u bytes; length zero performs no read. |
-| `S"` | `-- addr u (interpret); -- (compile)` | I | Parse through the next quote. Interpret to a temporary buffer; compile persistent data and two checked runtime results. |
+| `S"` | `-- addr u (interpret); -- (compile)` | I | Parse through the next quote. Interpret to a temporary buffer; compile persistent data and two depth-tracked runtime results. |
 | `."` | `--` | I | Parse through the next quote. Print now or compile printing; preserves the user stack even at depth eight. |
 
 ## Deliberate omissions

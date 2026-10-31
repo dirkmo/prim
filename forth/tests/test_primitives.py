@@ -244,14 +244,13 @@ class PrimitiveChecks(unittest.TestCase):
         self.assertTrue(runner.call('TRUE'))
         self.assertEqual(runner.values(), [65535])
 
-    def test_all_stack_guards_and_arithmetic_errors(self):
-        for word in self.image.words:
-            need, give = word['need'], word['give']
-            for n in range(need):
-                self.assert_error(word['name'], [0] * n, 'underflow')
-            if give > need:
-                for n in range(9 - (give - need), 9):
-                    self.assert_error(word['name'], [0] * n, 'overflow')
+    def test_depth_tracking_beyond_eight_cells(self):
+        values = list(range(20))
+        self.check('DUP', values, values + [19])
+        self.check('SWAP', values, values[:-2] + [19, 18])
+        self.check('+', values, values[:-2] + [37])
+
+    def test_arithmetic_errors(self):
         for word in ('LSHIFT', 'RSHIFT'):
             for count in (16, 17, 0x8000, 0xFFFF):
                 self.assert_error(word, [123, count], 'shift')
@@ -274,7 +273,7 @@ class PrimitiveChecks(unittest.TestCase):
                      ('LSHIFT', [3, 15], [0x8000]),
                      ('ROT', [11, 22, 33], [22, 33, 11]),
                      ('EMIT', [65], []), ('CR', [], []),
-                     ('/', [7, 0], None), ('DUP', [1] * 8, None)]
+                     ('/', [7, 0], None), ('DUP', [1] * 20, [1] * 21)]
             for word, args, expected in cases:
                 image = build_image(dual_console=False)
                 program = Image()
@@ -302,7 +301,7 @@ class PrimitiveChecks(unittest.TestCase):
                             self.assertEqual(last['rsp'], 0)
                         output = (b'A' if word == 'EMIT' else b'\r\n' if word == 'CR'
                                   else b'error: division by zero\r\n' if word == '/'
-                                  else b'error: stack overflow\r\n' if word == 'DUP' else b'')
+                                  else b'')
                         self.assertEqual(result.serial, output)
             print(f'PASS Forth primitives RTL: {len(cases)} programs x {len(TIMINGS)} timings')
 

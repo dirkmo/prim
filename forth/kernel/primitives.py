@@ -4,8 +4,6 @@ from forth.image import Ref
 from functools import partial
 
 ERRORS = {
-    'underflow': (1, 'stack underflow'),
-    'overflow': (2, 'stack overflow'),
     'shift': (3, 'shift range'),
     'division_zero': (4, 'division by zero'),
     'division_overflow': (5, 'division overflow'),
@@ -94,21 +92,9 @@ class Code:
         self.push(0xFFFF)
         self.mark(done)
 
-    def guard(self, need, give):
-        if need:
-            ready = self.label('stack_ready')
-            self.load('depth')
-            self.push(need)
-            self.ops(Op.LTU)
-            self.jz(ready)
-            self.jump('error_underflow')
-            self.mark(ready)
+    def adjust_depth(self, need, give):
+        """Maintain DEPTH/.S bookkeeping without testing stack bounds."""
         delta = give - need
-        if delta > 0:
-            self.load('depth')
-            self.push(9 - delta)
-            self.ops(Op.LTU)
-            self.jz('error_overflow')
         if delta:
             self.load('depth')
             self.push(abs(delta))
@@ -134,7 +120,7 @@ def emit_word(c, name, need, give, body, flags=0):
     image.define(xt)
     image.words.append({'name': name, 'header': header, 'xt': xt,
                         'need': need, 'give': give, 'flags': flags})
-    c.guard(need, give)
+    c.adjust_depth(need, give)
     body()
     c.ops(Op.NOP | 0x80)
 

@@ -209,7 +209,7 @@ def emit_console(image):
         word(name, 1, 0, print_number)
 
     def depth():
-        c.load('depth')  # Guard already counted the result cell.
+        c.load('depth')  # Depth bookkeeping already counted the result cell.
         c.push(1)
         c.ops(Op.SUB)
     word('DEPTH', 0, 1, depth)
@@ -356,7 +356,7 @@ def emit_console(image):
     c.call('compile_literal')
     c.jump(token)
     c.mark(interpret_number)
-    c.guard(0, 1)
+    c.adjust_depth(0, 1)
     c.load('number_value')
     c.jump(token)
     c.mark(line_done)

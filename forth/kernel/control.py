@@ -93,8 +93,8 @@ def emit_control(image):
     c.ops(Op.STORE, Op.NOP | 128)
 
     # Leaves the physical flag for JZ; only the semantic DEPTH is decreased.
-    c.mark('branch_guard')
-    c.guard(1, 0)
+    c.mark('branch_depth')
+    c.adjust_depth(1, 0)
     c.ops(Op.NOP | 128)
 
     def expect(kind):
@@ -116,7 +116,7 @@ def emit_control(image):
         c.call('compiler_reserve')
         if conditional:
             byte(Op.PUSH)
-            cell('branch_guard')
+            cell('branch_depth')
             byte(Op.CALL)
         byte(Op.PUSH)
         if forward:

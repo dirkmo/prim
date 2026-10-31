@@ -85,8 +85,9 @@ class DataChecks(unittest.TestCase):
         for definition, target in ((b'CREATE x', b'x'), (b'VARIABLE x', b'x'),
                                    (b'42 CONSTANT x', b'x')):
             out, values, _, _ = session(self.image, definition + b'\n1 2 3 4 5 6 7 8 ' + target + b'\n')
-            self.assertIn(b'error: stack overflow', out)
-            self.assertEqual(values, [])
+            self.assertNotIn(b'error:', out)
+            self.assertEqual(values[:8], list(range(1, 9)))
+            self.assertEqual(len(values), 9)
 
     def test_atomic_allocation_and_definition_failures(self):
         for command, remaining in ((b'VARIABLE x', 19), (b'CREATE x', 17), (b'42 CONSTANT x', 17)):
@@ -147,13 +148,12 @@ class DataChecks(unittest.TestCase):
         self.assertTrue(out.endswith(b'oldok\r\n'))
         self.assertEqual(values, [])
 
-    def test_string_stack_limits_and_full_stack_dot_quote(self):
-        for n in range(9):
+    def test_strings_beyond_eight_cells_and_dot_quote(self):
+        for n in (0, 6, 7, 8, 16, 20):
             prefix = b'1 ' * n
             out, values, _, _ = session(self.image, prefix + b'S" x"\n')
-            self.assertEqual(b'stack overflow' in out, n > 6)
-            if n <= 6:
-                self.assertEqual(values, [1] * n + [0x280, 1])
+            self.assertNotIn(b'error:', out)
+            self.assertEqual(values, [1] * n + [0x280, 1])
             out, values, _, _ = session(self.image, prefix + b'." x"\n')
             self.assertNotIn(b'error:', out)
             self.assertEqual(values, [1] * n)
@@ -179,8 +179,9 @@ class DataChecks(unittest.TestCase):
             self.assertTrue(out.endswith(suffix), out)
             self.assertEqual(values, [])
         out, values, _, _ = session(self.image, b': x S" a" ; 1 2 3 4 5 6 7 x\n')
-        self.assertIn(b'stack overflow', out)
-        self.assertEqual(values, [])
+        self.assertNotIn(b'error:', out)
+        self.assertEqual(values[:7], list(range(1, 8)))
+        self.assertEqual(len(values), 9)
 
     def test_string_errors_and_buffer_bounds(self):
         for source in (b'S" missing\n', b': bad ." missing\n', b': bad S" missing\n'):

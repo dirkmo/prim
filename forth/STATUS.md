@@ -1,3 +1,10 @@
+# Current update: unchecked Forth data stack
+
+Saved 32/32 + asynchronous IRQ baseline: `bb0eb19`. Data-stack runtime guards
+and the fixed eight-cell user limit are removed. DEPTH/.S keep depth bookkeeping;
+.S scratch is 03A0..03DF. See [unchecked stacks](../docs/FORTH_UNCHECKED.md).
+The earlier updates and AP history below describe their respective saved states.
+
 # Current update: 32/32 and asynchronous reception
 
 Hardware stacks now have 32 cells each; the checked Forth user limit remains

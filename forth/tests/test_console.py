@@ -41,13 +41,13 @@ class ConsoleChecks(unittest.TestCase):
                     self.assertEqual(runner.memory.data[0x39E:0x3A0], b'ok')
 
     def test_stack_display_every_depth_and_base(self):
-        values = [0, 1, 32767, 32768, 65535, 36, 2, 0xABCD]
+        values = [0, 1, 32767, 32768, 65535, 36, 2, 0xABCD] + list(range(8, 24))
         max_data = max_frames = 0
         for base in range(2, 37):
-            for n in range(9):
+            for n in (range(25) if base in (2, 10, 16, 36) else range(9)):
                 runner = Runner(self.image, values[:n])
                 runner.memory.data[0x39E:0x3A0] = b'ok'
-                runner.memory.data[0x3B0:0x3B2] = b'ok'
+                runner.memory.data[0x3E0:0x3E2] = b'ok'
                 runner.memory.write16(VARIABLES['base'], base)
                 self.assertTrue(runner.call('.S', limit=300000))
                 expected = '<' + formatted(n, base) + '> '
@@ -58,7 +58,7 @@ class ConsoleChecks(unittest.TestCase):
                 self.assertEqual(runner.cpu._rsp, 0)
                 self.assertLessEqual(runner.max_extra, 8)
                 self.assertEqual(runner.memory.data[0x39E:0x3A0], b'ok')
-                self.assertEqual(runner.memory.data[0x3B0:0x3B2], b'ok')
+                self.assertEqual(runner.memory.data[0x3E0:0x3E2], b'ok')
                 max_data = max(max_data, runner.max_data)
                 max_frames = max(max_frames, runner.max_return)
         print(f'.S all depths/bases: DS={max_data}/32, RS={max_frames}/32')
@@ -123,7 +123,7 @@ class ConsoleChecks(unittest.TestCase):
              b'ok\r\n1 2 ABORT 99\r\nok\r\nDEPTH .\r\n0 ok\r\n', []),
             (b'1 2 3 4 5 6 7 8\n', b'ok\r\n1 2 3 4 5 6 7 8\r\nok\r\n', list(range(1, 9))),
             (b'1 2 3 4 5 6 7 8 9\nDEPTH .\n',
-             b'ok\r\n1 2 3 4 5 6 7 8 9\r\nerror: stack overflow\r\nok\r\nDEPTH .\r\n0 ok\r\n', []),
+             b'ok\r\n1 2 3 4 5 6 7 8 9\r\nok\r\nDEPTH .\r\n9 ok\r\n', list(range(1, 10))),
         ]
         for payload, expected, stack in cases:
             with self.subTest(payload=payload):
@@ -132,9 +132,9 @@ class ConsoleChecks(unittest.TestCase):
                 self.assertEqual(values, stack)
                 self.assertLessEqual(budget[0], 16)
                 self.assertLessEqual(budget[1], 16)
-        payload = b'DROP\n1 .\n' * 25
+        payload = b'1 DROP ABORT\n1 .\n' * 25
         output, values, _, budget = session(self.image, payload)
-        self.assertEqual(output.count(b'error: stack underflow'), 25)
+        self.assertNotIn(b'error:', output)
         self.assertEqual(output.count(b'1 ok\r\n'), 25)
         self.assertEqual(values, [])
         print(f'Console recovery across ring wrap: DS={budget[0]}/32, RS={budget[1]}/32')

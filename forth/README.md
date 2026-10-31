@@ -2,7 +2,7 @@
 
 An independent on-CPU text interpreter and native-code compiler, with 90 kernel
 words. It uses the existing Prim ISA: **32-cell hardware data and return stacks,
-eight checked user data cells**. TokenForth remains a separate language/toolchain.
+without runtime data-stack bounds checks**. TokenForth remains a separate language/toolchain.
 
 The default FPGA image runs one shared interpreter on **UART and PS/2/VGA**.
 UART commands receive their echo/results/errors on UART; PS/2 commands receive
@@ -136,7 +136,7 @@ all arithmetic/stack contracts.
 ## Compile-time behavior and data
 
 `[` temporarily interprets within a definition, `]` resumes compilation.
-LITERAL consumes a compile-time value and emits a checked runtime push:
+LITERAL consumes a compile-time value and emits a runtime push with DEPTH bookkeeping:
 
 ```forth
 : answer [ 20 22 + ] LITERAL ;
@@ -184,13 +184,14 @@ words survive both. Arbitrary immediate-word side effects are not rolled back.
 A CPU reset rebuilds the dictionary pointers to kernel-only state; SRAM bytes
 may remain, but user words are forgotten. No persistence or image-save facility.
 
-The hardware stacks have 32 cells each. The kernel checks eight user data cells,
-reserving the remainder for internal work. Returnstack overflow has no general
-trap: arbitrary call depth is unsupported. The UART-only profile's structural
-checks bound the original kernel paths to 12 physical data cells and six return
-frames; user nesting adds to these. The dual-console paths, asynchronous interrupts
-and measured limits are described in [DUAL_CONSOLE.md](DUAL_CONSOLE.md).
-.S, S" and dynamic EXECUTE receive separate targeted checks.
+The hardware stacks have 32 cells each. There is no fixed eight-cell user limit
+and no runtime underflow/overflow check for either hardware stack. `DEPTH` and
+`.S` retain software depth bookkeeping; internal temporaries are not counted.
+Programmers must leave room for kernel temporaries and ISR work (up to three
+data and four return cells), so 32 physical cells are not 32 freely usable user
+cells. `.S` has a 32-cell scratch buffer at 03A0..03DF; it does not validate depth.
+The dual-console interrupt policy is described in [DUAL_CONSOLE.md](DUAL_CONSOLE.md).
+Current size and performance results: [unchecked stacks](../docs/FORTH_UNCHECKED.md).
 Tail calls reduce return depth but cannot remove every live caller frame.
 
 Code/data allocation is confined to USER_START..EFFF, with USER_START from the
@@ -211,7 +212,7 @@ Private `last_error` at 0126 retains the last code (zero after reset):
 
 | Codes | Meaning |
 | --- | --- |
-| 1–5 | Data underflow, overflow, shift range, zero divisor, quotient overflow |
+| 3–5 | Shift range, zero divisor, quotient overflow (codes 1–2 retired) |
 | 6–10 | Line too long, open comment, invalid BASE, invalid text control, numeric overflow |
 | 11–15 | Unknown word, compile-only word, compiler context, invalid name, dictionary full |
 | 16–21 | No user word for IMMEDIATE, unresolved control, simulator EOF in definition, control stack full, invalid ALLOT, open string |

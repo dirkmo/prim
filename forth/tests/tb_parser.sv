@@ -81,7 +81,7 @@ always @(posedge clk) begin
             (pc == wait_pc || pc == key_pc)) begin
             session_done = 1;
             depth = {ram[16'h0109], ram[16'h0108]};
-            if (depth < 0 || depth > 8) $fatal(1, "invalid session DEPTH");
+            if (depth < 0 || depth > (1<<cpu.DSS)) $fatal(1, "invalid session DEPTH");
             stack_file = $fopen(stack_path, "w");
             for (index = 0; index < depth; index = index + 1)
                 $fwrite(stack_file, "%04x\n", cpu.r_dstack[(cpu.r_dsp - depth + 1 + index) & ((1<<cpu.DSS)-1)]);

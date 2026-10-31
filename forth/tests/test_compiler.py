@@ -57,15 +57,15 @@ class CompilerChecks(unittest.TestCase):
             out, stack, _, _ = session(self.image, payload)
             self.assertNotIn(b'error:', out)
             self.assertEqual(stack, expected)
-        # EXECUTE keeps the target's stack checks, including with a full stack.
+        # EXECUTE preserves the target's depth bookkeeping beyond eight cells.
         _, _, memory, _ = session(self.image, b': target DUP ;\n')
         _, xt = lookup(memory, 'target')
-        for n in range(8):
+        for n in (1, 7, 8, 16, 20):
             r = Runner(self.image, list(range(n)) + [xt])
             start = self.image.symbols['user_start']
             r.memory.data[start:USER_LIMIT] = memory.data[start:USER_LIMIT]
             ok = r.call('EXECUTE')
-            self.assertEqual(ok, n > 0)
+            self.assertTrue(ok)
             if ok:
                 self.assertEqual(r.values(), list(range(n)) + [n - 1])
 
@@ -85,7 +85,7 @@ class CompilerChecks(unittest.TestCase):
         self.assertEqual(cell(r.memory, VARIABLES['found_xt']), 0)
 
     def test_literal_return_bit_never_changes_operand_bytes(self):
-        guard = self.image.symbols['literal_guard']
+        guard = self.image.symbols['literal_depth']
         prefix = bytes([Op.PUSH, guard & 255, guard >> 8, Op.CALL])
         for value in (0, 127, 128, 129, 255, 256, 0x8021, 0xFFFF):
             payload = f': value #{value} ; value\n'.encode()
@@ -129,13 +129,14 @@ class CompilerChecks(unittest.TestCase):
         self.assertEqual(memory.data[xt + 4:cell(memory, VARIABLES['here'])], bytes([Op.PUSH8, 128, 128]))
         self.assertEqual(values, [128])
 
-    def test_runtime_checks_of_compiled_literals_and_words(self):
-        for source, expected_error in ((b': value 9 ; 1 2 3 4 5 6 7 8 value\n', b'stack overflow'),
-                                       (b': dropper DROP ; dropper\n', b'stack underflow'),
-                                       (b": target 1 2 ; 1 2 3 4 5 6 7 ' target EXECUTE\n", b'stack overflow')):
+    def test_depth_tracking_of_compiled_literals_and_words(self):
+        for source, expected in (
+                (b': value 9 ; 1 2 3 4 5 6 7 8 value\n', list(range(1, 10))),
+                (b': dropper DROP ; 1 2 3 4 5 6 7 8 9 dropper\n', list(range(1, 9))),
+                (b": target 1 2 ; 1 2 3 4 5 6 7 ' target EXECUTE\n", list(range(1, 8)) + [1, 2])):
             out, values, memory, _ = session(self.image, source)
-            self.assertIn(b'error: ' + expected_error + b'\r\n', out)
-            self.assertEqual(values, [])
+            self.assertNotIn(b'error:', out)
+            self.assertEqual(values, expected)
             self.assertEqual(cell(memory, VARIABLES['definition_open']), 0)
             self.assertGreater(cell(memory, VARIABLES['here']), self.image.symbols['user_start'])
         out, stack, memory, _ = session(self.image, b': bye ABORT 99 ; 1 bye 2\n3 .\n')
@@ -216,7 +217,7 @@ class CompilerChecks(unittest.TestCase):
             (b": get ['] DUP ; 4 get EXECUTE\n", b'ok\r\n', [4, 4]),
             (b': good 7 ;\n: bad Missing\ngood .\n', b'7 ok\r\n', []),
             (b': bad [ ABORT\n3\n', b'ok\r\n', [3]),
-            (b': value 9 ; 1 2 3 4 5 6 7 8 value\n', b'error: stack overflow\r\nok\r\n', []),
+            (b': value 9 ; 1 2 3 4 5 6 7 8 value\n', b'ok\r\n', list(range(1, 10))),
         ]
         with tempfile.TemporaryDirectory(prefix='forth-compiler-rtl-') as directory:
             sim = RtlConsole(directory, self.image)
