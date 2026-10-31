@@ -1,7 +1,6 @@
 """Two bounded line editors feeding one interpreter; no interpreter reentry."""
 from prim.isa import PrimOpcodes as Op
 from forth.kernel.primitives import Code
-from forth.kernel.io import set_cell, increment
 from forth.kernel.interrupts import RINGS, RING_SIZE
 
 FRONT_NAMES = ('poll_source', 'input_ring', 'input_byte', 'input_available',
@@ -51,13 +50,13 @@ def emit_frontend(image):
             c.push(0)
             c.push(base + offset)
             c.ops(Op.STORE)
-    set_cell(c, 'last_source', 1)  # First tie selects UART; later ties alternate.
+    c.set_cell('last_source', 1)  # First tie selects UART; later ties alternate.
     c.call('vga_init')
     c.call('irq_init')  # Discard input that arrived before display initialization.
     for source in (1, 0):
-        set_cell(c, 'console_owner', source)
+        c.set_cell('console_owner', source)
         c.output(b'ok\r\n')
-    set_cell(c, 'console_initialized', 1)
+    c.set_cell('console_initialized', 1)
     c.ops(Op.NOP | 128)
 
     c.mark('front_echo')  # Preserve command ownership while echoing idle input.
@@ -74,25 +73,25 @@ def emit_frontend(image):
     local, selected = c.label('source_local'), c.label('source_selected')
     c.load('poll_source')
     c.jz(local)
-    set_cell(c, 'input_ring', RINGS['ps2'])
-    set_cell(c, 'front_line', LINES[1])
+    c.set_cell('input_ring', RINGS['ps2'])
+    c.set_cell('front_line', LINES[1])
     c.jump(selected)
     c.mark(local)
-    set_cell(c, 'input_ring', RINGS['uart'])
-    set_cell(c, 'front_line', LINES[0])
+    c.set_cell('input_ring', RINGS['uart'])
+    c.set_cell('front_line', LINES[0])
     c.mark(selected)
     c.ops(Op.NOP | 128)
 
     c.mark('source_recover')
     # Loss reset and head=tail must be atomic with respect to the ISR producer.
     c.ops(Op.INTDI)
-    set_cell(c, 'input_failed', 0)
+    c.set_cell('input_failed', 0)
     c.load('input_ring')
     c.push(4)
     c.ops(Op.ADD, Op.FETCH)
     no_loss = c.label('source_no_loss')
     c.jz(no_loss)
-    set_cell(c, 'input_failed', 1)
+    c.set_cell('input_failed', 1)
     c.push(0)
     c.load('input_ring')
     c.push(4)
@@ -111,7 +110,7 @@ def emit_frontend(image):
     c.ops(Op.INTEI | 128)
 
     c.mark('ring_take')
-    set_cell(c, 'input_available', 0)
+    c.set_cell('input_available', 0)
     c.load('input_ring')
     c.ops(Op.FETCH)
     c.store('front_head')
@@ -135,7 +134,7 @@ def emit_frontend(image):
     c.ops(Op.AND)
     c.load('input_ring')
     c.ops(Op.STORE)
-    set_cell(c, 'input_available', 1)
+    c.set_cell('input_available', 1)
     c.mark(empty)
     c.ops(Op.NOP | 128)
 
@@ -145,7 +144,7 @@ def emit_frontend(image):
     read, finish = c.label('source_read_byte'), c.label('source_read_finish')
     c.load('input_failed')
     c.jz(read)
-    set_cell(c, 'input_available', 0)
+    c.set_cell('input_available', 0)
     c.jump(finish)
     c.mark(read)
     c.call('ring_take')
@@ -174,7 +173,7 @@ def emit_frontend(image):
     c.jz(not_lf)
     c.jump(finish)
     c.mark(not_lf)
-    set_cell(c, 'input_available', 0)
+    c.set_cell('input_available', 0)
     c.mark(finish)
     c.ops(Op.NOP | 128)
 
@@ -308,7 +307,7 @@ def emit_frontend(image):
     loop = c.label('front_collect')
     c.mark(loop)
     for source in (0, 1):
-        set_cell(c, 'poll_source', source)
+        c.set_cell('poll_source', source)
         c.call('collect_source')
     unlocked, choose = c.label('front_unlocked'), c.label('front_choose')
     c.load('definition_open')
@@ -354,7 +353,7 @@ def emit_frontend(image):
     field(ERROR)
     c.store('line_error')
     for name in ('input_pos', 'token_addr', 'token_length', 'front_index'):
-        set_cell(c, name, 0)
+        c.set_cell(name, 0)
     copy, copied = c.label('front_copy'), c.label('front_copied')
     c.mark(copy)
     c.load('front_index')
@@ -369,7 +368,7 @@ def emit_frontend(image):
     c.push('input_buffer')
     c.load('front_index')
     c.ops(Op.ADD, Op.BYTE_STORE)
-    increment(c, 'front_index')
+    c.advance('front_index')
     c.jump(copy)
     c.mark(copied)
     c.push(0)

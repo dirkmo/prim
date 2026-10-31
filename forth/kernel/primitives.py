@@ -1,4 +1,4 @@
-"""Checked Forth primitives, emitted as Prim code, not evaluated by the host."""
+"""Forth primitives and shared Prim code-generation helpers."""
 from prim.isa import PrimOpcodes as Op
 from forth.image import Ref
 from functools import partial
@@ -57,6 +57,26 @@ class Code:
         self.push(name)
         self.ops(Op.STORE)
 
+    def set_cell(self, name, value):
+        self.push(value)
+        self.store(name)
+
+    def advance(self, name, amount=1):
+        self.load(name)
+        self.push(abs(amount))
+        self.ops(Op.ADD if amount > 0 else Op.SUB)
+        self.store(name)
+
+    def compile_byte(self, value):
+        """Emit a runtime call that appends a byte to the Forth dictionary."""
+        self.push(value)
+        self.call('compile_byte')
+
+    def compile_cell(self, value):
+        """Emit a runtime call that appends a cell to the Forth dictionary."""
+        self.push(value)
+        self.call('compile_cell')
+
     def jump(self, label, opcode=Op.JP):
         self.push(label)
         self.ops(opcode)
@@ -96,10 +116,7 @@ class Code:
         """Maintain DEPTH/.S bookkeeping without testing stack bounds."""
         delta = give - need
         if delta:
-            self.load('depth')
-            self.push(abs(delta))
-            self.ops(Op.ADD if delta > 0 else Op.SUB)
-            self.store('depth')
+            self.advance('depth', delta)
 
 
 def emit_word(c, name, need, give, body, flags=0):
@@ -269,12 +286,8 @@ def emit_primitives(image):
     def emit():
         c.emit()
     word('EMIT', 1, 0, emit)
-    def output(text):
-        for byte in text:
-            c.push(byte)
-            emit()
-    word('CR', 0, 0, lambda: output(b'\r\n'))
-    word('SPACE', 0, 0, lambda: output(b' '))
+    word('CR', 0, 0, lambda: c.output(b'\r\n'))
+    word('SPACE', 0, 0, lambda: c.output(b' '))
 
     # Shared private routine. Inputs/outputs are raw; public wrappers own DEPTH.
     c.mark('signed_divmod')
@@ -370,23 +383,39 @@ def emit_primitives(image):
     c.mark(finished)
     c.ops(Op.NOP | 0x80)
 
-    # Non-returning errors. AP 6 must roll back before clearing definition_open.
+    # Small entry stubs select a message; all errors share recovery and output.
     for name, (number, message) in ERRORS.items():
         c.mark('error_' + name)
-        c.push(number)
-        c.store('last_error')
-        c.call('rollback_definition')
-        for slot in ('depth', 'state', 'control_depth', 'definition_open'):
-            c.push(0)
-            c.store(slot)
-        output(('error: ' + message).encode('ascii'))
-        if name in ('unknown', 'compile_only'):
-            output(b' ')
-            c.call('print_token')
-        output(b'\r\n')
-        for slot in ('input_length', 'input_pos', 'token_addr', 'token_length'):
-            c.push(0)
-            c.store(slot)
-        c.jump('error_exit')
+        c.set_cell('last_error', number)
+        c.set_cell('print_addr', 'error_message_' + name)
+        c.set_cell('print_left', len(message))
+        c.jump('error_report')
+
+    c.mark('error_report')
+    # Roll back before clearing definition_open; preserve the token until printed.
+    c.call('rollback_definition')
+    for slot in ('depth', 'state', 'control_depth', 'definition_open'):
+        c.set_cell(slot, 0)
+    c.output(b'error: ')
+    c.call('print_span')
+    token, finish = c.label('error_token'), c.label('error_finish')
+    for name in ('unknown', 'compile_only'):
+        c.load('last_error')
+        c.push(ERRORS[name][0])
+        c.ops(Op.SUB)
+        c.jz(token)
+    c.jump(finish)
+    c.mark(token)
+    c.output(b' ')
+    c.call('print_token')
+    c.mark(finish)
+    c.output(b'\r\n')
+    for slot in ('input_length', 'input_pos', 'token_addr', 'token_length'):
+        c.set_cell(slot, 0)
     c.mark('error_exit')
     c.jump('idle')  # Abandon all call frames; never return through old ones.
+
+    # Literal data, deliberately excluded from the instruction disassembly.
+    for name, (_, message) in ERRORS.items():
+        c.mark('error_message_' + name)
+        image.emit(message.encode('ascii'))

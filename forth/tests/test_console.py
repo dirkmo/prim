@@ -26,6 +26,57 @@ class ConsoleChecks(unittest.TestCase):
     def setUpClass(cls):
         cls.image = build_image(dual_console=False)
 
+    def test_all_error_entries_report_and_roll_back(self):
+        # Independent expectations include the host-only EOF entry, and ensure
+        # only unknown/compile-only errors append the still-live input token.
+        errors = (
+            ('shift', 3, b'shift range'),
+            ('division_zero', 4, b'division by zero'),
+            ('division_overflow', 5, b'division overflow'),
+            ('input_overflow', 6, b'input too long'),
+            ('comment', 7, b'unterminated comment'),
+            ('base', 8, b'invalid base'),
+            ('input_character', 9, b'input character'),
+            ('number_overflow', 10, b'number overflow'),
+            ('unknown', 11, b'unknown word MiXeD'),
+            ('compile_only', 12, b'compile-only word MiXeD'),
+            ('compiler', 13, b'compiler context'),
+            ('name', 14, b'invalid name'),
+            ('memory', 15, b'dictionary full'),
+            ('immediate', 16, b'no user definition'),
+            ('control', 17, b'unresolved control'),
+            ('incomplete', 18, b'unfinished definition'),
+            ('control_overflow', 19, b'control stack overflow'),
+            ('allot', 20, b'invalid allot'),
+            ('string', 21, b'unterminated string'),
+        )
+        for name, number, message in errors:
+            for opened in (False, True):
+                with self.subTest(error=name, definition_open=opened):
+                    r = Runner(self.image, [123, 456])
+                    get = lambda name: r.memory.read16(VARIABLES[name])
+                    put = lambda name, value: r.memory.write16(VARIABLES[name], value)
+                    here, latest = get('here'), get('latest')
+                    r.memory.data[0x200:0x205] = b'MiXeD'
+                    for key, value in (('token_addr', 0x200), ('token_length', 5),
+                                       ('input_length', 5), ('input_pos', 5)):
+                        put(key, value)
+                    if opened:
+                        for key, value in (('saved_here', here), ('saved_latest', latest),
+                                           ('here', here + 64), ('latest', here),
+                                           ('pending_header', here), ('definition_open', 1),
+                                           ('state', 1), ('control_depth', 2)):
+                            put(key, value)
+                    self.assertFalse(r.invoke(self.image.symbols['error_' + name]))
+                    self.assertEqual(bytes(r.memory.tx), b'error: ' + message + b'\r\n')
+                    self.assertEqual(get('last_error'), number)
+                    self.assertEqual((get('here'), get('latest')), (here, latest))
+                    for key in ('depth', 'state', 'control_depth', 'definition_open',
+                                'input_length', 'input_pos', 'token_addr', 'token_length'):
+                        self.assertEqual(get(key), 0, key)
+                    self.assertTrue(r.call('TRUE'))
+                    self.assertEqual(r.values(), [65535])
+
     def test_number_output_all_bases(self):
         for base in range(2, 37):
             for value in (0, 1, 32767, 32768, 65535):
@@ -199,7 +250,7 @@ class ConsoleChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='forth-console-rtl-') as directory:
             directory = Path(directory)
             simulator, image_path = directory / 'console', directory / 'image.hex'
-            image_path.write_text(''.join(f'{b:02x}\n' for b in bytes(self.image.memory) + bytes(16)))
+            image_path.write_text(''.join(f'{b:02x}\n' for b in bytes(self.image.memory).ljust(0x10000, b'\0')))
             run([configured_tools().iverilog, '-g2012', '-s', 'tb_parser', '-P', 'tb_parser.SESSION=1',
                  '-I', ROOT / 'cpu/rtl', '-o', simulator, ROOT / 'forth/tests/tb_parser.sv',
                  ROOT / 'cpu/rtl/prim.v', ROOT / 'debug_uart/rtl/uart_buffers.v'])

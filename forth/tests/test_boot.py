@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / 'tests'))
 
 from forth.build import build_image
 from forth.kernel.boot import VARIABLES
-from forth.image import Image, Ref
+from forth.image import Image, RAM_END, Ref
 from prim.cpu import Prim
 from prim.isa import PrimOpcodes as Op
 from support.reference import Memory
@@ -107,7 +107,7 @@ class BootChecks(unittest.TestCase):
         image.org(0)
         with self.assertRaisesRegex(ValueError, 'overlapping'):
             image.emit([0])
-        image.org(0xFFEF)
+        image.org(RAM_END - 1)
         with self.assertRaisesRegex(ValueError, 'MMIO'):
             image.emit([0, 0])
 

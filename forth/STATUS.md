@@ -1,4 +1,22 @@
-# Current update: unchecked Forth data stack
+# Current update: compact errors and shared generator helpers
+
+Error entries now select a code and a byte-span message, then use one shared
+rollback/output/reset path. Messages, error codes, token suffixes and console
+ownership are preserved. Error code plus message storage, including the final
+jump to idle, shrinks from 4046 to 890 bytes. Each profile gains 3156 bytes:
+dual free dictionary 31BA..EFFF, 48710 bytes; UART-only 2482..EFFF, 52094 bytes.
+Reserved SRAM and MMIO are excluded. Error messages now execute a byte-span
+loop instead of unrolled output, trading error-path speed for image size.
+
+`Code` owns set_cell, advance, compile_byte, compile_cell and output helpers;
+the helper-only refactor produces byte-identical images in both profiles.
+Tests cover all 19 error entries with/without an open definition, and IRQs
+during shared error output on both consoles. RTL fixtures pad images to the
+full address space instead of assuming a fixed MMIO size.
+Validation: 97 tests passed with `--rtl`, no skips; the separate VGA-Forth
+driver regression also passed. Report: `build/forth-cleanup/verified/report.json`.
+
+# Previous update: unchecked Forth data stack
 
 Saved 32/32 + asynchronous IRQ baseline: `bb0eb19`. Data-stack runtime guards
 and the fixed eight-cell user limit are removed. DEPTH/.S keep depth bookkeeping;

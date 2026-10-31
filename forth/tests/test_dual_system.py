@@ -50,7 +50,7 @@ class DualSystemChecks(unittest.TestCase):
         directory = Path(os.environ.get('FORTH_TEST_ARTIFACTS', ROOT / 'build/dual-system-tests'))
         directory.mkdir(parents=True, exist_ok=True)
         image = build_image()
-        data = bytes(image.memory) + bytes(16)
+        data = bytes(image.memory).ljust(0x10000, b'\0')
         image_file = directory / 'image.hex'
         image_file.write_text(''.join(f'{data[n+1]:02x}{data[n]:02x}\n' for n in range(0, 65536, 2)))
         (directory / 'kernel.map.json').write_text(json.dumps(memory_map(image), indent=2) + '\n')

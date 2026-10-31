@@ -12,7 +12,7 @@ class RtlConsole:
         self.tools = configured_tools()
         self.simulator = self.directory / 'console'
         self.image_path = self.directory / 'image.hex'
-        self.image_path.write_text(''.join(f'{b:02x}\n' for b in bytes(image.memory) + bytes(16)))
+        self.image_path.write_text(''.join(f'{b:02x}\n' for b in bytes(image.memory).ljust(0x10000, b'\0')))
         run([self.tools.iverilog, '-g2012', '-s', 'tb_parser', '-P', 'tb_parser.SESSION=1',
              '-I', ROOT / 'cpu/rtl', '-o', self.simulator, ROOT / 'forth/tests/tb_parser.sv',
              ROOT / 'cpu/rtl/prim.v', ROOT / 'debug_uart/rtl/uart_buffers.v'])

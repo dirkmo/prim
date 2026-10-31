@@ -4,6 +4,45 @@ from dual_support import DualSession
 
 
 class FrontendChecks(unittest.TestCase):
+    def test_error_message_irq_and_rollback_on_both_consoles(self):
+        for local in (False, True):
+            with self.subTest(local=local):
+                r = DualSession()
+                send = r.keyboard if local else r.uart
+                send(': kept 17 ;\r')
+                r.quiet()
+                here, latest = r.get('here'), r.get('latest')
+                original = r.step
+                sent = False
+
+                def interrupt():
+                    nonlocal sent
+                    if r.cpu._pc == r.image.symbols['print_span'] and not sent:
+                        sent = True
+                        r.memory.receive_ps2(0x12)  # IRQ during shared error output.
+                    original()
+                r.step = interrupt
+                uart_before = len(r.memory.tx)
+                screen_before = bytes(r.memory.vram)
+                send(': broken BoGuS\r')
+                r.quiet()
+                self.assertTrue(sent)
+                expected = b'error: unknown word BoGuS'
+                if local:
+                    self.assertIn(expected, r.memory.screen())
+                    self.assertEqual(len(r.memory.tx), uart_before)
+                else:
+                    self.assertIn(expected, bytes(r.memory.tx[uart_before:]))
+                    self.assertEqual(bytes(r.memory.vram), screen_before)
+                self.assertEqual(r.get('last_error'), 11)
+                self.assertEqual((r.get('here'), r.get('latest')), (here, latest))
+                self.assertEqual(r.get('definition_open'), 0)
+                self.assertEqual(r.stack(), [])
+                self.assertTrue(r.cpu._int_enable)
+                send('kept\r')
+                r.quiet()
+                self.assertEqual(r.stack(), [17])
+
     def test_twenty_four_cell_display_with_interrupt(self):
         r = DualSession()
         values = list(range(1, 25))

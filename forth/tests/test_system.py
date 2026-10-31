@@ -56,7 +56,7 @@ class SystemChecks(unittest.TestCase):
         tools = configured_tools()
         with tempfile.TemporaryDirectory(prefix='forth-wire-') as directory:
             directory = Path(directory)
-            image = bytes(build_image(dual_console=False).memory) + bytes(16)
+            image = bytes(build_image(dual_console=False).memory).ljust(0x10000, b'\0')
             image_file, source_file, expected_file, tx_file = [directory / (n + '.hex')
                 for n in ('image', 'source', 'expected', 'tx')]
             image_file.write_text(''.join(f'{image[n+1]:02x}{image[n]:02x}\n' for n in range(0, 65536, 2)))

@@ -8,18 +8,6 @@ IO_NAMES = ('console_owner', 'vga_x', 'vga_y', 'vga_row', 'vga_saved',
 IO_VARIABLES = {name: 0xF000 + 2 * n for n, name in enumerate(IO_NAMES)}
 
 
-def set_cell(c, name, value):
-    c.push(value)
-    c.store(name)
-
-
-def increment(c, name, delta=1):
-    c.load(name)
-    c.push(abs(delta))
-    c.ops(Op.ADD if delta > 0 else Op.SUB)
-    c.store(name)
-
-
 def emit_io(image):
     c = Code(image)
     c.mark('raw_emit')  # ( byte -- ), preserves logical DEPTH.
@@ -70,26 +58,26 @@ def emit_io(image):
     c.push(32)
     c.load('vga_clear')
     c.call('vga_write')
-    increment(c, 'vga_clear')
-    increment(c, 'vga_left', -1)
+    c.advance('vga_clear')
+    c.advance('vga_left', -1)
     c.jump(loop)
     c.mark(done)
     c.ops(Op.NOP | 128)
 
     c.mark('vga_init')
     for name in ('vga_x', 'vga_y', 'vga_row'):
-        set_cell(c, name, 0)
+        c.set_cell(name, 0)
     c.push(0x1E)
     c.push(0xFFF6)
     c.ops(Op.BYTE_STORE)
-    set_cell(c, 'vga_clear', 0xE000)
-    set_cell(c, 'vga_left', 2560)
+    c.set_cell('vga_clear', 0xE000)
+    c.set_cell('vga_left', 2560)
     c.call('vga_clear_span')
     c.jump('vga_cursor')
 
     c.mark('vga_newline')
-    set_cell(c, 'vga_x', 0)
-    increment(c, 'vga_y')
+    c.set_cell('vga_x', 0)
+    c.advance('vga_y')
     c.load('vga_y')
     c.push(30)
     c.ops(Op.LTU)
@@ -97,7 +85,7 @@ def emit_io(image):
     c.jz(scroll)
     c.jump('vga_cursor')
     c.mark(scroll)
-    set_cell(c, 'vga_y', 29)
+    c.set_cell('vga_y', 29)
     c.load('vga_row')
     c.push(1)
     c.ops(Op.ADD)
@@ -106,7 +94,7 @@ def emit_io(image):
     c.store('vga_row')
     c.call('vga_address')
     c.store('vga_clear')
-    set_cell(c, 'vga_left', 80)
+    c.set_cell('vga_left', 80)
     c.call('vga_clear_span')
     c.jump('vga_cursor')
 
@@ -129,21 +117,21 @@ def emit_io(image):
     c.load('vga_char')
     c.call('vga_address')
     c.call('vga_write')
-    increment(c, 'vga_x')
+    c.advance('vga_x')
     c.load('vga_x')
     c.push(80)
     c.ops(Op.SUB)
     c.jz(lf)
     c.jump('vga_cursor')
     c.mark(cr)
-    set_cell(c, 'vga_x', 0)
+    c.set_cell('vga_x', 0)
     c.jump('vga_cursor')
     c.mark(lf)
     c.jump('vga_newline')
     c.mark(bs)
     c.load('vga_x')
     c.jz(done)
-    increment(c, 'vga_x', -1)
+    c.advance('vga_x', -1)
     c.push(32)
     c.call('vga_address')
     c.call('vga_write')

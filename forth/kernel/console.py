@@ -8,19 +8,6 @@ def emit_console(image):
     c = Code(image)
     word = partial(emit_word, c)
 
-    def set_cell(name, value):
-        c.push(value)
-        c.store(name)
-
-    def advance(name, amount=1):
-        c.load(name)
-        c.push(abs(amount))
-        c.ops(Op.ADD if amount > 0 else Op.SUB)
-        c.store(name)
-
-    def output(text):
-        c.output(text)
-
     def field(name, offset, byte=False):
         c.load(name)
         if offset:
@@ -48,7 +35,7 @@ def emit_console(image):
 
     c.mark('find_word')  # ( -- ); current token -> found_header/xt/flags or 0.
     for name in ('found_header', 'found_xt', 'found_flags'):
-        set_cell(name, 0)
+        c.set_cell(name, 0)
     finish = c.label('find_return')
     c.load('token_length')
     c.jz(finish)
@@ -76,7 +63,7 @@ def emit_console(image):
     c.jz(length_equal)
     c.jump(next_header)
     c.mark(length_equal)
-    set_cell('find_index', 0)
+    c.set_cell('find_index', 0)
     c.mark(scan)
     c.load('find_index')
     c.load('token_length')
@@ -96,7 +83,7 @@ def emit_console(image):
     c.jz(equal_char)
     c.jump(next_header)
     c.mark(equal_char)
-    advance('find_index')
+    c.advance('find_index')
     c.jump(scan)
     c.mark(next_header)
     field('find_header', 0)
@@ -127,8 +114,8 @@ def emit_console(image):
     c.load('print_addr')
     c.ops(Op.BYTE_FETCH)
     c.call('raw_emit')
-    advance('print_addr')
-    advance('print_left', -1)
+    c.advance('print_addr')
+    c.advance('print_left', -1)
     c.jump(loop)
     c.mark(done)
     c.ops(Op.NOP | 128)
@@ -150,7 +137,7 @@ def emit_console(image):
     c.mark('print_unsigned')  # ( u -- ), raw, no trailing space.
     c.store('arith_a')
     c.call('validate_base')
-    set_cell('format_count', 0)
+    c.set_cell('format_count', 0)
     digits, alpha, save, emit, done = (
         c.label('format_' + x) for x in ('digits', 'alpha', 'save', 'emit', 'done'))
     c.mark(digits)
@@ -172,14 +159,14 @@ def emit_console(image):
     c.push('digit_buffer')
     c.load('format_count')
     c.ops(Op.ADD, Op.BYTE_STORE)
-    advance('format_count')
+    c.advance('format_count')
     c.load('arith_q')
     c.ops(Op.DUP)
     c.store('arith_a')
     c.jz(emit)
     c.jump(digits)
     c.mark(emit)
-    advance('format_count', -1)
+    c.advance('format_count', -1)
     c.push('digit_buffer')
     c.load('format_count')
     c.ops(Op.ADD, Op.BYTE_FETCH)
@@ -197,7 +184,7 @@ def emit_console(image):
     c.push(0)
     c.ops(Op.LTS)
     c.jz(positive)
-    output(b'-')
+    c.output(b'-')
     c.negate()
     c.mark(positive)
     c.jump('print_unsigned')  # Tail jump shares the existing return frame.
@@ -205,7 +192,7 @@ def emit_console(image):
     for name, routine in (('.', 'print_signed'), ('U.', 'print_unsigned')):
         def print_number(routine=routine):
             c.call(routine)
-            output(b' ')
+            c.output(b' ')
         word(name, 1, 0, print_number)
 
     def depth():
@@ -218,7 +205,7 @@ def emit_console(image):
         c.call('validate_base')
         c.load('depth')
         c.store('dump_count')
-        set_cell('dump_index', 0)
+        c.set_cell('dump_index', 0)
         dump, dumped, restore, restored = (
             c.label('stack_' + x) for x in ('dump', 'dumped', 'restore', 'restored'))
         c.mark(dump)
@@ -229,22 +216,22 @@ def emit_console(image):
         c.push('stack_buffer')
         c.load('dump_index')
         c.ops(Op.SL, Op.ADD, Op.STORE)
-        advance('dump_index')
+        c.advance('dump_index')
         c.jump(dump)
         c.mark(dumped)
-        output(b'<')
+        c.output(b'<')
         c.load('dump_count')
         c.call('print_unsigned')
-        output(b'> ')
+        c.output(b'> ')
         c.mark(restore)
         c.load('dump_index')
         c.jz(restored)
-        advance('dump_index', -1)
+        c.advance('dump_index', -1)
         c.push('stack_buffer')
         c.load('dump_index')
         c.ops(Op.SL, Op.ADD, Op.FETCH, Op.DUP)
         c.call('print_signed')
-        output(b' ')
+        c.output(b' ')
         c.jump(restore)
         c.mark(restored)
     word('.S', 0, 0, stack_display)
@@ -270,20 +257,20 @@ def emit_console(image):
         field('word_cursor', 3, byte=True)
         c.store('print_left')
         c.call('print_span')
-        output(b' ')
+        c.output(b' ')
         c.mark(next_word)
         field('word_cursor', 0)
         c.store('word_cursor')
         c.jump(loop)
         c.mark(done)
-        output(b'\r\n')
+        c.output(b'\r\n')
     word('WORDS', 0, 0, words)
 
     def abort():
         c.call('rollback_definition')
         for name in ('depth', 'state', 'control_depth', 'definition_open',
                      'input_length', 'input_pos', 'token_addr', 'token_length'):
-            set_cell(name, 0)
+            c.set_cell(name, 0)
         c.jump('idle')
     word('ABORT', 0, 0, abort)
 
@@ -292,7 +279,7 @@ def emit_console(image):
     if getattr(image, 'dual_console', False):
         c.call('frontend_start')
     else:
-        output(b'ok\r\n')
+        c.output(b'ok\r\n')
     c.mark('console_next')
     c.call('read_line')
     token, number, execute, line_done = (
@@ -363,8 +350,8 @@ def emit_console(image):
     finished_line = c.label('console_finished_line')
     c.load('definition_open')
     c.jz(finished_line)
-    output(b'compiled\r\n')
+    c.output(b'compiled\r\n')
     c.jump('console_next')
     c.mark(finished_line)
-    output(b'ok\r\n')
+    c.output(b'ok\r\n')
     c.jump('console_next')

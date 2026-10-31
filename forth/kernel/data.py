@@ -9,24 +9,6 @@ def emit_data(image):
     c = Code(image)
     word = partial(emit_word, c)
 
-    def set_cell(name, value):
-        c.push(value)
-        c.store(name)
-
-    def advance(name):
-        c.load(name)
-        c.push(1)
-        c.ops(Op.ADD)
-        c.store(name)
-
-    def byte(value):
-        c.push(value)
-        c.call('compile_byte')
-
-    def cell(value):
-        c.push(value)
-        c.call('compile_cell')
-
     word('HERE', 0, 1, lambda: c.load('here'))
 
     def unused():
@@ -62,7 +44,7 @@ def emit_data(image):
     c.ops(Op.ADD)
     c.store('data_value')
     c.mark(constant)
-    set_cell('compiler_needed', 8)
+    c.set_cell('compiler_needed', 8)
     c.load('data_kind')
     c.push(1)
     c.ops(Op.SUB)
@@ -70,17 +52,17 @@ def emit_data(image):
     write = c.label('data_write')
     c.jump(write)
     c.mark(reserved)
-    set_cell('compiler_needed', 10)
+    c.set_cell('compiler_needed', 10)
     c.mark(write)
     c.call('compiler_reserve')
     # Fixed eight-byte depth-tracked stub, regardless of constant value magnitude.
-    byte(Op.PUSH)
-    cell('literal_depth')
-    byte(Op.CALL)
-    byte(Op.PUSH)
+    c.compile_byte(Op.PUSH)
+    c.compile_cell('literal_depth')
+    c.compile_byte(Op.CALL)
+    c.compile_byte(Op.PUSH)
     c.load('data_value')
     c.call('compile_cell')
-    byte(Op.NOP | 128)
+    c.compile_byte(Op.NOP | 128)
     c.load('data_kind')
     c.push(1)
     c.ops(Op.SUB)
@@ -88,7 +70,7 @@ def emit_data(image):
     c.jz(variable)
     c.jump(publish)
     c.mark(variable)
-    cell(0)
+    c.compile_cell(0)
     c.mark(publish)
     c.call('publish_definition')  # Only publish after variable initialization.
     c.ops(Op.NOP | 128)
@@ -97,7 +79,7 @@ def emit_data(image):
         def define(kind=kind):
             if kind == 2:
                 c.store('data_value')
-            set_cell('data_kind', kind)
+            c.set_cell('data_kind', kind)
             c.call('define_data')
         word(name, need, 0, define)
 
@@ -113,7 +95,7 @@ def emit_data(image):
     c.load('input_pos')
     c.ops(Op.ADD)
     c.store('string_addr')
-    set_cell('string_length', 0)
+    c.set_cell('string_length', 0)
     loop, done = c.label('string_scan'), c.label('string_closed')
     c.mark(loop)
     c.load('input_pos')
@@ -126,15 +108,15 @@ def emit_data(image):
     c.push(34)
     c.ops(Op.SUB)
     c.jz(done)
-    advance('input_pos')
-    advance('string_length')
+    c.advance('input_pos')
+    c.advance('string_length')
     c.jump(loop)
     c.mark(done)
-    advance('input_pos')
+    c.advance('input_pos')
     c.ops(Op.NOP | 128)
 
     c.mark('copy_string_buffer')
-    set_cell('string_index', 0)
+    c.set_cell('string_index', 0)
     loop, done = c.label('string_copy'), c.label('string_copied')
     c.mark(loop)
     c.load('string_index')
@@ -147,7 +129,7 @@ def emit_data(image):
     c.push('string_buffer')
     c.load('string_index')
     c.ops(Op.ADD, Op.BYTE_STORE)
-    advance('string_index')
+    c.advance('string_index')
     c.jump(loop)
     c.mark(done)
     c.push(0)
@@ -167,13 +149,13 @@ def emit_data(image):
         c.push(4)
         c.ops(Op.ADD)
         c.store('string_code_addr')
-        byte(Op.PUSH)
+        c.compile_byte(Op.PUSH)
         c.load('string_code_addr')
         c.load('string_length')
         c.ops(Op.ADD)
         c.call('compile_cell')
-        byte(Op.JP)  # Skip embedded bytes; never fetch them as opcodes.
-        set_cell('string_index', 0)
+        c.compile_byte(Op.JP)  # Skip embedded bytes; never fetch them as opcodes.
+        c.set_cell('string_index', 0)
         loop, done = c.label('string_emit'), c.label('string_emitted')
         c.mark(loop)
         c.load('string_index')
@@ -184,20 +166,20 @@ def emit_data(image):
         c.load('string_index')
         c.ops(Op.ADD, Op.BYTE_FETCH)
         c.call('compile_byte')
-        advance('string_index')
+        c.advance('string_index')
         c.jump(loop)
         c.mark(done)
         if printing:
             # Private temporaries, so ." works even with eight user cells.
-            byte(Op.PUSH)
+            c.compile_byte(Op.PUSH)
             c.load('string_code_addr')
             c.call('compile_cell')
-            byte(Op.PUSH8)
+            c.compile_byte(Op.PUSH8)
             c.load('string_length')
             c.call('compile_byte')
-            byte(Op.PUSH)
-            cell('raw_type')
-            byte(Op.CALL)
+            c.compile_byte(Op.PUSH)
+            c.compile_cell('raw_type')
+            c.compile_byte(Op.CALL)
         else:
             for source in ('string_code_addr', 'string_length'):
                 c.load(source)

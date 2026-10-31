@@ -8,35 +8,17 @@ def emit_compiler(image):
     c = Code(image)
     word = partial(emit_word, c)
 
-    def set_cell(name, value):
-        c.push(value)
-        c.store(name)
-
-    def advance(name, amount=1):
-        c.load(name)
-        c.push(amount)
-        c.ops(Op.ADD)
-        c.store(name)
-
-    def byte(value):
-        c.push(value)
-        c.call('compile_byte')
-
-    def cell(value):
-        c.push(value)
-        c.call('compile_cell')
-
     def align():
         aligned = c.label('compiler_aligned')
         c.load('here')
         c.push(1)
         c.ops(Op.AND)
         c.jz(aligned)
-        byte(0)
+        c.compile_byte(0)
         c.mark(aligned)
 
     def record(kind):
-        set_cell('last_kind', kind)
+        c.set_cell('last_kind', kind)
         c.load('here')
         c.store('last_end')
 
@@ -49,7 +31,7 @@ def emit_compiler(image):
         c.store(target)
     for name in ('definition_open', 'pending_header', 'state', 'control_depth',
                  'fold_safe', 'last_opcode', 'last_end', 'last_kind'):
-        set_cell(name, 0)
+        c.set_cell(name, 0)
     c.mark(done)
     c.ops(Op.NOP | 128)
 
@@ -94,12 +76,12 @@ def emit_compiler(image):
                                 ('compile_cell', 2, Op.STORE)):
         c.mark(label)  # ( value -- ), raw, bounds checked before writing.
         c.store('emit_value')
-        set_cell('compiler_needed', size)
+        c.set_cell('compiler_needed', size)
         c.call('compiler_reserve')
         c.load('emit_value')
         c.load('here')
         c.ops(opcode)
-        advance('here', size)
+        c.advance('here', size)
         c.ops(Op.NOP | 128)
 
     # Count a compiled literal before its PUSH, with no user result yet.
@@ -108,14 +90,14 @@ def emit_compiler(image):
     c.ops(Op.NOP | 128)
 
     c.mark('compile_word')  # ( -- ), found_xt -> PUSH16 xt; CALL.
-    set_cell('compiler_needed', 4)
+    c.set_cell('compiler_needed', 4)
     c.call('compiler_reserve')
-    byte(Op.PUSH)
+    c.compile_byte(Op.PUSH)
     c.load('found_xt')
     c.call('compile_cell')
     c.load('here')
     c.store('last_opcode')
-    byte(Op.CALL)
+    c.compile_byte(Op.CALL)
     record(1)
     c.ops(Op.NOP | 128)
 
@@ -126,27 +108,27 @@ def emit_compiler(image):
     c.push(256)
     c.ops(Op.LTU)
     c.jz(large)
-    set_cell('compiler_needed', 6)
+    c.set_cell('compiler_needed', 6)
     c.jump(prefix)
     c.mark(large)
-    set_cell('compiler_needed', 7)
+    c.set_cell('compiler_needed', 7)
     c.mark(prefix)
     c.call('compiler_reserve')
-    byte(Op.PUSH)
-    cell('literal_depth')
-    byte(Op.CALL)
+    c.compile_byte(Op.PUSH)
+    c.compile_cell('literal_depth')
+    c.compile_byte(Op.CALL)
     c.load('here')
     c.store('last_opcode')
     c.load('compile_value')
     c.push(256)
     c.ops(Op.LTU)
     c.jz(small_value)
-    byte(Op.PUSH8)
+    c.compile_byte(Op.PUSH8)
     c.load('compile_value')
     c.call('compile_byte')
     c.jump(finished)
     c.mark(small_value)
-    byte(Op.PUSH)
+    c.compile_byte(Op.PUSH)
     c.load('compile_value')
     c.call('compile_cell')
     c.mark(finished)
@@ -178,7 +160,7 @@ def emit_compiler(image):
         for source, target in (('here', 'saved_here'), ('latest', 'saved_latest')):
             c.load(source)
             c.store(target)
-        set_cell('definition_open', 1)
+        c.set_cell('definition_open', 1)
         # Alignment + padded header + at least one return byte, in one check.
         c.load('token_length')
         c.push(9)
@@ -197,12 +179,12 @@ def emit_compiler(image):
         c.store('pending_header')
         c.load('latest')
         c.call('compile_cell')
-        byte(4)  # HIDDEN until successful semicolon.
+        c.compile_byte(4)  # HIDDEN until successful semicolon.
         c.load('token_length')
         c.call('compile_byte')
-        cell(0)  # XT patched after the name is copied and padded.
-        cell(0)  # Call class, no inline opcode.
-        set_cell('compiler_index', 0)
+        c.compile_cell(0)  # XT patched after the name is copied and padded.
+        c.compile_cell(0)  # Call class, no inline opcode.
+        c.set_cell('compiler_index', 0)
         loop, copied = c.label('name_copy'), c.label('name_copied')
         c.mark(loop)
         c.load('compiler_index')
@@ -213,7 +195,7 @@ def emit_compiler(image):
         c.load('compiler_index')
         c.ops(Op.ADD, Op.BYTE_FETCH)
         c.call('compile_byte')
-        advance('compiler_index')
+        c.advance('compiler_index')
         c.jump(loop)
         c.mark(copied)
         align()
@@ -225,7 +207,7 @@ def emit_compiler(image):
         c.store('latest')
         for name, value in (('state', 1), ('fold_safe', 1), ('control_depth', 0),
                             ('last_opcode', 0), ('last_end', 0), ('last_kind', 0)):
-            set_cell(name, value)
+            c.set_cell(name, value)
     # Immediate so a nested colon is rejected instead of silently compiled.
     word(':', 0, 0, colon, flags=1)
     image.define('colon_xt', image.symbols[image.words[-1]['xt']])
@@ -303,7 +285,7 @@ def emit_compiler(image):
         c.ops(Op.BYTE_STORE)
         c.jump(publish)
         c.mark(fallback)
-        byte(Op.NOP | 128)
+        c.compile_byte(Op.NOP | 128)
         c.mark(publish)
         c.mark('publish_definition')  # Shared transaction commit; caller emitted its own return.
         c.load('pending_header')
@@ -312,7 +294,7 @@ def emit_compiler(image):
         c.push(0xFB)
         c.ops(Op.AND, Op.SWAP, Op.BYTE_STORE)
         for name in ('state', 'definition_open', 'pending_header', 'fold_safe', 'last_kind'):
-            set_cell(name, 0)
+            c.set_cell(name, 0)
     word(';', 0, 0, semicolon, flags=3)
     image.define('semicolon_xt', image.symbols[image.words[-1]['xt']])
 
@@ -340,15 +322,15 @@ def emit_compiler(image):
 
     def bracket_open():
         c.call('require_compiling')
-        set_cell('state', 0)
-        set_cell('fold_safe', 0)
+        c.set_cell('state', 0)
+        c.set_cell('fold_safe', 0)
     word('[', 0, 0, bracket_open, flags=3)
 
     def bracket_close():
         c.load('definition_open')
         c.jz('error_compiler')
-        set_cell('state', 1)
-        set_cell('fold_safe', 0)
+        c.set_cell('state', 1)
+        c.set_cell('fold_safe', 0)
     word(']', 0, 0, bracket_close, flags=1)
 
     def literal_word():

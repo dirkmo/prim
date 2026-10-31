@@ -1,7 +1,6 @@
 """Set-2 German QWERTZ ASCII decoder, executed by Prim in foreground."""
 from prim.isa import PrimOpcodes as Op
 from forth.kernel.primitives import Code
-from forth.kernel.io import set_cell, increment
 from forth.kernel.interrupts import RINGS
 
 KBD_NAMES = ('kbd_scan', 'kbd_char', 'kbd_available', 'kbd_extended', 'kbd_break',
@@ -37,15 +36,15 @@ def emit_keyboard(image):
     c = Code(image)
     c.mark('kbd_reset')
     for name in KBD_VARIABLES:
-        set_cell(c, name, 0)
+        c.set_cell(name, 0)
     c.ops(Op.NOP | 128)
 
     c.mark('kbd_decode')  # Input kbd_scan; output kbd_char and kbd_available.
-    set_cell(c, 'kbd_available', 0)
+    c.set_cell('kbd_available', 0)
     skip_done = c.label('kbd_not_skipping')
     c.load('kbd_skip')
     c.jz(skip_done)
-    increment(c, 'kbd_skip', -1)
+    c.advance('kbd_skip', -1)
     c.ops(Op.NOP | 128)
     c.mark(skip_done)
     done, clear, ordinary = (c.label('kbd_' + n) for n in ('done', 'clear', 'ordinary'))
@@ -72,10 +71,10 @@ def emit_keyboard(image):
         continue_prefix = c.label('kbd_prefix_continue')
         c.jump(continue_prefix)
         c.mark(next_prefix)
-        set_cell(c, name, value)
+        c.set_cell(name, value)
         if byte == 0xE1:
-            set_cell(c, 'kbd_extended', 0)
-            set_cell(c, 'kbd_break', 0)
+            c.set_cell('kbd_extended', 0)
+            c.set_cell('kbd_break', 0)
         c.jump(done)
         c.mark(continue_prefix)
 
@@ -117,11 +116,11 @@ def emit_keyboard(image):
     c.ops(Op.ADD, Op.BYTE_FETCH)
     c.store('kbd_char')
     # For letters use Shift XOR Caps; punctuation only observes Shift.
-    set_cell(c, 'kbd_work', 0)
+    c.set_cell('kbd_work', 0)
     shift_ready, punctuation = (c.label('kbd_' + n) for n in ('shift_ready', 'punctuation'))
     c.load('kbd_shift')
     c.jz(shift_ready)
-    set_cell(c, 'kbd_work', 1)
+    c.set_cell('kbd_work', 1)
     c.mark(shift_ready)
     c.load('kbd_char')
     c.push(97)
@@ -181,9 +180,9 @@ def emit_keyboard(image):
     c.store('kbd_char')
     c.jump(emit)
     c.mark(ctrl_space)
-    set_cell(c, 'kbd_char', 0)
+    c.set_cell('kbd_char', 0)
     c.mark(emit)
-    set_cell(c, 'kbd_available', 1)
+    c.set_cell('kbd_available', 1)
     c.jump(clear)
 
     for label, variable, mask in (('kbd_shift_left', 'kbd_shift', 1),
@@ -211,7 +210,7 @@ def emit_keyboard(image):
     caps_make = c.label('kbd_caps_make')
     c.load('kbd_break')
     c.jz(caps_make)
-    set_cell(c, 'kbd_caps_down', 0)
+    c.set_cell('kbd_caps_down', 0)
     c.jump(clear)
     c.mark(caps_make)
     c.load('kbd_caps_down')
@@ -219,14 +218,14 @@ def emit_keyboard(image):
     c.jz(caps_toggle)
     c.jump(clear)
     c.mark(caps_toggle)
-    set_cell(c, 'kbd_caps_down', 1)
+    c.set_cell('kbd_caps_down', 1)
     c.load('kbd_caps')
     c.push(1)
     c.ops(Op.XOR)
     c.store('kbd_caps')
     c.mark(clear)
-    set_cell(c, 'kbd_extended', 0)
-    set_cell(c, 'kbd_break', 0)
+    c.set_cell('kbd_extended', 0)
+    c.set_cell('kbd_break', 0)
     c.mark(done)
     c.ops(Op.NOP | 128)
 

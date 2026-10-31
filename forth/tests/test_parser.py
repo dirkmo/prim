@@ -241,7 +241,7 @@ class ParserChecks(unittest.TestCase):
             simulator = directory / 'parser'
             image_path, rx_path = directory / 'image.hex', directory / 'rx.hex'
             tx_path, ram_path = directory / 'tx.hex', directory / 'ram.hex'
-            image_path.write_text(''.join(f'{byte:02x}\n' for byte in bytes(image.memory) + bytes(16)))
+            image_path.write_text(''.join(f'{byte:02x}\n' for byte in bytes(image.memory).ljust(0x10000, b'\0')))
             rx_path.write_text(''.join(f'{byte:02x}\n' for byte in payload))
             run([configured_tools().iverilog, '-g2012', '-s', 'tb_parser', '-I', ROOT / 'cpu/rtl',
                  '-o', simulator, ROOT / 'forth/tests/tb_parser.sv',

@@ -1,7 +1,6 @@
 """One non-nesting source dispatcher and bounded SRAM receive rings."""
 from prim.isa import PrimOpcodes as Op
 from forth.kernel.primitives import Code
-from forth.kernel.io import set_cell
 
 IRQ_NAMES = ('irq_carry', 'irq_snapshot', 'irq_progress', 'irq_base',
              'irq_byte', 'irq_next', 'irq_tail', 'irq_diagnostic')
@@ -66,7 +65,7 @@ def emit_interrupts(image):
     c.mark('irq_service')
     scan, done = c.label('irq_rescan'), c.label('irq_done')
     c.mark(scan)
-    set_cell(c, 'irq_progress', 0)
+    c.set_cell('irq_progress', 0)
     c.push(0xFFF5)
     c.ops(Op.BYTE_FETCH)
     c.store('irq_snapshot')
@@ -86,7 +85,7 @@ def emit_interrupts(image):
         c.push(bit)
         c.push(0xFFF5)
         c.ops(Op.BYTE_STORE)  # Acknowledge snapshot BEFORE the handler.
-        set_cell(c, 'irq_progress', 1)
+        c.set_cell('irq_progress', 1)
         c.call(handler)
         c.mark(skip)
     c.load('irq_progress')
@@ -113,7 +112,7 @@ def emit_interrupts(image):
 
     for name, csr, data in (('uart', 0xFFFE, 0xFFFF), ('ps2', 0xFFFB, 0xFFFC)):
         c.mark('irq_' + name)
-        set_cell(c, 'irq_base', RINGS[name])
+        c.set_cell('irq_base', RINGS[name])
         if name == 'ps2':
             no_error = c.label('irq_ps2_no_error')
             c.push(csr)

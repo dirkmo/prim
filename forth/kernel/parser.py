@@ -8,16 +8,6 @@ def emit_parser(image):
     c = Code(image)
     word = partial(emit_word, c)
 
-    def set_cell(name, value):
-        c.push(value)
-        c.store(name)
-
-    def advance(name, amount=1):
-        c.load(name)
-        c.push(abs(amount))
-        c.ops(Op.ADD if amount > 0 else Op.SUB)
-        c.store(name)
-
     def char_at(position):
         c.load(position)
         c.ops(Op.BYTE_FETCH)
@@ -26,9 +16,6 @@ def emit_parser(image):
         c.push('input_buffer')
         c.load('input_pos')
         c.ops(Op.ADD, Op.BYTE_FETCH)
-
-    def output(text):
-        c.output(text)
 
     def char_equals(value, target):
         c.load('io_char')
@@ -78,7 +65,7 @@ def emit_parser(image):
     if not getattr(image, 'dual_console', False):
         c.mark('read_line')  # ( -- ); preserves all user cells.
         for name in ('input_length', 'input_pos', 'token_addr', 'token_length', 'line_error'):
-            set_cell(name, 0)
+            c.set_cell(name, 0)
         c.push(0)
         c.push('input_buffer')
         c.ops(Op.BYTE_STORE)
@@ -89,7 +76,7 @@ def emit_parser(image):
         c.store('io_char')
         c.load('skip_lf')
         c.jz(regular)
-        set_cell('skip_lf', 0)
+        c.set_cell('skip_lf', 0)
         char_equals(10, loop)
         c.mark(regular)
         char_equals(13, cr)
@@ -107,17 +94,17 @@ def emit_parser(image):
         c.jz(append)
         for byte in (9, 11, 12):
             char_equals(byte, append)
-        set_cell('line_error', 9)
+        c.set_cell('line_error', 9)
         c.jump(loop)
         c.mark(edit)
         c.load('input_length')
         c.jz(loop)
-        advance('input_length', -1)
+        c.advance('input_length', -1)
         c.push(0)
         c.push('input_buffer')
         c.load('input_length')
         c.ops(Op.ADD, Op.BYTE_STORE)
-        output(b'\b \b')
+        c.output(b'\b \b')
         c.jump(loop)
         c.mark(append)
         c.load('input_length')
@@ -129,7 +116,7 @@ def emit_parser(image):
         c.push('input_buffer')
         c.load('input_length')
         c.ops(Op.ADD, Op.BYTE_STORE)
-        advance('input_length')
+        c.advance('input_length')
         c.push(0)
         c.push('input_buffer')
         c.load('input_length')
@@ -138,12 +125,12 @@ def emit_parser(image):
         c.call('raw_emit')
         c.jump(loop)
         c.mark(room)
-        set_cell('line_error', 6)
+        c.set_cell('line_error', 6)
         c.jump(loop)
         c.mark(cr)
-        set_cell('skip_lf', 1)
+        c.set_cell('skip_lf', 1)
         c.mark(eol)
-        output(b'\r\n')
+        c.output(b'\r\n')
         c.load('line_error')
         done = c.label('line_done')
         c.jz(done)
@@ -158,8 +145,8 @@ def emit_parser(image):
     # parse_name consumes exactly one terminating delimiter, if present.
     # Tokens may be 127 bytes; dictionary names are limited separately to 31.
     c.mark('parse_name')  # ( -- ); token_addr/token_length, or length zero at EOF.
-    set_cell('token_length', 0)
-    set_cell('token_addr', 0)
+    c.set_cell('token_length', 0)
+    c.set_cell('token_addr', 0)
     skip, scan, found, finish, delimiter = (
         c.label('token_' + x) for x in ('skip', 'scan', 'found', 'finish', 'delimiter'))
     c.mark(skip)
@@ -170,7 +157,7 @@ def emit_parser(image):
     buffer_char()
     c.call('is_space')
     c.jz(found)
-    advance('input_pos')
+    c.advance('input_pos')
     c.jump(skip)
     c.mark(found)
     c.push('input_buffer')
@@ -188,11 +175,11 @@ def emit_parser(image):
     c.jz(text)
     c.jump(delimiter)
     c.mark(text)
-    advance('token_length')
-    advance('input_pos')
+    c.advance('token_length')
+    c.advance('input_pos')
     c.jump(scan)
     c.mark(delimiter)
-    advance('input_pos')
+    c.advance('input_pos')
     c.mark(finish)
     c.ops(Op.NOP | 128)
 
@@ -212,10 +199,10 @@ def emit_parser(image):
     c.push(ord(')'))
     c.ops(Op.SUB)
     c.jz(close)
-    advance('input_pos')
+    c.advance('input_pos')
     c.jump(loop)
     c.mark(close)
-    advance('input_pos')
+    c.advance('input_pos')
     c.ops(Op.NOP | 128)
 
     # Kernel-only number conversion: no user stack effect. status=0 syntax/
@@ -223,7 +210,7 @@ def emit_parser(image):
     c.mark('parse_number')
     for name in ('number_value', 'number_status', 'number_acc',
                  'number_negative', 'number_overflow'):
-        set_cell(name, 0)
+        c.set_cell(name, 0)
     c.load('base')
     c.ops(Op.DUP)
     c.push(2)
@@ -254,10 +241,10 @@ def emit_parser(image):
     char_equals(ord('+'), sign)
     c.jump(prefix)
     c.mark(negative)
-    set_cell('number_negative', 1)
+    c.set_cell('number_negative', 1)
     c.mark(sign)
-    advance('number_pos')
-    advance('number_left', -1)
+    c.advance('number_pos')
+    c.advance('number_left', -1)
     c.load('number_left')
     c.jz(end)
     c.mark(prefix)
@@ -267,13 +254,13 @@ def emit_parser(image):
     char_equals(ord('#'), decimal_prefix)
     c.jump(digits)
     c.mark(hex_prefix)
-    set_cell('number_base', 16)
+    c.set_cell('number_base', 16)
     c.jump(prefixed)
     c.mark(decimal_prefix)
-    set_cell('number_base', 10)
+    c.set_cell('number_base', 10)
     c.mark(prefixed)
-    advance('number_pos')
-    advance('number_left', -1)
+    c.advance('number_pos')
+    c.advance('number_left', -1)
     c.load('number_left')
     c.jz(end)
 
@@ -309,7 +296,7 @@ def emit_parser(image):
     c.jz(end)
     # Bounded repeated addition, at most 36 iterations per input digit.
     # Carry is checked before count arithmetic can overwrite it.
-    set_cell('number_sum', 0)
+    c.set_cell('number_sum', 0)
     c.load('number_base')
     c.store('number_count')
     multiply, multiplied, no_carry, digit_no_carry, finished, overflow, success = (
@@ -324,9 +311,9 @@ def emit_parser(image):
     c.store('number_sum')
     c.ops(Op.CARRY)
     c.jz(no_carry)
-    set_cell('number_overflow', 1)
+    c.set_cell('number_overflow', 1)
     c.mark(no_carry)
-    advance('number_count', -1)
+    c.advance('number_count', -1)
     c.jump(multiply)
     c.mark(multiplied)
     c.load('number_sum')
@@ -335,10 +322,10 @@ def emit_parser(image):
     c.store('number_acc')
     c.ops(Op.CARRY)
     c.jz(digit_no_carry)
-    set_cell('number_overflow', 1)
+    c.set_cell('number_overflow', 1)
     c.mark(digit_no_carry)
-    advance('number_pos')
-    advance('number_left', -1)
+    c.advance('number_pos')
+    c.advance('number_left', -1)
     c.load('number_left')
     c.jz(finished)
     c.jump(digits)
@@ -360,10 +347,10 @@ def emit_parser(image):
     c.mark(success)
     c.load('number_acc')
     c.store('number_value')
-    set_cell('number_status', 1)
+    c.set_cell('number_status', 1)
     c.jump(end)
     c.mark(overflow)
-    set_cell('number_status', 2)
+    c.set_cell('number_status', 2)
     c.jump(end)
     c.mark(invalid_digit)
     c.ops(Op.DROP)
@@ -372,7 +359,7 @@ def emit_parser(image):
 
     word('BASE', 0, 1, lambda: c.push('base'))
     def set_base(value):
-        set_cell('base', value)
+        c.set_cell('base', value)
     word('DECIMAL', 0, 0, lambda: set_base(10))
     word('HEX', 0, 0, lambda: set_base(16))
     word('\\', 0, 0, lambda: c.call('skip_line'), flags=1)

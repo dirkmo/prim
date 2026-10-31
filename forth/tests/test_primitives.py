@@ -331,7 +331,7 @@ class PrimitiveChecks(unittest.TestCase):
                  '-o', binary, source, ROOT / 'cpu/rtl/prim.v',
                  ROOT / 'debug_uart/rtl/uart_buffers.v'])
             hexfile = directory / 'image.hex'
-            memory = bytes(image.memory) + bytes(16)
+            memory = bytes(image.memory).ljust(0x10000, b'\0')
             hexfile.write_text(''.join(f'{byte:02x}\n' for byte in memory))
             result = run([configured_tools().vvp, binary, f'+image={hexfile}'], cwd=directory)
             self.assertIn('PASS Forth KEY', result.stdout)

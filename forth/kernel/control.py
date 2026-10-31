@@ -10,18 +10,6 @@ def emit_control(image):
     c = Code(image)
     word = partial(emit_word, c, need=0, give=0, flags=3)
 
-    def set_cell(name, value):
-        c.push(value)
-        c.store(name)
-
-    def byte(value):
-        c.push(value)
-        c.call('compile_byte')
-
-    def cell(value):
-        c.push(value)
-        c.call('compile_cell')
-
     def slot():
         c.load('control_depth')
         c.ops(Op.SL, Op.SL)
@@ -108,25 +96,25 @@ def emit_control(image):
         c.mark(good)
 
     def push(kind):
-        set_cell('control_type', kind)
+        c.set_cell('control_type', kind)
         c.call('control_push')
 
     def branch(conditional, forward):
-        set_cell('compiler_needed', 8 if conditional else 4)
+        c.set_cell('compiler_needed', 8 if conditional else 4)
         c.call('compiler_reserve')
         if conditional:
-            byte(Op.PUSH)
-            cell('branch_depth')
-            byte(Op.CALL)
-        byte(Op.PUSH)
+            c.compile_byte(Op.PUSH)
+            c.compile_cell('branch_depth')
+            c.compile_byte(Op.CALL)
+        c.compile_byte(Op.PUSH)
         if forward:
             c.load('here')
             c.store('control_addr')
-            cell(0)
+            c.compile_cell(0)
         else:
             c.load('control_addr')
             c.call('compile_cell')
-        byte(Op.JZ if conditional else Op.JP)
+        c.compile_byte(Op.JZ if conditional else Op.JP)
 
     def if_word():
         c.call('require_compiling')
