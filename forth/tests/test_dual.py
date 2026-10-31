@@ -21,6 +21,10 @@ class OutputChecks(unittest.TestCase):
         self.assertEqual(r.memory.video[0], 0x1E)
         self.assertEqual(r.memory.data[0xE000:0xE004], b'kept')
         self.assertEqual((r.get('vga_x'), r.get('vga_y')), (1, 1))
+        r.invoke('raw_emit', [0xFF41])
+        self.assertEqual(r.memory.vram[81], ord('A'))
+        r.invoke('raw_emit', [0x010D])
+        self.assertEqual(r.get('vga_x'), 0)
 
     def test_wrapping_scrolling_and_shared_numeric_formatting(self):
         r = DualRunner()
@@ -41,4 +45,5 @@ class OutputChecks(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    from dual_support import run_tests
+    run_tests()

@@ -38,7 +38,7 @@ class VideoMemory(ConsoleMemory):
 
 
 def main():
-    image = build_image()
+    image = build_image(dual_console=False)
     driver = (ROOT / 'vga/examples/console.fs').read_bytes()
     # 64 newlines scroll 35 times: the offset wraps 32; each scroll clears 80 bytes.
     commands = b'VGA-INIT\n' + b'VGA-CR\n' * 64

@@ -28,4 +28,5 @@ VARIABLE VX VARIABLE VY VARIABLE VO
 : VGA-INIT HERE E000 U< 0= IF ABORT THEN 1E FFF6 C! VGA-PAGE ;
 DECIMAL
 \ Example: VGA-INIT S" Prim VGA console" VGA-TYPE
-\ KEY remains on UART. Existing EMIT/TYPE and interpreter echo stay on UART.
+\ Explicit VGA words do not change ordinary console routing.
+\ In the UART-only profile, KEY/EMIT/TYPE and interpreter echo use UART.

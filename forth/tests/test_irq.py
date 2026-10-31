@@ -6,6 +6,51 @@ from prim.isa import PrimOpcodes as Op
 
 
 class InterruptChecks(unittest.TestCase):
+    def test_every_wait_boundary_and_return_handoff(self):
+        for offset in range(3):  # Before INTEI, NOP and INTDI respectively.
+            for carry in (0, 1):
+                r = DualRunner()
+                r.cpu._carry = carry
+                original = r.step
+                sent = False
+
+                def step():
+                    nonlocal sent
+                    if r.cpu._pc == r.image.symbols['irq_wait'] + offset and not sent:
+                        sent = True
+                        r.memory.receive_uart(65)
+                        r.memory.receive_ps2(0x1C)
+                    original()
+                r.step = step
+                values = list(range(101, 109))
+                r.invoke('irq_wait', values)
+                self.assertEqual(int(r.cpu._carry), carry)
+                # Event coinciding with INTDI is retained until the next window.
+                r.invoke('irq_wait')
+                self.assertEqual((r.memory.read16(0xF102), r.memory.read16(0xF182)), (1, 1))
+                self.assertEqual([r.cpu._ds[(r.cpu._dsp - 7 + i) % 16] for i in range(8)], values)
+                self.assertFalse(r.cpu._int_enable)
+                self.assertLessEqual(r.max_data, 12)
+                self.assertLessEqual(r.max_frames, 5)
+
+        r = DualRunner()
+        r.cpu._carry = 1
+        r.memory.receive_uart(65)
+        original = r.step
+        sent = False
+
+        def handoff():
+            nonlocal sent
+            if r.cpu._pc == r.image.symbols['irq_service'] - 1 and not sent:
+                sent = True
+                r.memory.receive_uart(66)  # New event at ISR's INTEI.RET.
+            original()
+        r.step = handoff
+        r.invoke('irq_wait', list(range(8)))
+        self.assertTrue(sent)
+        self.assertEqual(r.memory.data[0xF106:0xF108], b'AB')
+        self.assertEqual(int(r.cpu._carry), 1)
+
     def test_boot_and_simultaneous_sources(self):
         r = DualRunner()
         self.assertFalse(r.cpu._int_enable)
@@ -102,4 +147,5 @@ class InterruptChecks(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    from dual_support import run_tests
+    run_tests()

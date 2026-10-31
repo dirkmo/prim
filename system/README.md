@@ -20,9 +20,9 @@ Optional `PS2_ENABLE=1` adds the [PS/2 receiver and FIFO](../ps2/README.md)
 at FFFB/FFFC. The Olimex board enables it on G1/J5. Generic instances default
 to PS/2 disabled. FFF5 is always the [shared IRQ_PENDING register](docs/interrupts_mmio.md)
 for timer, UART RX/TX and PS/2 events; install a dispatcher before enabling
-sources. CPU-only reset retains peripheral pending state. The Forth kernel
-still uses UART polling; console routing and the software dispatcher follow
-in AP4–AP7.
+sources. CPU-only reset retains peripheral pending state. The [default Forth kernel](../forth/DUAL_CONSOLE.md)
+now implements console routing and a generic dispatcher, with interrupts
+restricted to safe collector wait points. A UART-only profile remains available.
 
 Complete SRAM/MMIO/CPU/debug and TokenForth integration tests live in `tests/`.
 See [CPU](../cpu/README.md), [debug UART](../debug_uart/README.md), and

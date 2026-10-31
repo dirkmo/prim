@@ -18,8 +18,10 @@ Write repository documentation in English.
 
 An independent on-CPU text interpreter and compiler lives in [forth/](forth/README.md).
 Run `python3 forth/run.py`, build its RAM image with `python3 forth/build.py`,
-and run its integrated checks with `python3 forth/test.py --rtl`. It uses the
-existing CPU and is separate from TokenForth.
+and run its integrated checks with `python3 forth/test.py --rtl`. The default
+FPGA image shares one interpreter between UART and PS/2/VGA; the local host
+terminal keeps the UART-only profile. See [console routing and limits](forth/DUAL_CONSOLE.md).
+It uses the existing CPU and is separate from TokenForth.
 
 ## Python development setup
 

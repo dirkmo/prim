@@ -134,9 +134,51 @@ class FrontendChecks(unittest.TestCase):
         r.quiet()
         self.assertIn(b'<8> 1 2 3 4 5 6 7 8 ', r.memory.screen())
         self.assertEqual(r.stack(), list(range(1, 9)))
+        r.keyboard('WORDS\r')
+        r.quiet()
+        self.assertEqual(r.stack(), list(range(1, 9)))
         self.assertLessEqual(r.max_data, 16)
         self.assertLessEqual(r.max_frames, 16)
+        print(f'Dual model stack peak: DS={r.max_data}/16 RS={r.max_frames}/16')
+
+    def test_cpu_reset_discards_stale_input_and_rebuilds_dictionary(self):
+        r = DualSession()
+        r.uart(': old 7 ;\r1 2\r')
+        r.quiet()
+        r.memory.receive_uart(ord('X'))
+        r.memory.receive_ps2(0x12)
+        r.memory.receive_ps2(0x1C)
+        r.memory.ps2_errors = 24
+        r.memory.event(8)
+        before = len(r.memory.tx)
+        r.cpu.reset()
+        r.physical = r.frames = 0
+        r.until(lambda: r.cpu._pc == r.image.symbols['read_line'] and r.get('console_initialized'))
+        r.quiet()
+        self.assertEqual(bytes(r.memory.tx[before:]), b'ok\r\n')
+        self.assertTrue(r.memory.screen().startswith(b'ok'))
+        self.assertEqual(r.stack(), [])
+        self.assertEqual(r.get('latest'), r.image.symbols['kernel_latest'])
+        self.assertEqual((r.memory.pending, r.memory.ps2_errors, r.get('kbd_shift')), (0, 0, 0))
+        self.assertEqual((r.memory.uart_ie, r.memory.ps2_ie), (4, 4))
+
+    def test_loss_during_key_aborts_and_discards_to_resynchronizing_enter(self):
+        r = DualSession()
+        r.uart(': take KEY . ;\rtake\r')
+        r.until(lambda: not r.uart_wire and r.cpu._pc == r.image.symbols['raw_key'])
+        r.memory.write16(0xF104, 1)  # Software ring loss while KEY is blocked.
+        r.until(lambda: b'error: input too long' in bytes(r.memory.tx)
+                and r.cpu._pc == r.image.symbols['irq_wait'])
+        before = bytes(r.memory.tx)
+        r.uart('123 .\r')  # Damaged line is drained, never executed or echoed.
+        r.quiet()
+        self.assertEqual(bytes(r.memory.tx), before)
+        self.assertEqual(r.stack(), [])
+        r.uart('2 .\r')
+        r.quiet()
+        self.assertTrue(bytes(r.memory.tx).endswith(b'2 .\r\n2 ok\r\n'))
 
 
 if __name__ == '__main__':
-    unittest.main()
+    from dual_support import run_tests
+    run_tests()

@@ -498,3 +498,14 @@ otherwise that extra check is explicitly skipped. `debug_uart_checks` includes
 real serial-debug reads, PS/2 input and masked/HALT/RUN interrupt delivery on
 the complete CPU/system. See [the PS/2 guide](../ps2/README.md) and
 [shared pending semantics](../system/docs/interrupts_mmio.md).
+
+The integrated `forth_checks` suite now also runs the dual-console model,
+dispatcher, keyboard and arbitration tests. With `--rtl`, its `dual_system`
+case executes the default kernel through physical PS/2 and UART signal models,
+real SRAM/MMIO/CPU/IRQ and VGA RAM. It checks cross-console definitions, exact
+UART output, VGA-only local errors/results, KEY isolation, concurrent input,
+scrolling, bank restoration, HALT/reset retention and physical stack occupancy.
+Direct command: `python3 forth/tests/test_dual_system.py --rtl`. Retained
+fixtures/logs are under `build/dual-system-tests/`, or FORTH_TEST_ARTIFACTS
+when called by the integrated runner. This is simulation, not a physical board
+or monitor test. [AP8](PS2_AP8_VALIDATION.md) records the remaining hardware steps.

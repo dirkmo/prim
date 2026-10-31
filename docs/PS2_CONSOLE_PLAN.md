@@ -1,8 +1,8 @@
 # PS/2 keyboard and two console transports
 
-Planning baseline: 2026-10-31. AP1–AP3 are complete: the PS/2 receiver, FIFO,
-MMIO and shared interrupt source identification are implemented. The software
-dispatcher and dual-console Forth remain AP4–AP7; physical acceptance is AP8.
+Planning baseline: 2026-10-31. AP1–AP7 are implemented. AP8 supplies automated
+end-to-end verification, resource reporting and the physical acceptance
+procedure; physical keyboard/monitor measurements remain pending.
 
 AP1 is complete: see [the board and interface contract](PS2_AP1_CONTRACT.md)
 and [the measured resource baseline](PS2_AP1_BASELINE.json). The AP1 contract
@@ -10,6 +10,9 @@ resolves the provisional register/dispatch choices below and governs AP2 onward.
 AP2/AP3 implementation and checks: [PS/2 guide](../ps2/README.md),
 [shared IRQ registers](../system/docs/interrupts_mmio.md),
 [resource comparison](PS2_AP3_RESOURCES.json).
+Software implementation, profile selection and measured limits:
+[Forth dual console](../forth/DUAL_CONSOLE.md).
+Final validation and outstanding physical checks: [AP8](PS2_AP8_VALIDATION.md).
 
 ## Required behavior
 
@@ -185,6 +188,14 @@ AP5 must settle interrupt stack/carry safety before interrupts are enabled in
 the kernel. If the existing stack budget cannot accommodate the ISR, revise
 the service routine or reserve verified kernel headroom explicitly; do not
 silently reduce the public stack guarantee or grow the CPU stacks.
+
+Implemented AP5 refinement: global IRQs are enabled only in the collector's
+small INTEI/NOP/INTDI wait window. Arbitrary Forth execution is masked and KEY
+services the same dispatcher synchronously. This bounds ISR headroom without
+changing either hardware stack or the eight checked user cells. Long-running
+programs therefore have only hardware input buffering until they return/read
+KEY. This explicit constraint supersedes any assumption of asynchronous input
+service during arbitrary user-code call depth. See the dual-console guide.
 
 VGA mapping helpers and ISR code/data must reside outside E000..EFFF. The ISR
 must not touch VGA banking or shared arithmetic/parser scratch. Reserve the

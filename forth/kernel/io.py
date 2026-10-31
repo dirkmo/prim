@@ -111,6 +111,8 @@ def emit_io(image):
     c.jump('vga_cursor')
 
     c.mark('vga_emit')
+    c.push(255)
+    c.ops(Op.AND)  # EMIT consumes a byte, including control-byte interpretation.
     c.store('vga_char')
     cr, lf, bs, printable, done = (c.label('vga_' + n) for n in ('cr', 'lf', 'bs', 'print', 'done'))
     for byte, target in ((13, cr), (10, lf), (8, bs), (127, bs)):

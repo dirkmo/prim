@@ -9,6 +9,15 @@ Alle APs abgeschlossen; aktuellen Stand und Messwerte in STATUS.md nachlesen.
 Arbeitsstand und APs: [STATUS.md](STATUS.md).
 Bedienung: [README.md](README.md), [Wörter](WORDS.md), [Beispiele](examples/README.md).
 
+## Dual-console extension
+
+The default FPGA image now adds PS/2/VGA beside UART, sharing one interpreter,
+dictionary and user stack. [DUAL_CONSOLE.md](DUAL_CONSOLE.md) defines current
+routing, safe-window interrupts, input ownership and reserved SRAM at F000..F3FF.
+The original single-UART architecture below remains the baseline for the
+explicit `--uart-only` build and host model; the extension supersedes its
+single-console/no-interrupt restrictions for the default FPGA image.
+
 ## Ziel und Abgrenzung
 
 Eigenständiges interaktives Text-Forth im Verzeichnis `forth/`. Parser,

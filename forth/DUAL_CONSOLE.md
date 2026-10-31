@@ -161,3 +161,30 @@ and stack, concurrent/partial input, alternating ready lines, multiline locks,
 KEY isolation, edit/error/ABORT behavior, overflows and decoder recovery using
 the real Prim interpreter/compiler. Hardware-serial/VGA integration follows in
 AP8; a Python peripheral model alone is not a board validation.
+
+## AP8: full integration and acceptance
+
+The integrated `forth/test.py --rtl` runner includes both profiles, all dual
+model suites and a complete wire-level system case. The default dual image
+runs on the real CPU/SRAM/MMIO/UART/PS2/VGA RTL, with 25 MHz clock, 115200-baud
+serial traffic and 20 kHz keyboard clock. UART expectations are fixed literal
+bytes; VGA checks inspect actual controller RAM, cursor/scroll and output
+activity. No host-side interpreter or keyboard decoder replaces kernel code.
+
+The wire case defines a word locally and executes it over UART, checks a local
+error produces no UART output, blocks UART KEY while local input queues,
+resumes KEY from UART, accepts concurrent input, scrolls through 35 CRs,
+preserves SRAM behind banked VRAM, and verifies display/peripheral retention
+during HALT and CPU-only reset. It also counts occupied physical stack cells
+and includes IRQ PC pushes, independently of the Python model.
+
+Model checks additionally cover every IRQ wait boundary for both carry values,
+an event at ISR return, eight user cells during formatting/WORDS, input loss
+during KEY with Enter resynchronization, and cold restart with stale input.
+All default and UART-only profiles retain the same public word set.
+
+Builds, measurements and the reproducible physical acceptance checklist are in
+[PS2_AP8_VALIDATION.md](../docs/PS2_AP8_VALIDATION.md). No physical FPGA
+programming, keyboard-level measurement or monitor acceptance is claimed by
+the automated tests. The board CMake dependency list now includes PS/2 RTL,
+so receiver changes correctly invalidate an existing bitstream target.

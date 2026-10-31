@@ -57,4 +57,5 @@ class KeyboardChecks(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    from dual_support import run_tests
+    run_tests()

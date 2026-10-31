@@ -200,3 +200,11 @@ class DualSession(DualRunner):
         depth = self.get('depth')
         return [self.cpu._ds[(self.cpu._dsp - depth + 1 + n) % 16] for n in range(depth)]
 
+
+def run_tests():
+    """Model suites share the integrated runner's --rtl option; no RTL claimed."""
+    import unittest
+    if '--rtl' in sys.argv:
+        sys.argv.remove('--rtl')
+    unittest.main()
+

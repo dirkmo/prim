@@ -11,6 +11,7 @@ file(GLOB OLIMEX_RTL CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/cpu/rtl/*.v"
     "${PROJECT_SOURCE_DIR}/timer/rtl/*.v"
     "${PROJECT_SOURCE_DIR}/vga/rtl/*.v"
+    "${PROJECT_SOURCE_DIR}/ps2/rtl/*.v"
     "${PROJECT_SOURCE_DIR}/system/rtl/*.v"
     "${PROJECT_SOURCE_DIR}/debug_uart/rtl/*.v")
 if(YOSYS_EXECUTABLE AND NEXTPNR_ICE40_EXECUTABLE AND ICEPACK_EXECUTABLE)

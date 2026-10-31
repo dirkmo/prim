@@ -1,8 +1,16 @@
 # Small Forth for Prim
 
-An independent on-CPU text interpreter and native-code compiler, with 89 kernel
+An independent on-CPU text interpreter and native-code compiler, with 90 kernel
 words. It uses the existing Prim ISA: **16-cell hardware data and return stacks,
 eight checked user data cells**. TokenForth remains a separate language/toolchain.
+
+The default FPGA image runs one shared interpreter on **UART and PS/2/VGA**.
+UART commands receive their echo/results/errors on UART; PS/2 commands receive
+them on VGA. Each endpoint has a separate editor; dictionary and user stack
+are shared. Open multiline definitions and KEY retain their command's source.
+See [dual-console architecture, limits and verification](DUAL_CONSOLE.md).
+The local Python terminal uses the UART-only profile; it does not emulate a
+keyboard or display. `forth/build.py --uart-only` builds that smaller profile.
 
 ## Start here
 
@@ -75,7 +83,7 @@ make uart-console PORT=/dev/serial/by-id/YOUR-UART
 
 `upload` resets/halts the CPU, loads/verifies RAM and leaves it halted. In the
 console press Ctrl+B for the local debug prompt, enter `run`, then Ctrl+B to
-return to CPU input. The kernel prints `ok`. Ctrl+D closes this host console
+return to CPU input. The kernel prints `ok` on UART and VGA. Ctrl+D closes this host console
 without changing CPU state. For a fresh Forth session, use `reset-halt` and
 `run` at the debug prompt; this forgets user definitions. The host console uses
 RX-credit polling for queued CPU input. A plain terminal or uploader must pace
@@ -163,7 +171,8 @@ Interpreted S" returns a temporary address/length valid until the next
 interpreted S" or reset. ." does not overwrite that buffer. Compiled S" refers
 to persistent embedded bytes; compiled ." uses private temporaries and works
 even with eight occupied user cells. TYPE consumes address/length and writes
-bytes; length zero performs no read. All output uses the seven-bit UART.
+bytes; length zero performs no read. Ordinary output follows the selected
+command endpoint: seven-bit UART or the integrated VGA text backend.
 
 ## Errors, reset and limits
 
@@ -177,9 +186,11 @@ may remain, but user words are forgotten. No persistence or image-save facility.
 
 The hardware stacks remain 16/16. The kernel checks eight user data cells,
 reserving the remainder for internal work. Returnstack overflow has no general
-trap: arbitrary call depth is unsupported. Current structural checks bound
-kernel paths to 12 physical data cells and six return frames; user nesting
-adds to these. .S, S" and dynamic EXECUTE receive separate targeted checks.
+trap: arbitrary call depth is unsupported. The UART-only profile's structural
+checks bound the original kernel paths to 12 physical data cells and six return
+frames; user nesting adds to these. The dual-console paths, safe interrupt
+windows and measured limits are described in [DUAL_CONSOLE.md](DUAL_CONSOLE.md).
+.S, S" and dynamic EXECUTE receive separate targeted checks.
 Tail calls reduce return depth but cannot remove every live caller frame.
 
 Code/data allocation is confined to USER_START..EFFF, with USER_START from the
@@ -187,7 +198,11 @@ generated kernel map. F000..FFEF is reserved; FFF0..FFFF is MMIO. Stack display,
 string and arithmetic scratch have separate regions. There is no memory
 isolation: arbitrary !/C!/EXECUTE operands can corrupt the kernel. Nontermination,
 invalid XT and hardware-stack overflow are not recoverable Forth exceptions.
-No floating point, files, interrupts, CATCH/THROW or standards compliance claim.
+The dual kernel reserves F000..F3FF for console state and buffers. Interrupts
+are enabled only at safe collector wait points; arbitrary Forth execution is
+masked and KEY services input synchronously. Hardware buffers can overflow
+during long-running code; input loss requires Enter to resynchronize.
+No floating point, files, user interrupt API, CATCH/THROW or standards compliance claim.
 
 Private `last_error` at 0126 retains the last code (zero after reset):
 

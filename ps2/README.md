@@ -92,6 +92,7 @@ an increase of 205 routed cells, 188 synthesized LUT4, 81 flip-flops and one
 EBR. The existing PLL is reused. Routed internal Fmax is **28.98 MHz** and
 passes 25 MHz. AP2/AP3 add no CPU software or external SRAM allocations.
 
-The Forth console is still UART-only after AP3. Routing, software ISR dispatch,
-keyboard decoding and the second console are AP4–AP7; this implementation
-provides the hardware and source identification those packages need.
+The [default Forth kernel](../forth/DUAL_CONSOLE.md) now uses the receiver and
+shared dispatcher for one interpreter on UART and PS/2/VGA. The UART-only
+profile remains available for host models and systems without the IO board.
+Physical keyboard/monitor validation is a separate hardware acceptance step.

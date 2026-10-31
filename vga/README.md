@@ -111,9 +111,10 @@ words must reside below E000; VGA-INIT checks HERE before enabling output.
 VGA-C! temporarily maps VRAM only during a write and immediately restores
 SRAM, allowing later user definitions in the E000..EFFF SRAM region. This
 helper assumes BANK clear on entry and is not interrupt/reentrant safe.
-KEY, ordinary EMIT/TYPE and interpreter echo still use UART. This is an
-explicit VGA output driver; automatic redirection of the kernel console is
-a separate software extension.
+This remains an explicit VGA output driver. In the `--uart-only` profile,
+KEY, ordinary EMIT/TYPE and interpreter echo use UART. The default
+[Forth kernel now integrates automatic UART/PS2/VGA routing](../forth/DUAL_CONSOLE.md);
+that profile does not need this example driver loaded before local interaction.
 
 The font contains 256 glyphs, including the supplied extended character set;
 printable ASCII uses its usual byte values. No attribute/color bytes or

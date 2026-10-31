@@ -61,8 +61,8 @@ see [the guide](README.md) for the complete input/memory contracts.
 | `/MOD` | `n1 n2 -- remainder quotient` | - | Compute both signed results; zero divisor and -32768/-1 are errors. |
 | `/` | `n1 n2 -- quotient` | - | Signed division, truncated toward zero. |
 | `MOD` | `n1 n2 -- remainder` | - | Signed remainder, same sign as n1 unless zero. |
-| `KEY` | `-- char` | - | Wait for one CPU UART byte; NUL is a valid result. |
-| `EMIT` | `char --` | - | Write low seven bits to CPU UART; wait for TX credit as needed. |
+| `KEY` | `-- char` | - | Wait for a byte from the command owner (UART or decoded PS/2); NUL is valid. |
+| `EMIT` | `char --` | - | Emit on the command owner: seven-bit UART (with TX waits) or VGA. |
 | `CR` | `--` | - | Emit CRLF. |
 | `SPACE` | `--` | - | Emit ASCII space. |
 | `BASE` | `-- addr` | - | Address of numeric base; values 2..36 are supported. |

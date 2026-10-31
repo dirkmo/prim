@@ -7,6 +7,17 @@ AP-7-Commit: `79db3df`, AP 8: `797f599`.
 AP-5-Commit: `d0ff968`, AP 4: `cf739a7`.
 Weitere Historie: AP 3 `1e77c88`, AP 1/2 `b620a9e`.
 
+## PS/2/VGA console extension
+
+Default FPGA builds now use the shared UART + PS/2/VGA interpreter. AP4 output
+routing: `e7344e9`; AP5 dispatcher/rings: `3209b51`; AP6 set-2 decoder:
+`eedef90`; AP7 editors/ownership: `a78cab5`. AP8 adds complete wire/CPU/SRAM/VGA
+verification, resource measurements and a hardware acceptance procedure.
+Current architecture and limits: [DUAL_CONSOLE.md](DUAL_CONSOLE.md). Generated
+maps are authoritative; historical addresses/counts below describe the original
+UART-only implementation. Both profiles retain 16-cell hardware stacks and
+eight checked user cells. Physical keyboard/monitor acceptance remains pending.
+
 ## Aktueller Stand und Leitplanken
 
 Eigenständiges Text-Forth unter forth/, vollständig auf der CPU; kein TokenForth-

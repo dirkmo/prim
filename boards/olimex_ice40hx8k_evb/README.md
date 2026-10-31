@@ -301,8 +301,9 @@ The [timer reference](../../system/docs/timer_mmio.md) describes counting and
 word access behavior. The board uses `TIMER_DIVISOR=25000` at 25 MHz (1 ms per
 counting interval). Timer, UART and PS/2 events share the CPU IRQ through the
 [IRQ_PENDING block](../../system/docs/interrupts_mmio.md). The CPU supports
-interrupts; the current Forth kernel still polls UART. CPU halt/debug reset
-leave peripherals and source pending intact. [PS/2 reception](../../ps2/README.md)
+interrupts; the [default Forth kernel](../../forth/DUAL_CONSOLE.md) now runs
+one interpreter on UART and PS/2/VGA, with IRQs restricted to safe collector
+wait points. CPU halt/debug reset leave peripherals and source pending intact. [PS/2 reception](../../ps2/README.md)
 uses GPIO1.14/G1 and GPIO1.16/J5 without conflicting with VGA/UART.
 
 Reading an empty RX register returns the last byte, initially zero. New reception
