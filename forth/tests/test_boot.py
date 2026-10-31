@@ -84,12 +84,17 @@ class BootChecks(unittest.TestCase):
             self.assertEqual([w for w in memory.writes if w[0] >= 0xFFF0],
                              [[0xFFFE, 0]])
             memory.writes.clear()
-            # The production image idles indefinitely, without BREAK or frames.
-            for _ in range(12):
+            # Production now enters the console and waits for RX without leaking
+            # frames. The boot boundary at idle remains available to fixtures.
+            for _ in range(300):
                 self.assertNotIn(cpu.step(), (Op.BREAK, Op.SIMEND))
-            self.assertEqual(cpu._pc, image.symbols['idle'])
-            self.assertEqual((cpu._dsp, cpu._rsp), (0, 0))
-            self.assertEqual(memory.writes, [])
+                self.assertLessEqual(cpu._dsp, 2)
+                self.assertLessEqual(cpu._rsp, 2)
+            self.assertEqual(bytes(memory.tx), b'ok\r\n')
+            self.assertEqual(cpu._rsp, 2)
+            self.assertFalse(any(a == 0xFFFF for a, _ in memory.reads))
+            memory.tx.clear()
+            memory.writes.clear()
 
     def test_invalid_image_rejected(self):
         image = Image()
@@ -115,7 +120,7 @@ class BootChecks(unittest.TestCase):
 
         image = build_image()
         fixture = bytearray(image.memory)
-        # Test-only stop at idle; the production binary has an infinite JP loop.
+        # Test-only stop before idle jumps into the production console.
         fixture[image.symbols['idle']] = Op.BREAK
         fixture[0x100:0x400] = b'\xa5' * 0x300
         with tempfile.TemporaryDirectory(prefix='forth-boot-rtl-') as directory:

@@ -1,320 +1,144 @@
-# Eigenständiges Forth für Prim – Arbeitsstand und Arbeitspakete
+# Forth für Prim – kompakte Übergabe und Arbeitspakete
 
-Stand: 31. Oktober 2026. Dieses Dokument dient als Übergabe an weitere Chats.
+Stand: 31. Oktober 2026. AP 1–5 abgeschlossen; AP 6–10 offen.
+Letzter Nutzerauftrag: geprüften AP-5-Stand committen. AP 6 nicht begonnen.
+AP-4-Commit: `cf739a7`. AP 5 wird mit dem Commit dieser Übergabe festgehalten.
+Weitere Historie: AP 3 `1e77c88`, AP 1/2 `b620a9e`.
 
-## Auftrag und aktueller Stand
+## Aktueller Stand und Leitplanken
 
-Ein kleines, eigenständiges Forth unter `forth/` im Projekt-Root entwickeln.
-Es verwendet normale Forth-Syntax und einen vollständig auf der Prim-CPU
-laufenden Textinterpreter und Compiler. Standardkonformität ist kein Ziel.
+Eigenständiges Text-Forth unter forth/, vollständig auf der CPU; kein TokenForth-
+Umbau, keine Hosttokenisierung. Nicht standardkonform, bewusst kleiner Umfang.
+CPU/ISA, Stackgrößen und bestehende Tests/Simulationshelfer unverändert.
+Multiplikation/Division/variable Schiebeweiten in Software. Keine beschlossenen
+Hardware-Erweiterungen. Return-Bit-Folding und Tail-CALL→JP sind AP 6.
 
-**AP 1–4 sind abgeschlossen. Kernel-Build, Boot, 55 Wörter und private
-CPU-Routinen für Eingabe/Parser/Zahlen sind implementiert; noch kein
-Textinterpreter oder Laufzeitcompiler.** Der Nutzer hat zuletzt AP 3 committen
-und das nächste AP beginnen lassen. AP-3-Commit: `1e77c88`; AP-4-Änderungen
-liegen noch uncommittet vor. AP 5 wurde nicht begonnen.
-Die konkrete Architektur steht in [ARCHITECTURE.md](ARCHITECTURE.md).
+61 Wörter, interaktive Interpretation, noch kein `:`/`;` oder Laufzeitcompiler.
+Start: ` .venv/bin/python forth/run.py ` (Prim-Modell mit Terminal-UART).
+Build: ` .venv/bin/python forth/build.py `; reproduzierbare kernel.bin/map.json/
+disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
+[README.md](README.md): Bedienung, aktuelle Wortliste, APIs und Testbefehle.
+[ARCHITECTURE.md](ARCHITECTURE.md): vollständige Architektur/Zielsemantik.
 
-AP 5–10 sind offen. Dieses Dokument bei späterer Arbeit knapp aktuell halten:
-Entscheidungen, betroffene Dateien, Prüfungen und nächste Schritte festhalten.
+## Technische Arbeitsreferenz
 
-## Verbindliche Leitplanken aus dem Gespräch
-
-- Bestehendes TokenForth ist eine andere Sprache, kein klassisches Forth.
-  Die neue Implementierung bleibt eigenständig; TokenForth nicht umbauen.
-- Eingabe ist gewöhnlicher Forth-Quelltext über UART. Keine Tokenisierung
-  oder Namensauflösung durch den Host im laufenden Betrieb voraussetzen.
-- Interpretation und das Kompilieren neuer Definitionen laufen auf der CPU.
-- Die CPU ist bewusst minimal. Mit der bestehenden ISA planen, keine neuen
-  Opcodes voraussetzen. Multiplikation, Division und variable Schiebeweiten
-  zunächst in Software implementieren; keine iterativen Hardware-Rechenwerke.
-- Allenfalls sehr kleine Hardwareergänzungen später separat untersuchen:
-  arithmetisches Rechtsschieben um eins, Carry-Addition, Schieben durch Carry
-  oder Nullvergleich. Keine davon ist beschlossen. Vor einer Empfehlung
-  zusätzliche Ressourcen durch einen Synthesevergleich bestimmen.
-- Stackvergrößerungen sind ebenfalls nicht beschlossen.
-
-Beispiel der gewünschten Bedienung:
-
-```forth
-2 3 + .
-: quadrat dup * ;
-7 quadrat .
-: betrag dup 0< if negate then ;
-```
-
-## Technische Ausgangslage und Architekturvorschlag
-
-Aus dem bestehenden Repository geprüft:
-
-- Prim: 16-Bit-Daten und -Adressen, byteadressierter Speicher, 8-Bit-Opcodes.
-- Byte-/Wortzugriffe, indirekte CALL/JP/JZ, Daten- und Returnstack vorhanden.
-- Addition, Subtraktion, signed/unsigned Kleinervergleich, Bitoperationen,
-  logische Schiebeoperationen um 1 und 8 Bit und Carry-/Borrow-Abfrage vorhanden.
-- Multiplikation und Division fehlen als Opcodes. Logisches SR ersetzt nicht
-  das arithmetische Rechtsschieben für Forth `2/` bei negativen Zahlen.
-- Standardmäßig je 16 Stackzellen (`DSS=4`, `RSS=4`), zyklische Zeiger,
-  keine Hardwareprüfung auf Stacküberlauf. Returnstack wird auch für Aufrufe
-  und Interrupts verwendet; dies bei Compiler und Schleifen berücksichtigen.
-- Code liegt im beschreibbaren Speicher; CPU kann neue Definitionen erzeugen.
-- UART: CSR an 0xFFFE, Daten an 0xFFFF. FPGA-CPU-Ausgabe ist auf sieben Bit
-  beschränkt. Statusbits und Zugriffseffekte vor Implementierung nachlesen.
-- System-MMIO liegt an 0xFFF0..0xFFFF; nicht als Wörterbuchspeicher verwenden.
-
-In AP 1 festgelegte Architektur (Details im Architekturdokument):
-
-- Subroutine-Threaded Code: Aufrufe als `PUSH16 adresse; CALL`, geeignete
-  Primitive direkt als Opcode; Definitionsende mit Return-Semantik der CPU.
-- Eigenes verkettetes Wörterbuch mit Name, Flags (u. a. Immediate), vorherigem
-  Eintrag und Ausführungsadresse; 8-Byte-Header plus ASCII-Name, Suche ohne
-  Unterscheidung von Groß-/Kleinschreibung.
-- Äußerer Interpreter: Wort lesen, suchen, ausführen/kompilieren oder Zahl
-  erkennen. Immediate-Wörter auch im Kompiliermodus ausführen.
-- Ein Buildwerkzeug darf das initiale Kernel-Image erzeugen. Danach braucht
-  der laufende Interpreter keinen Hostcompiler.
-- Fehler führen zurück zur Konsole. Unvollständige Definitionen verwerfen;
-  abgeschlossene Wörter bleiben erhalten.
-- Native Datenstacks mit softwaregeprüfter Benutzergrenze von 8 Zellen und
-  8 temporären Kernelzellen. Hardware-Returnstack bleibt bei 16 Zellen ohne
-  allgemeinen Überlaufschutz. Kernelbudgets in folgenden APs verifizieren.
-- Speicher: Boot/Variablen/Puffer unter 0400, Kernel ab 0400, Benutzerbereich
-  hinter dem Kernel bis exklusiv F000. Kein öffentliches >R/R>/R@ in Version 1.
-- Return-Bit-Folding und Tail-CALL→JP in AP 6 konservativ implementieren.
-
-Wichtige vorhandene Referenzen (keine fertige Forth-Implementierung):
-
-| Pfad | Zweck |
-| --- | --- |
-| `cpu/rtl/prim.v` | Tatsächliche CPU-, ALU-, Stack- und Return-Semantik |
-| `src/prim/isa.py` | Opcodewerte |
-| `src/prim/assembler.py` | Vorhandener Prim-Assembler |
-| `cpu/README.md` | CPU, Debugsteuerung, Interrupts |
-| `system/docs/registers.md` | Registerübersicht |
-| `system/docs/uart_mmio.md` | UART-Vertrag |
-| `system/README.md` | System und Simulationsinfrastruktur |
-| `tests/support/` | Wiederverwendbare Simulationshilfen |
-| `src/prim/cpu.py` | Python-Instruktionsmodell |
-| `src/interpreter.cf` | Unfertiger TokenForth-Tokeninterpreter, kein Text-Forth |
-| `src/base.cf`, `src/bootstrap.cf` | TokenForth-Codegeneratoren, keine unverändert übernehmbare klassische Forth-Basis |
+- Byteadressen, 16-Bit-Zellen Little Endian. Boot 0000..00FF, Variablen
+  0100..01FF, Eingabe 0200..027F (127+1), Stringpuffer 0280..02FF,
+  Kontrollstack 0300..037F (32 Einträge à vier Bytes), Scratch 0380..03FF,
+  Kernel ab 0400, Benutzerbereich ab align2(KERNEL_END) bis exklusiv F000.
+  F000..FFEF Reserve, FFF0..FFFF MMIO. Keine Speicherisolation.
+- AP 5: idle=051D, console_start=2025, console_next=203D,
+  KERNEL_END=USER_START=20C6, kernel_latest=1FE2. Boot bis idle: 144 Instruktionen,
+  maximal zwei Datenzellen, kein Returnframe. Generierte Map ist maßgeblich.
+- Boot setzt BASE=10, STATE/DEPTH/Metadaten=0, HERE=USER_START, LATEST=Kernelende
+  der Headerkette; Interrupts CPU/UART aus. idle springt zu console_start.
+  Dort `ok`/CRLF, danach read_line; jeder erfolgreiche Zeilenabschluss ebenfalls
+  `ok`/CRLF. Kein äußerer CALL-Rahmen. Kein Compiler oder Definitionenrollback.
+- Header +0 Link16, +2 Flags8, +3 Namenslänge8, +4 XT16, +6 Klasse8,
+  +7 Inline-Opcode8, +8 ASCII-Name; Padding gerade. Flags 1 immediate,
+  2 compile-only, 4 hidden. Alle aktuellen Klassen 0. Namen 1..31,
+  Suche ASCII-case-insensitive, neueste zuerst, HIDDEN überspringen.
+- image.words: name, header-/xt-Symbol, need/give, flags. Map löst Adressen auf.
+  Code und emit_word in kernel/primitives.py sind gemeinsame Codegeneratoren.
+  imageweiter Labelzähler; Image: define/org/op/push/cell/emit/resolve.
+- Composition in kernel/boot.py: Boot+idle, emit_primitives, emit_parser,
+  emit_console, kernel_end/user_start. Zusätzliche Routinen vor kernel_end
+  einfügen, Headerkette am letzten image.words-Eintrag verankern.
+- DEPTH zählt nur Benutzerzellen, maximal acht. Geprüfte Wörter/Inline-Emitter
+  müssen Bedarf und Wachstum vor Eingriff prüfen. Interne Stackwerte nicht zählen.
+  Hardwarestacks je 16; Returnstack ohne allgemeinen Überlaufschutz.
+- Scratch exklusiv: 0380..038D Arithmetik (a,b,q,rem,count,qsign,rsign),
+  038E..039D Ziffernpuffer, 03A0..03AF .S-Sicherung; Rest frei. Nicht reentrant.
+- private read_line/parse_name/parse_number/find_word haben keinen Benutzer-
+  stackeffekt. Ergebnisse in Verwaltungszellen. raw_key `( -- c )`, raw_emit
+  `( c -- )` und is_space/fold_ascii `( c -- flag/c' )` sind rohe Stackroutinen.
+  Öffentliche KEY/EMIT zählen dagegen Benutzerwerte. Siehe README-API-Tabelle.
+- read_line: Echo, BS/DEL, CR/LF/CRLF, max.127 Bytes, Abschlussbyte. TAB/VT/FF
+  erlaubt, andere C0-Zeichen außer Editing/EOL verwerfen die Zeile bis EOL.
+  KEY liefert NUL. skip_lf bleibt über Zeilen und Fehler erhalten.
+- parse_name konsumiert ein folgendes Trennzeichen; token_addr/length, Länge0
+  am Ende. Tokens bis127, Namensgrenze erst bei Headern. Kommentare `\`/`(`
+  sind Immediate-Wörter, nicht automatisch im Scanner verschluckt.
+- parse_number: Wörterbuchsuche muss zuerst erfolgen! BASE2..36, Vorzeichen
+  vor optionalem $/#, positive0..65535, negative Beträge bis32768.
+  number_status0 Syntax/kein Zahlentoken,1 Erfolg,2 Überlauf. number_value sonst0.
+  Invalides BASE ist Fehler. Zahlkonvertierung nutzt eigene Verwaltungszellen.
+- find_word: Token nach found_header/xt/flags (0 bei Misserfolg); keine Ausführung.
+  Interpreter prüft COMPILE_ONLY, ruft sonst XT indirekt auf. Bei nicht gefundenem
+  Wort Zahl konvertieren, mit Code.guard(0,1) prüfen, erst dann Wert ablegen.
+- . signed, U. unsigned, BASE2..36, nachfolgendes Leerzeichen. .S zeigt `<n> `
+  plus Werte unten→oben und stellt alle Zellen wieder her; auch n in BASE.
+  WORDS sichtbar/neueste zuerst. DEPTH liefert Tiefe vor Ablegen des Ergebnisses.
+- /MOD: signed, Quotient gegen null, Rest wie Dividend. unsigned_divide ist
+  private Hilfsroutine: arith_a=0..65535, b=1..32768, q/rem als Resultate.
+  Gemeinsamer Rechenkern für signed Division und Zahlenausgabe, kein UM/MOD.
+- Fehler: Grund/ggf.Token ausgeben, restliche Zeile/Stack verwerfen, über
+  error_exit→idle neue logische Basis etablieren. Hardwarezeiger bleiben beliebig;
+  alte Frames niemals zurückkehren lassen. HERE/LATEST bleiben erhalten.
+  ABORT analog ohne Fehlertext, last_error bleibt stehen.
+- last_error0126: 1 Unterlauf,2 Überlauf,3 Shift,4 Division0,5 Divisionsüberlauf,
+  6 Eingabelänge,7 Kommentar,8 BASE,9 Steuerzeichen,10 Zahlüberlauf,
+  11 unbekannt,12 compile-only. Token erst nach Fehlerausgabe löschen.
+- Neue Variablen AP5: find_header0142,find_index0144,found_header0146,
+  found_xt0148,found_flags014A,print_addr014C,print_left014E,format_count0150,
+  dump_count0152,dump_index0154,word_cursor0156. number_status013E,
+  number_value0140. Vollständige Zuordnung in boot.py und Map.
 
 ## Arbeitspakete
 
-### AP 1 – Architektur und Sprachumfang
+1. **AP 1 – Architektur/Sprachumfang: abgeschlossen.** Speicher, Header,
+   Stacks, Zahlen-/Fehlersemantik, Zielwortliste und Optimierungsregeln in
+   ARCHITECTURE.md. Eigenständiges Forth, bestehende ISA.
+2. **AP 2 – Build/Boot: abgeschlossen.** build.py, image.py und kernel/boot.py;
+   reproduzierbares Image/Map/Disassembly, Python/RTL-Bootprüfung.
+3. **AP 3 – Grundwörter/UART: abgeschlossen.** kernel/primitives.py; 50 Wörter,
+   Stackprüfungen, Software-Arithmetik, KEY/EMIT/CR/SPACE. Wörterbuchheader schon
+   hier erzeugt. UART- und Arithmetiktests.
+4. **AP 4 – Texteingabe/Parser: abgeschlossen.** kernel/parser.py; rohe Eingabe,
+   Scanner, Zahlen, Kommentare, BASE/DECIMAL/HEX; fünf zusätzliche Wörter.
+5. **AP 5 – Wörterbuch/Interpreter: abgeschlossen.** kernel/console.py;
+   Namenssuche, äußere Schleife, . U. .S DEPTH WORDS ABORT, sechs zusätzliche
+   Wörter. run.py führt den echten Kernel im CPU-Modell aus, keine Hostauswertung.
+6. **AP 6 – Compiler: offen.** Abhängig AP5. `: name ... ;`, STATE, IMMEDIATE,
+   `[ ] LITERAL ' ['] EXECUTE`; neue Definitionen auf CPU kompilieren, Header
+   bis Abschluss verstecken, HERE/LATEST bei Fehler/ABORT zurückrollen.
+   Fehler/ABORT zuerst Rollback, danach definition_open löschen! Konservative
+   Return-Bit-/Tail-CALL→JP-Optimierung, Instruktionsgrenzen/Sprungziele wahren.
+   Inline-Klasse nur mit denselben Stackprüfungen wie aufrufbare Wörter.
+7. **AP 7 – Kontrollstrukturen: offen.** Abhängig AP6. IF ELSE THEN BEGIN UNTIL
+   AGAIN WHILE REPEAT, getrennter RAM-Kontrollstack, Typ-/Grenzprüfung.
+   Maximal ein offenes WHILE pro BEGIN. DO/LOOP nicht im ersten Umfang.
+8. **AP 8 – Daten/Alltagswörter: offen.** Abhängig AP6/teilweise7. HERE ALLOT ,
+   C, CREATE VARIABLE CONSTANT TYPE S" ."; Stringsyntax/Lebensdauer gemäß
+   Architektur. Interne Emitter werden bereits AP6 benötigt. Kein DOES>.
+9. **AP 9 – Integration/Regression: offen, begleitet laufend.** Nach AP8 abschließen.
+   Textsessions/CPU-Kompilierung, unabhängige Sollwerte, Python/RTL/UART,
+   Fehler-/Speichergrenzen. Vorhandene Regressionen erhalten; echte Hardware
+   getrennt ausweisen.
+10. **AP 10 – Anleitung/Beispiele: offen, begleitet laufend.** Nach AP9
+    abschließen. README/Wortliste/Grenzen aktuell halten, examples/ ergänzen,
+    diese Übergabe pflegen. lib/ und examples/ erst bei Bedarf anlegen.
 
-Status: abgeschlossen (31. Oktober 2026). Abhängigkeiten: keine.
-
-Speicheraufteilung, Boot, Wörterbuchformat, Stackkonventionen und Grenzen,
-Ausführungsmodell sowie unterstützte Syntax dokumentieren. Zahlenbereiche,
-Vorzeichen-/Divisionssemantik, Namensvergleich und Fehlerverhalten festlegen.
-Den unten geplanten Wortschatz auf einen sinnvollen ersten Umfang eingrenzen.
-
-Ergebnis: [ARCHITECTURE.md](ARCHITECTURE.md) legt Speicher, Header, Stacks,
-Interpreter, Zahlen-/Divisionssemantik, Wortumfang, Compilertransaktionen,
-Return-Optimierungen und Fehlergrenzen als Grundlage für AP 2–8 fest.
-
-### AP 2 – Kernel-Build und Boot
-
-Status: abgeschlossen (31. Oktober 2026). Abhängigkeiten: AP 1.
-
-Reproduzierbares initiales Kernel-Image erzeugen. Startadresse, Initialisierung
-und Simulatoranbindung umsetzen. Bestehende Prim-Werkzeuge verwenden, soweit
-sie ohne Abhängigkeit von TokenForth-Sprachsemantik geeignet sind.
-
-Ergebnis: [build.py](build.py), [image.py](image.py) und
-[kernel/boot.py](kernel/boot.py) erzeugen ein RAM-Image, Symbol-/Speicherkarte
-und Instruktionsdisassembly. Boot initialisiert Kernelzustand und UART-
-Interruptfreigaben; anschließend endlose JP-Warteschleife. Im damaligen
-AP-2-Stand noch keine öffentlichen Forth-Wörter oder Header, kernel_latest=0;
-durch AP 3 inzwischen erweitert (aktueller Stand unten).
-
-Befehle und Simulatorverfahren: [README.md](README.md). Artefakte unter
-build/forth/: kernel.bin (65520 Bytes, ohne MMIO), kernel.map.json,
-kernel.disasm. Im AP-2-Stand idle=0487, KERNEL_END=048B, USER_START=048C.
-Variablenzellen damals 0100..0125; aktuelle Adressen in kernel/boot.py und Map.
-Alle übrigen in AP 1 reservierten Bereiche bleiben bestehen.
-
-Validierung: ` .venv/bin/python forth/tests/test_boot.py --rtl -v `:
-4 Tests erfolgreich; darin Bootvergleich in 3 SRAM-Timingkonfigurationen
-mit UART-MMIO. Je 69 Instruktionen bis idle, maximal 2 Datenstackzellen,
-keine Returnstack-Einträge. Reproduzierbarkeit, schmutziger RAM und erneuter
-Kaltstart geprüft. Nur Testkopie erhält BREAK bei idle. Kein Boardtest.
-
-### AP 3 – Grundwörter und UART
-
-Status: abgeschlossen (31. Oktober 2026). Abhängigkeiten: AP 2.
-
-Stackoperationen, Arithmetik, Vergleiche, Speicherzugriffe, `KEY`, `EMIT` und
-`CR` bereitstellen. Fehlende Rechenoperationen in Software ergänzen, soweit
-für die folgenden APs benötigt. Returnstackzugriffe mit Aufrufkonvention
-abgleichen; vorhandene CPU-Mnemonics nicht blind als Forth-Wörter übernehmen.
-
-Ergebnis: [kernel/primitives.py](kernel/primitives.py) erzeugt alle 50 Wörter
-des AP-3-Zielumfangs mit Stackprüfungen, verketteten Headern und aufrufbaren XT.
-Alle Header derzeit Kompilierklasse 0; gleichwertige Inline-Emitter folgen in
-AP 6. Details und Wortliste: [README.md](README.md).
-
-Software-Multiplikation und gemeinsame signed Division mit 16 Rechenschritten;
-keine neuen CPU-Instruktionen. Private Fehlerausgänge geben den Grund über
-UART aus, setzen logischen Stack-/Compilerzustand zurück und springen über
-error_exit nach idle. Kein Zeilenhandling oder Definitionsrollback vorgezogen.
-
-Im AP-3-Stand idle=048D, KERNEL_END=1131, USER_START=1132, kernel_latest=0C7C.
-Variablen bis 0127; neue Zelle last_error an 0126. Arithmetik-Scratch exklusiv
-0380..038D (a,b,q,rem,count,qsign,rsign), Rest ab 038E frei. Nicht reentrant.
-Beim Weiterentwickeln sind generierte Map und Variablenzuordnung maßgeblich.
-
-Validierung (alle erfolgreich):
+## Verifikation und nächste Schritte
 
 ```sh
 .venv/bin/python forth/build.py
 .venv/bin/python forth/tests/test_boot.py --rtl -v
 .venv/bin/python forth/tests/test_primitives.py --rtl -v
+.venv/bin/python forth/tests/test_parser.py --rtl -v
+.venv/bin/python forth/tests/test_console.py --rtl -v
 ```
 
-4 Boottests und 9 Grundworttests. Darin 3 Boot- und 27 Grundwortvergleiche
-CPU/SRAM/UART gegen Python sowie ein gerichteter KEY-Test mit uart_buffers,
-verzögertem ACK und NUL-Empfang. Python prüft alle Wörter, Grenz-/Zufallswerte,
-alle zu kleinen Eingabetiefen, alle wachsenden Wörter an der Stackgrenze,
-Fehlerfälle und Wiederaufnahme nach Fehler. Echte Hardware nicht geprüft.
+AP5: alle 30 Testmethoden bestanden (4+9+8+9). Darin 48 instruktionsweise
+Python/CPU/SRAM-Vergleiche über drei Timings, gerichtete KEY-/Eingabeprüfung
+sowie sechs komplette UART-Puffer-Konsolensitzungen. Alle Basen, alle .S-Tiefen,
+Puffergrenzen, versteckte/überschriebene/compile-only Einträge, Suche vor Zahl,
+Fehler-/ABORT-Wiederaufnahme und zyklisches Zeiger-Wraparound geprüft.
+Strukturell maximal 12 Datenzellen (vier temporäre) und drei Returnframes; .S separat
+315 Tiefen/Basenfälle, maximal elf Datenzellen und drei Returnframes. Keine seriellen
+RX- oder Boardtests. Konsolen-RTL speist Bytes vor uart_buffers ein.
 
-Strukturelle Stackprüfung aller Verzweigungen/Schleifen/Hilfsaufrufe bei
-zulässigen Eingabetiefen: maximal 10 physische Datenzellen, höchstens 2
-zusätzlich zur Eingabetiefe, maximal 2 Returnstack-Einträge einschließlich
-Aufruf des öffentlichen Wortes. Dynamische Tests bestätigen diese Budgets.
-Boot im AP-3-Stand 72 Instruktionen, maximal 2 Datenzellen und 0 Returnframes.
-Spätere Interpreter-/Compilerframes müssen zusätzlich berücksichtigt werden.
-
-### AP 4 – Texteingabe und Parser
-
-Status: abgeschlossen (31. Oktober 2026). Abhängigkeiten: AP 3.
-
-Zeilenpuffer, einfache Eingabekorrektur, Wortzerlegung, Kommentare und
-Zahlenkonvertierung mit `BASE`, `DECIMAL` und `HEX` umsetzen.
-
-Ergebnis: gewöhnlicher Forth-Text wird vollständig auf der CPU eingelesen
-und in Wörter/Zahlen zerlegt; Puffergrenzen werden berücksichtigt.
-
-[kernel/parser.py](kernel/parser.py): private read_line, parse_name,
-parse_number, skip_line/skip_paren, raw_key/raw_emit und is_space.
-Neue öffentliche Wörter BASE/DECIMAL/HEX und Immediate-Kommentare `\`/`(`.
-Noch keine Konsolenschleife oder automatische Wortsuche/Ausführung.
-
-read_line hat keinen Benutzerstackeffekt, Echo und BS/DEL-Korrektur,
-127-Byte-Grenze, CR/LF/CRLF. Ungültige Steuerzeichen (außer TAB/VT/FF und
-Editier-/EOL-Zeichen) und Überlänge werden bis EOL verworfen, dann Fehler.
-parse_name konsumiert ein folgendes Trennzeichen und liefert token_addr/length;
-Tokens bis 127 Bytes, Definitionen-Namensgrenze 31 erst in späteren APs.
-Kommentare werden durch expliziten Aufruf ihrer Wörter verarbeitet.
-
-parse_number erhält das aktuelle Token, bewahrt alle Benutzerwerte und liefert
-number_status: 0 ungültig/kein Zahlentoken, 1 Erfolg, 2 Zahlenüberlauf.
-number_value nur bei Status 1 gültig, sonst 0. Basis 2..36, +/-, Präfix $/#
-nach Vorzeichen, positive 0..65535, negative Beträge bis 32768. Invalides BASE
-ist Fehler; Syntax/Überlauf werden als Status zurückgegeben, damit AP 5 zuerst
-im Wörterbuch suchen kann. Bounded repeated addition mit Carry-Prüfung, kein
-Aufruf der öffentlichen Rechenwörter. Konvertierung nutzt eigene Variablen.
-
-Neue Fehlercodes: 6 Eingabe zu lang, 7 offener Kommentar, 8 ungültige BASE,
-9 Text-Steuerzeichen, 10 Zahlüberlauf (Ausgang für AP 5 vorbereitet).
-Alle Fehlerausgänge löschen zusätzlich Eingabe-/Tokenmetadaten; skip_lf
-bleibt für CRLF erhalten. Definitionstransaktionen weiterhin erst ab AP 6.
-
-Aktuell idle=04DB, KERNEL_END=1A9D, USER_START=1A9E, kernel_latest=1A8E.
-Variablen nun 0100..0141, neue Zellen ab 0128; number_status=013E,
-number_value=0140. Kernel wächst, generierte Map ist maßgeblich.
-Boot 111 Instruktionen, weiterhin 2 Datenzellen und kein Returnframe.
-
-Validierung: Build sowie test_boot.py, test_primitives.py und test_parser.py
-jeweils mit `--rtl -v` bestanden: 4+9+8 Testmethoden. Neue Prüfungen: alle
-Zahlenbasen und Grenzwerte, Kommentare, Eingabekorrektur, Zeilenverwerfen und
-Wiederaufnahme, 9 Parser-/Zahlenvergleiche mit physischem SRAM sowie gerichtete
-CPU/UART-Puffer-Prüfung für zwei editierte Zeilen unter TX-Rückstau/ACK-Wartezeit.
-Strukturelle Stackprüfung umfasst alle öffentlichen Wörter und die privaten
-read_line/parse_name/parse_number: maximal 11 Datenzellen, höchstens 3 zusätzlich
-zur Eingabetiefe und 2 Returnframes einschließlich Routineaufruf. Kein Boardtest.
-
-### AP 5 – Wörterbuch und äußerer Interpreter
-
-Status: offen. Abhängigkeiten: AP 4.
-
-Namen auf der CPU suchen, Wörter ausführen, Zahlen auf den Stack legen und
-unbekannte Eingaben behandeln. Interaktive Konsole mit `ok`, `.` und `.S`
-bereitstellen. Fehlerbehandlung und Wiederaufnahme der Eingabe umsetzen.
-
-Ergebnis: z. B. `2 3 + .` funktioniert ohne Hosttokenizer oder Hostcompiler.
-
-### AP 6 – Compiler für neue Definitionen
-
-Status: offen. Abhängigkeiten: AP 5.
-
-`: name ... ;`, `STATE`, `IMMEDIATE`, `[`, `]`, `LITERAL`, `'` und `EXECUTE`
-umsetzen. Aufrufe und Literale auf der CPU kompilieren. Unvollständige
-Definitionen bei Fehlern verwerfen und Wörterbuch-/Speicherkollisionen abfangen.
-Konservatives Return-Bit-Folding und Tail-Aufrufe per CALL→JP ergänzen;
-Instruktionsgrenzen und gemeinsame Rücksprungziele erhalten.
-
-Ergebnis: neue Definitionen lassen sich über UART eingeben und ausführen;
-Interpretations- und Kompiliersemantik sind geprüft.
-
-### AP 7 – Kontrollstrukturen
-
-Status: offen. Abhängigkeiten: AP 6.
-
-`IF ELSE THEN`, `BEGIN UNTIL`, `AGAIN` und `WHILE REPEAT` als Compilerwörter
-implementieren. Fehlerhafte Verschachtelungen erkennen. Weitergehende
-Schleifen wie `DO LOOP` sind bisher nicht Bestandteil des ersten Umfangs.
-
-Ergebnis: bedingte und wiederholte Ausführung funktioniert auch verschachtelt.
-
-### AP 8 – Datenwörter und Alltagswortschatz
-
-Status: offen. Abhängigkeiten: AP 6; für manche Hilfswörter AP 7.
-
-`HERE`, `ALLOT`, `,`, `C,`, `CREATE`, `VARIABLE`, `CONSTANT`, Stringausgabe
-und benötigte Hilfswörter ergänzen. Interne Speicheremitter werden bereits in
-AP 6 benötigt; hier ihre öffentliche Forth-Semantik vervollständigen.
-Stringsyntax und Lebensdauer gemäß ARCHITECTURE.md umsetzen.
-
-Ergebnis: kleine Programme mit veränderlichen Daten und Textausgabe möglich.
-
-### AP 9 – Integration und Regressionstests
-
-Status: offen. Begleitend ab AP 2; Abschluss nach AP 8.
-
-Interaktive Eingaben und auf der CPU kompilierte Definitionen im Python-Modell
-und in der RTL-Systemsimulation prüfen. UART, Compiler, Kontrollstrukturen,
-Fehlerbehandlung und Speichergrenzen abdecken. Erwartete Ergebnisse unabhängig
-festlegen; nicht nur Modell und RTL miteinander vergleichen.
-
-Ergebnis: reproduzierbare Tests mit dokumentierten Befehlen und Ergebnissen.
-
-### AP 10 – Anleitung und Beispiele
-
-Status: offen. Begleitend; Abschluss nach AP 9.
-
-Build-, Start- und Konsolenanleitung, Wortliste, Grenzen und kleine Beispiele
-unter `forth/` ablegen. Dieses Übergabedokument auf den tatsächlichen Stand
-bringen und nächste Schritte klar benennen.
-
-Ergebnis: Nutzung und Weiterentwicklung ohne Kenntnis des ursprünglichen Chats.
-
-## Letzte Prüfung und nächster Schritt
-
-- AP 4 vollständig unter forth/ umgesetzt; CPU, TokenForth und bestehende
-  Simulationshelfer unverändert. Alle oben genannten Tests bestanden.
-- Nächster AP: AP 5, Wörterbuchsuche und äußerer Interpreter plus Ausgabe/
-  Stackanzeige. Parser-ABI in README.md nutzen: read_line, dann parse_name,
-  Suche vor parse_number. Kommentare haben Immediate-Flag. Roh-I/O raw_key/
-  raw_emit verändert DEPTH nicht, öffentliche KEY/EMIT dagegen schon.
-- Code und emit_word in kernel/primitives.py sind gemeinsame Codegeneratoren;
-  Code.label verwendet einen imageweiten Zähler. Stackeffekte prüfen bevor
-  Literalwerte auf den Benutzerstack gelegt werden, z. B. Code.guard(0,1).
-- Image bietet define/org/op/push/cell/emit/resolve. image.words enthält
-  Name, Header-/XT-Symbol, need/give und flags; Map löst Symbole auf Adressen auf.
-  Kernelaufbau: Boot+idle, emit_primitives (Header, Wörter, Hilfsroutine,
-  Fehlerausgänge), emit_parser, danach kernel_end/user_start. Routinen vor kernel_end
-  einfügen; kernel_latest derzeit auf letzten Eintrag von image.words gesetzt.
-- error_exit führt derzeit nach idle. Zeilenverwerfen ab AP 5 und Rollback
-  ab AP 6 ergänzen; beim Fehler keine Rückkehr durch verworfene Frames.
-- Budget weiterer Kernelpfade einschließlich zusätzlicher Aufrufrahmen prüfen.
-  Keine stillschweigende Stackvergrößerung; Architekturänderungen dokumentieren.
+Nächstes AP6 noch nicht begonnen. Erst Compilertransaktionen/STATE-Fluss in
+console.py ergänzen, Fehler/ABORT um Rollback erweitern, Compilerwörter und
+sichere Emitter implementieren. Zusätzliche Aufrufrahmen budgetieren. Kein
+stillschweigendes Vergrößern der Hardwarestacks und keine neue ISA voraussetzen.

@@ -14,6 +14,8 @@ ERRORS = {
     'base': (8, 'invalid base'),
     'input_character': (9, 'input character'),
     'number_overflow': (10, 'number overflow'),
+    'unknown': (11, 'unknown word'),
+    'compile_only': (12, 'compile-only word'),
 }
 
 # Software arithmetic scratch. No interrupts/reentrant arithmetic in version 1.
@@ -301,6 +303,22 @@ def emit_primitives(image):
         c.load(slot)
         absolute()
         c.store(slot)
+    c.call('unsigned_divide')
+    for value, sign in (('arith_q', 'arith_qsign'), ('arith_rem', 'arith_rsign')):
+        positive = c.label('division_positive')
+        c.load(sign)
+        c.jz(positive)
+        c.load(value)
+        c.negate()
+        c.store(value)
+        c.mark(positive)
+    c.load('arith_rem')
+    c.load('arith_q')
+    c.ops(Op.NOP | 0x80)
+
+    # Private unsigned division: a=0..65535, b=1..32768, results in q/rem.
+    # Larger divisors would require a 17-bit remainder. No public UM/MOD yet.
+    c.mark('unsigned_divide')
     for slot in ('arith_q', 'arith_rem'):
         c.push(0)
         c.store(slot)
@@ -344,28 +362,24 @@ def emit_primitives(image):
     c.jz(finished)
     c.jump(loop)
     c.mark(finished)
-    for value, sign in (('arith_q', 'arith_qsign'), ('arith_rem', 'arith_rsign')):
-        positive = c.label('division_positive')
-        c.load(sign)
-        c.jz(positive)
-        c.load(value)
-        c.negate()
-        c.store(value)
-        c.mark(positive)
-    c.load('arith_rem')
-    c.load('arith_q')
     c.ops(Op.NOP | 0x80)
 
-    # AP 3 error exit. AP 5/6 will add line handling and definition rollback.
+    # Non-returning errors. AP 6 must roll back before clearing definition_open.
     for name, (number, message) in ERRORS.items():
         c.mark('error_' + name)
         c.push(number)
         c.store('last_error')
-        for slot in ('depth', 'state', 'control_depth', 'definition_open',
-                     'input_length', 'input_pos', 'token_addr', 'token_length'):
+        for slot in ('depth', 'state', 'control_depth', 'definition_open'):
             c.push(0)
             c.store(slot)
-        output(('error: ' + message + '\r\n').encode('ascii'))
+        output(('error: ' + message).encode('ascii'))
+        if name in ('unknown', 'compile_only'):
+            output(b' ')
+            c.call('print_token')
+        output(b'\r\n')
+        for slot in ('input_length', 'input_pos', 'token_addr', 'token_length'):
+            c.push(0)
+            c.store(slot)
         c.jump('error_exit')
     c.mark('error_exit')
     c.jump('idle')  # Abandon all call frames; never return through old ones.

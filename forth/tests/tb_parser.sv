@@ -2,9 +2,10 @@
 // CPU + real UART buffers, paced RX injection, TX backpressure and delayed ACK.
 // Not a serial receiver or physical SRAM test (covered separately).
 module tb_parser;
+parameter integer SESSION = 0;
 reg clk = 0, reset = 1;
 always #5 clk = ~clk;
-wire [15:0] addr, write_data;
+wire [15:0] addr, write_data, pc;
 wire [1:0] bs;
 wire we, halted;
 reg ack = 0;
@@ -17,16 +18,18 @@ wire [3:0] csr;
 wire [6:0] input_data, tx_data;
 wire tx_valid, output_ready;
 integer cycles = 0, waits = 0, rx_index = 0, consumed = 0, rx_count, tx_file;
+integer wait_pc, key_pc, stack_file, depth, index;
+reg session_done = 0;
 reg tx_ready = 0;
 wire input_read = ack && bs == 1 && !we && addr == 16'hffff;
 wire csr_write = ack && bs == 1 && we && addr == 16'hfffe;
 wire output_valid = ack && bs == 1 && we && addr == 16'hffff;
-string image_path, rx_path, tx_path, ram_path;
+string image_path, rx_path, tx_path, ram_path, stack_path;
 
 Prim cpu(.i_clk(clk), .i_reset(reset), .i_halt(1'b0), .i_run(1'b0),
     .i_step(1'b0), .i_debug_reset(1'b0), .i_irq(1'b0), .o_addr(addr),
     .o_dat(write_data), .i_dat(read_data), .o_bs(bs), .o_we(we),
-    .i_ack(ack), .o_halted(halted));
+    .i_ack(ack), .o_halted(halted), .o_pc(pc));
 uart_buffers buffers(.i_clk(clk), .i_reset(reset), .i_rx_data(rx_data),
     .i_rx_valid(rx_valid), .i_input_read(input_read), .o_input_data(input_data),
     .o_csr(csr), .i_csr_data(write_data[7:0]), .i_csr_write(csr_write),
@@ -60,7 +63,7 @@ end
 always @(posedge clk) begin
     if (!reset) begin
         cycles = cycles + 1;
-        if (cycles > 200000) $fatal(1, "input/parser timeout");
+        if (cycles > (SESSION ? 5000000 : 200000)) $fatal(1, "input/parser timeout");
         if (tx_valid && tx_ready) $fwrite(tx_file, "%02x\n", tx_data);
         if (ack && bs != 0) begin
             if (addr >= 16'hfffe) begin
@@ -74,7 +77,23 @@ always @(posedge clk) begin
                 if (bs[1]) ram[(addr + 1) & 65535] <= write_data[15:8];
             end
         end
-        if (halted && !tx_valid) begin
+        if (SESSION && !session_done && consumed == rx_count && !csr[0] &&
+            (pc == wait_pc || pc == key_pc)) begin
+            session_done = 1;
+            depth = {ram[16'h0109], ram[16'h0108]};
+            if (depth < 0 || depth > 8) $fatal(1, "invalid session DEPTH");
+            stack_file = $fopen(stack_path, "w");
+            for (index = 0; index < depth; index = index + 1)
+                $fwrite(stack_file, "%04x\n", cpu.r_dstack[(cpu.r_dsp - depth + 1 + index) & 15]);
+            $fclose(stack_file);
+        end
+        if (SESSION && session_done && !tx_valid) begin
+            $writememh(ram_path, ram);
+            $fclose(tx_file);
+            $display("PASS Forth console text session");
+            $finish;
+        end
+        if (!SESSION && halted && !tx_valid) begin
             if (consumed != rx_count || csr[0]) $fatal(1, "RX count/flag");
             if (cpu.r_dsp !== 8 || cpu.r_rsp !== 0 || cpu.T !== 16'ha007)
                 $fatal(1, "parser damaged user stacks");
@@ -92,6 +111,10 @@ initial begin
         !$value$plusargs("rx=%s", rx_path) || !$value$plusargs("count=%d", rx_count) ||
         !$value$plusargs("tx=%s", tx_path) || !$value$plusargs("ram=%s", ram_path))
         $fatal(1, "image/rx/count/tx/ram required");
+    if (SESSION && (!$value$plusargs("waitpc=%d", wait_pc) ||
+                    !$value$plusargs("keypc=%d", key_pc) ||
+                    !$value$plusargs("stack=%s", stack_path)))
+        $fatal(1, "waitpc/keypc/stack required for session");
     $readmemh(image_path, ram);
     $readmemh(rx_path, rx_bytes, 0, rx_count - 1);
     tx_file = $fopen(tx_path, "w");

@@ -1,9 +1,9 @@
 # Kleines Forth auf Prim – Architekturentscheidung (AP 1)
 
 Stand: 31. Oktober 2026. Zielarchitektur; AP 2 implementiert Build und Boot,
-AP 3 die Grundwörter, AP 4 Texteingabe/Parser/Zahlen. Textinterpreter und Compiler
-noch geplant. Änderungen
-hier begründen; aktuellen Stand und Messwerte in STATUS.md nachlesen.
+AP 3 die Grundwörter, AP 4 Texteingabe/Parser/Zahlen und AP 5 den interaktiven
+Interpreter. Laufzeitcompiler noch geplant. Änderungen hier begründen;
+aktuellen Stand und Messwerte in STATUS.md nachlesen.
 Arbeitsstand und APs: [STATUS.md](STATUS.md).
 
 ## Ziel und Abgrenzung
@@ -35,9 +35,11 @@ Alle Bereiche sind Byteadressen; Zellen sind 16 Bit Little Endian.
 | `F000..FFEF` | Reserve, nicht durch ALLOT/Compiler belegen |
 | `FFF0..FFFF` | System-MMIO, kein normaler RAM |
 
-Ab AP 3 ist Scratch 0380..038D für nicht reentrante Software-Arithmetik belegt;
-038E..03FF bleibt für weitere Scratchzwecke frei. Kein anderer Kernelpfad darf
-dort Werte über einen Arithmetikaufruf hinweg als erhalten voraussetzen.
+Scratch 0380..038D ist für nicht reentrante Software-Arithmetik belegt;
+ab AP 5 zusätzlich 038E..039D als 16-Byte-Ziffernpuffer und 03A0..03AF für
+acht gesicherte .S-Zellen. 039E..039F und 03B0..03FF bleiben frei. Kein
+anderer Kernelpfad darf diese Daten über überschreibende Aufrufe hinweg
+als erhalten voraussetzen.
 
 `USER_START = align2(KERNEL_END)`; Buildfehler, wenn der Kernel keinen
 Benutzerspeicher vor F000 lässt. Kein fester, ungemessener Kernelgrößenanspruch.
@@ -230,7 +232,7 @@ AP 6 implementiert beide Optimierungen ohne ISA-Änderung:
 
 ## Öffentlicher Wortumfang der ersten Version
 
-Dies ist der Zielumfang nach AP 8; Zeilen für AP 3 und AP 4 sind implementiert,
+Dies ist der Zielumfang nach AP 8; Zeilen für AP 3–5 sind implementiert,
 die übrigen Wörter noch geplant. Aktuelle Wortliste und Prüfungen in README.md.
 Stubs/Inline-Emitter müssen jeweils dieselben dokumentierten Stackeffekte haben.
 
@@ -273,6 +275,7 @@ Compilerkontext oder Kontrollstruktur falsch, Speicher erschöpft, ungültiges
 ALLOT/Shift, Division durch null/Quotientenüberlauf.
 
 Fehlerausgabe `error: <kurzer Grund>` plus ggf. betroffenem Wort und CRLF.
+Ab AP 5 folgt `ok`/CRLF als erneute Bereitschaftsmeldung, ebenso beim Kaltstart.
 Aktuelle Zeile verwerfen, ggf. Definition zurückrollen, STATE=0, Kontrollstack
 und logischen Datenstack leeren, per JP zum äußeren Eingabeschleifenkopf.
 ABORT nimmt denselben Weg ohne Fehlermeldung. Der Schleifenkopf hat keinen

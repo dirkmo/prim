@@ -25,7 +25,7 @@ def build_image():
 def memory_map(image):
     return {
         'format': 'prim-forth-map-v1',
-        'stage': 'AP4 input/parser/numbers; no text interpreter yet',
+        'stage': 'AP5 interactive interpreter; no runtime compiler yet',
         'image': {'file': 'kernel.bin', 'start': 0, 'size': RAM_END,
                   'endianness': 'little', 'entry': 0},
         'symbols': dict(sorted(image.symbols.items())),
@@ -65,7 +65,7 @@ def main():
     image = write_artifacts(args.output)
     print(f'Built {args.output / "kernel.bin"}: {len(image.memory)} RAM bytes; '
           f'USER_START=0x{image.symbols["user_start"]:04x}; '
-          f'{len(image.words)} kernel words (no text interpreter yet)')
+          f'{len(image.words)} kernel words (interactive interpreter)')
 
 
 if __name__ == '__main__':

@@ -164,9 +164,13 @@ class PrimitiveChecks(unittest.TestCase):
         budget_data = budget_return = budget_extra = 0
         entries = image.words + [
             {'name': name, 'xt': name, 'need': 0, 'give': 0}
-            for name in ('read_line', 'parse_name', 'parse_number')
+            for name in ('read_line', 'parse_name', 'parse_number', 'find_word')
         ]
         for word in entries:
+            if word['name'] == '.S':
+                # Data-stack traversal loops have DEPTH-bounded iteration
+                # counts; test every 0..8 depth in test_console instead.
+                continue
             for initial in range(word['need'], 9 - max(0, word['give'] - word['need'])):
                 pending = [(image.symbols[word['xt']], initial, (None,))]
                 visited = set()
