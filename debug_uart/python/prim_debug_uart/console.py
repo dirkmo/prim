@@ -6,7 +6,11 @@ import shutil
 import sys
 import threading
 
+from .forth_upload import ForthUpload
+
 HELP = """CPU mode: keys go to the seven-bit CPU channel (no local echo).
+Ctrl+U       Send a Forth source file to the interpreter (local filename prompt)
+Ctrl+C       Cancel filename entry/upload (upload finishes the current line)
 Ctrl+B       Switch between CPU mode and local debug prompt
 Ctrl+D       Quit the console in either mode; CPU state is unchanged
 Ctrl+V key   Send the next byte literally (including Ctrl+B or Ctrl+D)
@@ -48,18 +52,24 @@ class Console:
         self._progress_active = False
         self._lock = threading.RLock()
         self._commands = queue.Queue()
+        self._upload_path = None
+        self._upload = None
 
     def _prompt(self):
-        if self.debug_mode:
+        if self._upload_path is not None:
+            self.output.write('Forth file: ' + self._upload_path.decode('ascii'))
+        elif self.debug_mode:
             self.output.write('debug> ' + self.line.decode('ascii'))
 
     def cpu_output(self, data):
         with self._lock:
+            if self._upload is not None:
+                self._upload.feed(data)
             if self._progress_active:
                 self.output.write('\r\x1b[2K')
                 self._progress_active = False
             text = data.decode('ascii')
-            if self.debug_mode:
+            if self.debug_mode or self._upload_path is not None:
                 self.output.write('\r\x1b[2K')
                 if self._shown_partial:
                     self.output.write('\x1b[1A\r\x1b[2K')
@@ -144,6 +154,37 @@ class Console:
 
     def key(self, byte):
         with self._lock:
+            if self._upload is not None:
+                if byte == 4:
+                    self.running = False
+                elif byte == 3:
+                    self._upload.cancel.set()
+                    self.message('Cancellation requested; waiting for the current Forth line')
+                return
+            if self._upload_path is not None:
+                if byte == 4:
+                    self.running = False
+                elif byte in (3, 27):
+                    self._upload_path = None
+                    self.message('Forth upload cancelled')
+                elif byte in (10, 13):
+                    filename = self._upload_path.decode('ascii')
+                    self._upload_path = None
+                    if filename:
+                        self._upload = ForthUpload()
+                        self._commands.put((self._upload, filename))
+                        self.message('Forth upload starting (Ctrl+C to cancel)')
+                    else:
+                        self.message('Forth upload cancelled')
+                elif byte in (8, 127):
+                    if self._upload_path:
+                        self._upload_path.pop()
+                        self.output.write('\b \b')
+                elif 32 <= byte < 127:
+                    self._upload_path.append(byte)
+                    self.output.write(chr(byte))
+                self.output.flush()
+                return
             if self._progress_active:
                 self._progress_active = False
                 self.output.write('\r\x1b[2K')
@@ -160,6 +201,10 @@ class Console:
             elif byte == 2:
                 self._escape.clear()
                 self.debug_mode = not self.debug_mode
+                self.output.write('\r\n')
+                self._prompt()
+            elif byte == 21 and not self.debug_mode:
+                self._upload_path = bytearray()
                 self.output.write('\r\n')
                 self._prompt()
             elif not self.debug_mode:
@@ -203,13 +248,22 @@ class Console:
             except queue.Empty:
                 continue
             try:
-                result = self.session.transact(lambda: self.execute(command))
+                if isinstance(command, tuple):
+                    upload, filename = command
+                    result = upload.run(self.session, filename,
+                                        alive=lambda: self.running, progress=self.progress)
+                else:
+                    result = self.session.transact(lambda: self.execute(command))
                 if result:
                     self.message(result)
             except Exception as exc:
                 self.message(str(exc))
                 if self.session.error:
                     self.running = False
+            finally:
+                if isinstance(command, tuple):
+                    with self._lock:
+                        self._upload = None
 
     def run(self, session, *, input_fd=None):
         import termios
@@ -227,7 +281,7 @@ class Console:
             settings[1] = previous[1]  # Preserve normal terminal output processing.
             termios.tcsetattr(fd, termios.TCSANOW, settings)
             worker.start()
-            self.message('Prim UART console: Ctrl+B CPU/debug, Ctrl+D quit; Ctrl+B then help for commands')
+            self.message('Prim UART console: Ctrl+B CPU/debug, Ctrl+U Forth file, Ctrl+D quit; Ctrl+B then help for commands')
             while self.running:
                 if session.error:
                     raise OSError(f'UART session failed: {session.error}')

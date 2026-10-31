@@ -322,6 +322,8 @@ byte. While RX is full it releases the debug transaction lock, allowing RUN or
 other debug controls to proceed. Do not send several bytes on the same credit.
 Keep the connection open until needed; closing discards unsent queued input.
 CPU execution halted means it cannot consume input, not that debug RX is blocked.
+An optional `cancel=threading.Event()` argument discards queued bytes belonging
+to that call once the event is set; already transmitted bytes are unaffected.
 
 Debug methods are serialized by a reentrant transaction lock, including entire
 persistent write bursts. Use `uart.transact(operation)` to serialize a sequence
@@ -346,6 +348,18 @@ without HALT/RESET, and Ctrl+V quotes the next CPU byte. Empty Enter keeps the
 debug prompt open and shows a fresh prompt.
 Up/Down browses submitted commands in the debug prompt. Moving down past the
 newest entry restores the unfinished input. History lasts for the console session.
+Ctrl+U in CPU mode opens a local Forth source filename prompt. Enter a path
+without quotes (spaces are allowed; `~` is expanded). The running Forth
+interpreter must be ready with an empty input line. The uploader validates ASCII
+and the 127-byte line limit, normalizes line endings, and waits for each line's
+echo and `ok`/`compiled` response before sending the next. Ctrl+C cancels the
+filename prompt or stops after the current upload line completes. Errors and
+ten-second line timeouts stop with the filename/line; previously executed lines
+remain in effect. Unsent bytes are discarded on timeout. Inspect the interpreter
+state before continuing after a timeout or an unfinished definition.
+These are text acknowledgments: program output resembling prompts/errors can
+confuse the uploader, and `KEY` or long-running commands can time out.
+See the [Forth upload workflow](../forth/README.md#use-the-existing-fpga-console).
 In CPU mode, normal Enter goes to the CPU. Raw terminal input distinguishes Enter (CR) from
 Ctrl+B (STX); terminal attributes are restored on exit. `help` or `?` lists
 all commands. CPU output and BREAK remain active while entering commands,

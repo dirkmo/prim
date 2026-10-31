@@ -6,12 +6,15 @@ import queue
 import termios
 import threading
 import time
+import tempfile
+from pathlib import Path
 import unittest
 from unittest.mock import Mock
 
 from prim_debug_uart import DebugTimeout
 from prim_debug_uart.session import UARTSession
 from prim_debug_uart.console import Console, HELP
+from prim_debug_uart.forth_upload import ForthUpload, read_source
 
 
 def wire(text):
@@ -81,6 +84,18 @@ class Transport:
 
 
 class SessionChecks(unittest.TestCase):
+    def test_cancelled_queued_cpu_input_does_not_send_after_credit_returns(self):
+        transport = Transport()
+        with UARTSession(transport, poll_interval=0.001) as session:
+            cancel = threading.Event()
+            session.queue_cpu(b'never', cancel=cancel)
+            until(lambda: 'q' in transport.commands)
+            cancel.set()
+            session.queue_cpu(b'x')
+            transport.rx_full = False
+            until(lambda: transport.cpu)
+            self.assertEqual(transport.cpu, list(b'x'))
+
     def test_read_words_keeps_reader_live_and_blocks_credit_polls(self):
         transport = Transport()
         with UARTSession(transport) as session:
@@ -385,6 +400,163 @@ class SessionChecks(unittest.TestCase):
             thread.join(timeout=2)
             session.close()
             os.close(master); os.close(slave)
+
+
+class ForthUploadChecks(unittest.TestCase):
+    def source(self, data):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        filename = Path(directory.name) / 'source with spaces.fs'
+        filename.write_bytes(data)
+        return str(filename)
+
+    def test_validation_and_newline_normalization(self):
+        self.assertEqual(read_source(self.source(b'a\r\nb\rc\n\nlast')),
+                         [b'a', b'b', b'c', b'', b'last'])
+        self.assertEqual(read_source(self.source(b'')), [])
+        self.assertEqual(read_source(self.source(b'x' * 127)), [b'x' * 127])
+        for data in (b'valid\n' + b'x' * 128, b'valid\n\xff', b'valid\n\x02', b'valid\n\x7f'):
+            upload = ForthUpload()
+            session = Mock(error=None)
+            with self.assertRaisesRegex(ValueError, ':2:'):
+                upload.run(session, self.source(data))
+            session.queue_cpu.assert_not_called()
+
+    def test_live_session_waits_for_each_reply_and_handles_multiline_definition(self):
+        upload = ForthUpload(timeout=1)
+
+        class ForthTransport(Transport):
+            def __init__(self):
+                super().__init__()
+                self.rx_full = False
+                self.lines = []
+                self.line = bytearray()
+
+            def write(self, data):
+                result = super().write(data)
+                if not data[0] & 128:
+                    self.rx_full = False  # Interpreter consumes this byte.
+                    if data == b'\r':
+                        self.lines.append(bytes(self.line))
+                        self.line.clear()
+                        self.emit(b'\r\n')
+                    else:
+                        self.line.extend(data)
+                        self.emit(data)
+                return result
+
+        transport = ForthTransport()
+        results = []
+        filename = self.source(b': square\r\n DUP * ;\n7 square .')
+        with UARTSession(transport, on_output=upload.feed, poll_interval=0.001) as session:
+            def run():
+                try:
+                    results.append(upload.run(session, filename))
+                except Exception as exc:
+                    results.append(exc)
+            thread = threading.Thread(target=run)
+            thread.start()
+            for index, response in enumerate((b'ok', b'compiled', b'ok', b'49 ok'), 1):
+                until(lambda: len(transport.lines) == index)
+                # Neither a debug reply nor uncompleted CPU output grants a line.
+                session.status()
+                self.assertEqual(len(transport.lines), index)
+                transport.emit(response + b'\r\n')
+            thread.join(timeout=2)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(results, [f'{filename}: 3 lines loaded'])
+            self.assertEqual(transport.lines, [b'', b': square', b' DUP * ;', b'7 square .'])
+            self.assertFalse(any(command in ('H', 'G', 'Z') for command in transport.commands))
+
+    def scripted_session(self, upload, replies):
+        session = Mock(error=None)
+        def send(data, *, cancel):
+            response = next(replies)
+            # Chunked reception, including echo containing a prompt word.
+            for byte in data[:-1] + b'\r\n' + response + b'\r\n':
+                upload.feed(bytes([byte]))
+        session.queue_cpu.side_effect = send
+        return session
+
+    def test_error_stops_at_source_line_and_does_not_send_following_line(self):
+        upload = ForthUpload()
+        session = self.scripted_session(upload, iter((b'ok', b'ok', b'error: unknown word BAD')))
+        filename = self.source(b'\\ ok\nBAD\n99 .')
+        with self.assertRaisesRegex(RuntimeError, ':2: error: unknown word BAD'):
+            upload.run(session, filename)
+        self.assertEqual(session.queue_cpu.call_count, 3)
+
+    def test_cancel_finishes_current_line_and_incomplete_definition_is_reported(self):
+        upload = ForthUpload()
+        session = self.scripted_session(upload, iter((b'ok', b'compiled')))
+        with self.assertRaisesRegex(RuntimeError, ':1: file ends inside an unfinished definition'):
+            upload.run(session, self.source(b': unfinished'))
+        upload = ForthUpload()
+        session = self.scripted_session(upload, iter((b'ok', b'ok')))
+        def progress(text):
+            upload.cancel.set()
+        result = upload.run(session, self.source(b'1 DROP\n2 DROP'), progress=progress)
+        self.assertIn('cancelled before line 2', result)
+        self.assertEqual(session.queue_cpu.call_count, 2)
+
+    def test_timeout_discards_unsent_bytes(self):
+        upload = ForthUpload(timeout=0.01)
+        session = Mock(error=None)
+        with self.assertRaisesRegex(RuntimeError, ':0: no Forth response'):
+            upload.run(session, self.source(b'1 .'))
+        self.assertTrue(session.queue_cpu.call_args.kwargs['cancel'].is_set())
+
+    def test_cpu_mode_filename_prompt_and_upload_input_is_local(self):
+        ui = Console(lambda command: None, output=io.StringIO())
+        ui.session = Mock(error=None)
+        filename = self.source(b'1 .')
+        for byte in b'\x15' + filename.encode() + b'X\x7f\r':
+            ui.key(byte)
+        upload, queued = ui._commands.get_nowait()
+        self.assertEqual(queued, filename)
+        self.assertFalse(ui.debug_mode)
+        self.assertIn('Forth file:', ui.output.getvalue())
+        ui.key(ord('x'))
+        ui.key(22)
+        ui.key(2)
+        ui.session.queue_cpu.assert_not_called()
+        ui.key(3)
+        self.assertTrue(upload.cancel.is_set())
+        ui.key(4)
+        self.assertFalse(ui.running)
+
+    def test_filename_cancel_and_literal_ctrl_u(self):
+        ui = Console(lambda command: None, output=io.StringIO())
+        ui.session = Mock()
+        for byte in b'\x15abc\x03\x16\x15':
+            ui.key(byte)
+        self.assertIsNone(ui._upload_path)
+        self.assertTrue(ui._commands.empty())
+        ui.session.queue_cpu.assert_called_once_with(b'\x15')
+
+    def test_console_worker_uploads_outside_debug_transaction_and_restores_input(self):
+        ui = Console(lambda command: None, output=io.StringIO())
+        ui.session = Mock(error=None)
+        def send(data, *, cancel):
+            ui.cpu_output(data[:-1] + b'\r\nok\r\n')
+        ui.session.queue_cpu.side_effect = send
+        filename = self.source(b'1 DROP')
+        worker = threading.Thread(target=ui._worker)
+        try:
+            for byte in b'\x15' + filename.encode() + b'\r':
+                ui.key(byte)
+            worker.start()
+            until(lambda: ui._upload is None)
+            self.assertIn(f'{filename}: 1 lines loaded', ui.output.getvalue())
+            self.assertFalse(ui.debug_mode)
+            ui.session.transact.assert_not_called()
+            ui.session.queue_cpu.side_effect = None
+            ui.session.queue_cpu.reset_mock()
+            ui.key(ord('7'))
+            ui.session.queue_cpu.assert_called_once_with(b'7')
+        finally:
+            ui.running = False
+            worker.join(timeout=2)
 
 
 if __name__ == '__main__':

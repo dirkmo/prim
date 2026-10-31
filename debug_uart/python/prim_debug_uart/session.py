@@ -96,23 +96,26 @@ class UARTSession(DebugUART):
                 self._fail(exc)
                 raise
 
-    def queue_cpu(self, data):
+    def queue_cpu(self, data, *, cancel=None):
+        """Queue input; an optional Event discards bytes not yet sent when set."""
         data = bytes(data)
         if any(byte & 128 for byte in data):
             raise ValueError('CPU UART accepts seven-bit data only; UTF-8 is not supported')
         if self._stop.is_set():
             raise OSError('UART session is closed')
         for byte in data:
-            self._input.put(byte)
+            self._input.put((byte, cancel))
 
     def _send_input(self):
         try:
             while not self._stop.is_set():
                 try:
-                    byte = self._input.get(timeout=0.05)
+                    byte, cancel = self._input.get(timeout=0.05)
                 except queue.Empty:
                     continue
                 while not self._stop.is_set():
+                    if cancel is not None and cancel.is_set():
+                        break
                     # A full RX register never holds the debug transaction lock.
                     if self._operation_lock.acquire(timeout=0.05):
                         try:
@@ -120,6 +123,8 @@ class UARTSession(DebugUART):
                                 with self._write_lock:
                                     if self._stop.is_set():
                                         return
+                                    if cancel is not None and cancel.is_set():
+                                        break
                                     if self.transport.write(bytes([byte])) != 1:
                                         raise OSError('Could not write CPU UART byte')
                                 break

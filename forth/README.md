@@ -1,6 +1,6 @@
 # Small Forth for Prim
 
-An independent on-CPU text interpreter and native-code compiler, with 90 kernel
+An independent on-CPU text interpreter and native-code compiler, with 91 kernel
 words. It uses the existing Prim ISA: **32-cell hardware data and return stacks,
 without runtime data-stack bounds checks**. TokenForth remains a separate language/toolchain.
 
@@ -93,6 +93,31 @@ without changing CPU state. For a fresh Forth session, use `reset-halt` and
 RX-credit polling for queued CPU input. A plain terminal or uploader must pace
 input: the CPU UART has a single retained RX byte, not a line FIFO.
 
+To send a `.fs` file to the running interpreter, press **Ctrl+U in CPU mode**,
+enter its path (relative to the host console's working directory), and press
+Enter. Paths containing spaces need no quotes; `~` is expanded. Start with the
+interpreter ready and its input line empty. The console first sends an empty
+line to synchronize, then sends one source line at a time, waiting for its echo
+and `ok` or `compiled`. Normal keyboard input is blocked during upload.
+For the audio examples, send `audio/forth/audio.fs` first, then
+`audio/forth/demo.fs`; afterward invoke the demo words interactively.
+
+The whole file is checked before transmission: seven-bit ASCII, at most 127
+bytes per line, and no editing/control bytes except TAB/VT/FF whitespace.
+CRLF/CR/LF are normalized and a missing final newline is supplied. Ctrl+C
+cancels filename entry, or stops an upload after the current line completes.
+Errors and the ten-second per-line timeout report the source file and line;
+earlier definitions remain loaded. An unfinished definition at EOF is reported
+and remains open in the interpreter. After cancellation, timeout or incomplete
+input, inspect the interpreter state before continuing; `ABORT` at a fresh input
+line abandons an open definition. Ctrl+D closes the console.
+
+Upload uses the existing text prompts, so programs that print `ok`, `compiled`
+or `error:` can be mistaken for protocol responses. Files that execute `KEY`
+or long-running commands may time out; this uploader is intended for source
+definitions and short interpreter commands. It does not halt/reset the CPU or
+load a RAM image. The debug prompt's `load` command still loads binary images.
+
 This image ends before FFE0, so no `SKIP_UART_MMIO` option is needed. Re-uploading
 it overwrites user RAM. The existing `make image`/`make load-run` targets build
 TokenForth `.cf` programs; use `forth-image` followed by `upload` for this kernel.
@@ -171,6 +196,14 @@ word; VARIABLE adds one zeroed cell; CONSTANT defines a stored value. These
 execute only outside open definitions, and may be used by simple defining
 words. No DOES> behavior is implemented.
 
+`FORGET name` removes the named user word and all definitions and data allocated
+after its header, reclaiming that dictionary RAM. Older definitions remain;
+forgetting a redefinition reveals the previous meaning. Kernel words are
+protected. FORGET is immediate and rejects any open definition, including
+inside `[ ... ]`. Saved execution tokens and addresses into reclaimed memory
+become invalid. For the audio demos, `FORGET AUDIO-DEMO-TIMER` removes all words
+from `demo.fs` while keeping the previously loaded `audio.fs` words.
+
 Interpreted S" returns a temporary address/length valid until the next
 interpreted S" or reset. ." does not overwrite that buffer. Compiled S" refers
 to persistent embedded bytes; compiled ." uses private temporaries and
@@ -220,6 +253,7 @@ Private `last_error` at 0126 retains the last code (zero after reset):
 | 6–10 | Line too long, open comment, invalid BASE, invalid text control, numeric overflow |
 | 11–15 | Unknown word, compile-only word, compiler context, invalid name, dictionary full |
 | 16–21 | No user word for IMMEDIATE, unresolved control, simulator EOF in definition, control stack full, invalid ALLOT, open string |
+| 22 | FORGET target is a protected kernel word |
 
 ## Verification and implementation reference
 
