@@ -108,15 +108,78 @@ Ein nachgeschalteter Interruptcontroller muss den einzelnen Systemtaktimpuls
 sicher erfassen. CPU-Halt oder CPU-Reset haben ohne Ansteuerung von `i_reset`
 keine Wirkung auf den Timer.
 
+## Forth-Treiber
+
+[`forth/timer.fs`](forth/timer.fs) wird zeilenweise in den laufenden Prim-Forth
+geladen (UART-Konsole: **Ctrl+U**, dann `timer/forth/timer.fs`). Der Treiber
+belegt den Systemtimer exklusiv; Audio-Demos mit eigener Timer-Konfiguration
+dürfen ihn währenddessen nicht umstellen. Beim Laden werden nur Wörter
+definiert, keine Timerregister verändert. Die Zahlenbasis ist danach dezimal.
+
+```forth
+TIMER-INIT
+1000 TIMER-WAIT
+TIMER-COUNT@ U. CR
+250 TIMER-ONCE
+: WAIT-DONE BEGIN TIMER-DONE? UNTIL ;
+WAIT-DONE
+1000 TIMER-PERIOD
+TIMER-STOP
+```
+
+| Wort | Stackeffekt | Funktion |
+|---|---|---|
+| `TIMER-INIT` | `( -- )` | COUNT=0, COMPARE=65535, AUTO und ENABLE setzen |
+| `TIMER-COUNT@` / `TIMER-COUNT!` | `( -- u )` / `( u -- )` | COUNT atomar lesen/schreiben |
+| `TIMER-COMPARE@` / `TIMER-COMPARE!` | `( -- u )` / `( u -- )` | COMPARE lesen/schreiben |
+| `TIMER-RESET` | `( -- )` | COUNT und Vorteilerphase auf null setzen |
+| `TIMER-STOP` / `TIMER-START` | `( -- )` | Stoppen/fortsetzen, AUTO erhalten, Timer-INTEN löschen |
+| `TIMER-ONCE` | `( ticks -- )` | Einmal bis COUNT=ticks zählen; null ist sofort fertig |
+| `TIMER-PERIOD` | `( ticks -- )` | AUTO mit Periode ticks; erlaubt 2..65535, sonst ABORT vor Registerzugriff |
+| `TIMER-DONE?` | `( -- flag )` | Momentaufnahme COUNT=COMPARE, kein gespeichertes Ereignis |
+| `TIMER-WAIT` | `( ticks -- )` | 0..65535 Ticks aktiv warten, benötigt freien Lauf nach TIMER-INIT |
+
+Ein Tick dauert `TIMER_DIVISOR / CLK_HZ` Sekunden; auf dem Olimex-Board mit
+25 MHz und Teiler 25000 ist das **1 ms**. Der Teiler ist nicht per Forth
+einstellbar. [`forth/demo.fs`](forth/demo.fs) definiert dazu `TIMER-DEMO`.
+Die Wartezeit wird ab der ersten COUNT-Abfrage gemessen; sie hat Tick-Auflösung
+und zusätzlichen Interpreter-/Aufrufaufwand. `TIMER-WAIT` sammelt aufeinanderfolgende
+COUNT-Differenzen über den 16-Bit-Überlauf hinweg; zwischen zwei Abfragen müssen
+weniger als 65536 Ticks liegen. Es verändert keine Timerregister. Bei gestopptem
+Timer oder einem anderen COMPARE-Wert ist diese Wartefunktion ungeeignet.
+
+Im AUTO-Betrieb folgt der erste Vergleich nach `ticks-1` Ticks, weitere Vergleiche
+jeweils nach `ticks` Ticks. COMPARE=0 bleibt bei COUNT=0 stehen; deshalb sind
+Perioden von null oder einem Tick ausgeschlossen. `TIMER-DONE?` kann einen
+Vergleich im AUTO-Modus verpassen. Es eignet sich vor allem für `TIMER-ONCE`.
+`TIMER-START` setzt COUNT nicht zurück: einen fertigen Einmallauf mit
+`TIMER-RESET` neu starten.
+
+Der Treiber schaltet Timer-IRQs bei der Konfiguration aus. Die Forth-ISR besitzt
+keine Benutzer-Callback-Schnittstelle. CPU-IRQ-Freigabe und andere Quellen bleiben
+unverändert; FFF4 wird ausschließlich byteweise geschrieben, damit FFF5
+(gemeinsames W1C-Pendingregister) unangetastet bleibt. Ein altes Timer-Pendingbit
+wird weder quittiert noch als Ereignis ausgewertet. Die ISR bleibt unverändert
+mit INTDI am Eintritt und INTEI.RET am Ende.
+
+`forth/run.py` simuliert keinen Timer: dort kann der Treiber geladen werden,
+zeitabhängige Aufrufe benötigen jedoch Hardware oder ein passendes Testmodell.
+
 ## Tests
 
 Benötigt werden Python 3 (nur Standardbibliothek), Icarus Verilog und `vvp`:
 
 ```sh
 python3 timer/tests/test_timer.py
+python3 forth/tests/test_timer.py -v
 ```
 
-Der Test ist auch außerhalb dieses Repositorys ausführbar, wenn das komplette
+Der zweite Aufruf prüft den Forth-Treiber im CPU-Modell: Laden in beiden
+Konsolenprofilen, Registerzugriffe, Grenzwerte und Wartezeiten mit vorgegebenen
+COUNT-Abfragen einschließlich Überlauf. Er prüft keine FPGA-Zeitgenauigkeit.
+Diese Prüfungen sind auch in `python3 forth/test.py` enthalten.
+
+Der RTL-Test ist auch außerhalb dieses Repositorys ausführbar, wenn das komplette
 Verzeichnis `timer/` kopiert wird. Toolpfade lassen sich über `--iverilog` und
 `--vvp` angeben. Die Tests prüfen Register-/Bytezugriffe, Schreibpriorität,
 Einmal-/Automatikbetrieb, Interrupts, Reset, Pause/Neustart, 16-Bit-Grenzen und

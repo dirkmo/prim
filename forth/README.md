@@ -101,6 +101,10 @@ line to synchronize, then sends one source line at a time, waiting for its echo
 and `ok` or `compiled`. Normal keyboard input is blocked during upload.
 For the audio examples, send `audio/forth/audio.fs` first, then
 `audio/forth/demo.fs`; afterward invoke the demo words interactively.
+For the [system timer driver](../timer/README.md#forth-treiber), send
+`timer/forth/timer.fs`, then optionally `timer/forth/demo.fs`.
+On the Olimex board, `TIMER-INIT 1000 TIMER-WAIT` waits about one second.
+The host CPU model does not simulate the timer.
 
 The whole file is checked before transmission: seven-bit ASCII, at most 127
 bytes per line, and no editing/control bytes except TAB/VT/FF whitespace.

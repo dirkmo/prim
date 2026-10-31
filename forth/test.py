@@ -12,7 +12,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 SUITES = ('boot', 'primitives', 'parser', 'console', 'compiler', 'control', 'data',
-          'system', 'examples', 'dual', 'irq', 'keyboard', 'frontend', 'dual_system')
+          'system', 'examples', 'timer', 'dual', 'irq', 'keyboard', 'frontend', 'dual_system')
 
 
 def main():
