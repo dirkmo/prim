@@ -1,6 +1,7 @@
 """Reusable Forth-owned UART-buffer session simulator, no host interpretation."""
 from pathlib import Path
 from support.process import run
+from forth.tests.tools import configured_tools
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -8,17 +9,18 @@ ROOT = Path(__file__).resolve().parents[2]
 class RtlConsole:
     def __init__(self, directory, image):
         self.directory, self.image = Path(directory), image
+        self.tools = configured_tools()
         self.simulator = self.directory / 'console'
         self.image_path = self.directory / 'image.hex'
         self.image_path.write_text(''.join(f'{b:02x}\n' for b in bytes(image.memory) + bytes(16)))
-        run(['iverilog', '-g2012', '-s', 'tb_parser', '-P', 'tb_parser.SESSION=1',
+        run([self.tools.iverilog, '-g2012', '-s', 'tb_parser', '-P', 'tb_parser.SESSION=1',
              '-I', ROOT / 'cpu/rtl', '-o', self.simulator, ROOT / 'forth/tests/tb_parser.sv',
              ROOT / 'cpu/rtl/prim.v', ROOT / 'debug_uart/rtl/uart_buffers.v'])
 
     def session(self, payload):
         rx, tx, ram, stack = [self.directory / f'{n}.hex' for n in ('rx', 'tx', 'ram', 'stack')]
         rx.write_text(''.join(f'{b:02x}\n' for b in payload))
-        result = run(['vvp', self.simulator, f'+image={self.image_path}', f'+rx={rx}',
+        result = run([self.tools.vvp, self.simulator, f'+image={self.image_path}', f'+rx={rx}',
                       f'+count={len(payload)}', f'+tx={tx}', f'+ram={ram}',
                       f'+stack={stack}', f'+waitpc={self.image.symbols["console_next"]}',
                       f'+keypc={self.image.symbols["raw_key"]}'])

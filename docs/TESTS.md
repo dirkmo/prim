@@ -433,7 +433,36 @@ werden; die Dokumentation hält keine dauerhaft gültige Testanzahl fest.
 `python cpu/tests/test_debug_cpu.py` prüft CPU-Halt/Step bei Speicherwartezyklen.
 `python debug_uart/tests/test_rtl.py` prüft RX/TX, Parser und TX-Arbiter ohne
 CPU- oder Systeminstanzen. `python debug_uart/tests/test_host.py` prüft die
-Hostbibliothek. CTest integriert alle vier Einstiegspunkte; insgesamt gibt es
-sechzehn Suiten einschließlich der Olimex-Board-, Host-CLI- und Toplevel-Makefile-Tests. Details zum implementierten Protokoll und zum `synth_ice40`-Vergleich
+Hostbibliothek. CTest integriert alle vier Einstiegspunkte; CTest includes the Olimex board, host CLI, top-level Makefile and standalone
+Forth suites. Details zum implementierten Protokoll und zum `synth_ice40`-Vergleich
 stehen in [DRAFT.md](DRAFT.md). FPGA-CPU-Ausgaben werden als sieben Nutzbits
 verglichen; UTF-8 wird auf dieser Leitung nicht erhalten.
+
+
+## Standalone Forth integration (AP 9)
+
+The independent Forth kernel in `forth/` has a separate `forth_checks` CTest
+entry; TokenForth and its unfinished token interpreter are different components.
+It runs software checks, instruction-by-instruction CPU/SRAM comparisons,
+UART-buffer sessions and a complete serial RX/TX system test:
+
+```sh
+python forth/test.py --rtl
+ctest --test-dir build/sim -R '^forth_checks$' --output-on-failure
+cmake --build build/sim --target forth_kernel
+```
+
+`forth/test.py --output DIR` retains a fresh kernel image, per-suite logs and
+`report.json` (commands, exit codes, timings, test/skip counts, explicit tool
+paths). Software-only invocation omits `--rtl`; reported skips are intentional.
+CTest passes its detected Icarus/vvp paths through `--iverilog`/`--vvp`.
+No FPGA programming or physical serial port is accessed by these tests.
+
+The complete system case sends ordinary ASCII source through the real RTL
+serial receiver, compiles definitions on Prim, accesses SRAM, checks serial TX
+against independent expected bytes, exercises rollback and uses high-bit debug
+`q` replies for RX credit. It finally halts through the debug UART and checks
+the runtime state. Input, expected bytes and captured TX are retained under
+`artifacts/system/` when run by the integrated runner. This covers the serial
+RX boundary in simulation; it is not a board validation or a timing guarantee
+for external SRAM. Stacks remain 16/16 hardware cells and eight user data cells.

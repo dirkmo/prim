@@ -323,3 +323,20 @@ AP 8 prüft außerdem atomare Daten-Definitionen auf bereits benutztem RAM,
 Allocation-/Puffergrenzen, String-Lebensdauer, Überspringen eingebetteter Bytes,
 fehlende Schlusszeichen, beide Stringmodi und volle Benutzerstacks. Ein
 übersetztes Stringwort wird mit allen drei physischen SRAM-Timings ausgeführt.
+
+
+## Integrated regression entry point (AP 9)
+
+```sh
+python3 forth/test.py --rtl
+cmake -S . -B build/sim
+cmake --build build/sim --target simulator forth_kernel
+ctest --test-dir build/sim --output-on-failure
+```
+
+The runner retains kernel artifacts, one log per suite and report.json under
+build/forth-tests/; CTest uses build/sim/forth-tests/. Explicit --iverilog/--vvp
+options support non-default tool locations. The AP-9 run passed all 18 CTest
+entries and all 63 Forth test methods without skips. It adds a complete serial
+RX/TX/CPU/SRAM test using debug-q input credit and debug HALT. This is RTL
+simulation, not a hardware test. Stacks remain 16/16, with eight user data cells.

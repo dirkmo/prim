@@ -12,53 +12,13 @@ for directory in (ROOT, ROOT / 'src', ROOT / 'tests', ROOT / 'forth/tests'):
 
 from forth.build import build_image
 from forth.kernel.boot import VARIABLES
-from prim.cpu import Prim
 from prim.isa import PrimOpcodes as Op
-from test_primitives import Runner, UartMemory, stack_delta
+from forth.tests.model import Runner, formatted, session
+
+
+from forth.tests.tools import configured_tools
 
 RTL = False
-
-
-def formatted(value, base, signed=False):
-    alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    negative = signed and value >= 32768
-    if negative:
-        value = 65536 - value
-    text = ''
-    while value:
-        value, digit = divmod(value, base)
-        text = alphabet[digit] + text
-    return ('-' if negative else '') + (text or '0')
-
-
-def session(image, payload, prepare=None):
-    memory = UartMemory(image.memory, payload)
-    cpu = Prim(memory)
-    physical = frames = max_data = max_frames = 0
-    for steps in range(2000000):
-        if cpu._pc in (image.symbols['console_next'], image.symbols['raw_key']) and not memory.rx:
-            depth = memory.read16(VARIABLES['depth'])
-            values = [cpu._ds[(cpu._dsp - depth + 1 + n) % 16] for n in range(depth)]
-            return bytes(memory.tx), values, memory, (max_data, max_frames)
-        if cpu._pc == image.symbols['idle']:
-            if prepare:
-                prepare(memory)
-                prepare = None
-            # Cold/error/ABORT entry abandons physical cells and frames;
-            # pointers need not become zero to establish an empty stack base.
-            physical = frames = 0
-        opcode = memory.data[cpu._pc]
-        op = opcode & 127
-        physical += stack_delta(op)
-        frames += int(op == Op.CALL)
-        if opcode & 128 and op not in (Op.CALL, Op.JP, Op.JZ):
-            frames -= 1
-        if not (0 <= physical <= 16 and 0 <= frames <= 16):
-            raise AssertionError(f'stack budget at {cpu._pc:04x}: DS={physical}, RS={frames}')
-        max_data, max_frames = max(max_data, physical), max(max_frames, frames)
-        cpu.step()
-        memory.reads.clear()  # Long formatting sessions need no retained bus log.
-    raise AssertionError('console timeout')
 
 
 class ConsoleChecks(unittest.TestCase):
@@ -240,14 +200,14 @@ class ConsoleChecks(unittest.TestCase):
             directory = Path(directory)
             simulator, image_path = directory / 'console', directory / 'image.hex'
             image_path.write_text(''.join(f'{b:02x}\n' for b in bytes(self.image.memory) + bytes(16)))
-            run(['iverilog', '-g2012', '-s', 'tb_parser', '-P', 'tb_parser.SESSION=1',
+            run([configured_tools().iverilog, '-g2012', '-s', 'tb_parser', '-P', 'tb_parser.SESSION=1',
                  '-I', ROOT / 'cpu/rtl', '-o', simulator, ROOT / 'forth/tests/tb_parser.sv',
                  ROOT / 'cpu/rtl/prim.v', ROOT / 'debug_uart/rtl/uart_buffers.v'])
             for payload, expected, stack in cases:
                 with self.subTest(payload=payload):
                     rx, tx, ram, stack_path = [directory / f'{n}.hex' for n in ('rx', 'tx', 'ram', 'stack')]
                     rx.write_text(''.join(f'{b:02x}\n' for b in payload))
-                    result = run(['vvp', simulator, f'+image={image_path}', f'+rx={rx}',
+                    result = run([configured_tools().vvp, simulator, f'+image={image_path}', f'+rx={rx}',
                                   f'+count={len(payload)}', f'+tx={tx}', f'+ram={ram}',
                                   f'+stack={stack_path}', f'+waitpc={self.image.symbols["console_next"]}',
                                   f'+keypc={self.image.symbols["raw_key"]}'])
@@ -260,7 +220,7 @@ class ConsoleChecks(unittest.TestCase):
         if not RTL:
             self.skipTest('enable formatting with physical SRAM/UART-TX with --rtl')
         from forth.image import Image
-        from support.config import Tools
+        from forth.tests.tools import configured_tools as Tools
         from support.paths import TIMINGS
         from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
         with tempfile.TemporaryDirectory(prefix='forth-format-rtl-') as directory:

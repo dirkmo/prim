@@ -18,7 +18,7 @@ import sys
 from unittest.mock import patch
 from pathlib import Path
 root = Path.cwd()
-for directory in ['cpu/tests', 'system/tests', 'debug_uart/tests']:
+for directory in ['cpu/tests', 'system/tests', 'debug_uart/tests', 'forth/tests']:
     sys.path.insert(0, str(root / directory))
 sys.argv = ['embedding-application', '--unknown-option', '--compiler-python', '/missing']
 with patch('argparse.ArgumentParser.parse_args', side_effect=AssertionError('parsed argv')), \\
@@ -29,6 +29,9 @@ with patch('argparse.ArgumentParser.parse_args', side_effect=AssertionError('par
     import compare, control_flow_regressions
     import test_compare, test_memory, test_sram, test_io, test_tokenforth
     import test_debug_cpu, test_debug_uart, test_rtl, test_host
+    import test_boot, test_primitives, test_parser, test_console
+    import test_compiler, test_control, test_data, test_system
+    import forth.test, forth.run
 print('PASS imports')
 '''
         result = run([sys.executable, '-c', code], cwd=ROOT)

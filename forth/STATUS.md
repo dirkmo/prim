@@ -1,9 +1,9 @@
 # Forth für Prim – kompakte Übergabe und Arbeitspakete
 
-Stand: 31. Oktober 2026. AP 1–8 abgeschlossen; AP 9–10 offen.
-Letzter Nutzerauftrag: AP 7 und 8 umsetzen, jeweils committen. Dieser Stand wird mit dem
-Commit dieser Übergabe festgehalten. AP 9/10 noch offen.
-AP-7-Commit: `79db3df`; AP 8 wird mit diesem Dokument committet.
+Stand: 31. Oktober 2026. AP 1–9 abgeschlossen; AP 10 offen.
+Letzter Nutzerauftrag: restliche APs umsetzen und committen, Stacks unverändert lassen. Dieser Stand wird mit dem
+Commit dieser Übergabe festgehalten. AP 10 noch offen.
+AP-7-Commit: `79db3df`, AP 8: `797f599`. AP 9 wird mit dieser Übergabe committet.
 AP-5-Commit: `d0ff968`, AP 4: `cf739a7`.
 Weitere Historie: AP 3 `1e77c88`, AP 1/2 `b620a9e`.
 
@@ -142,7 +142,7 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
 8. **AP 8 – Daten/Alltagswörter: abgeschlossen.** Abhängig AP6/teilweise7. HERE ALLOT ,
    C, CREATE VARIABLE CONSTANT TYPE S" ."; Stringsyntax/Lebensdauer gemäß
    Architektur. Interne Emitter werden bereits AP6 benötigt. Kein DOES>.
-9. **AP 9 – Integration/Regression: offen, begleitet laufend.** Nach AP8 abschließen.
+9. **AP 9 – Integration/Regression: abgeschlossen.** Nach AP8 abschließen.
    Textsessions/CPU-Kompilierung, unabhängige Sollwerte, Python/RTL/UART,
    Fehler-/Speichergrenzen. Vorhandene Regressionen erhalten; echte Hardware
    getrennt ausweisen.
@@ -215,6 +215,22 @@ versteckte Transaktionen, volle Stacks, Lifetime und SRAM-Stringausführung.
 Forth-SRAM-Adapter: Watchdog1M, Kontroll-Quelltexttest jetzt bis50k Instruktionen,
 da mehr Kernelwörter die Suche verlängern; tatsächliches Timing unverändert.
 
-Nächste AP9/10: Gesamtintegration/Regressionen und abschließende Anleitung/
-Beispiele vervollständigen. Bestehende Wort-/Compiler- und Stackverträge wahren.
-Keine neue ISA oder Stackvergrößerung voraussetzen. Kein Boardtest erfolgt.
+AP9: `forth/test.py --rtl` führt alle Forth-Tests isoliert aus und speichert
+Kernelartefakte, Logs und report.json unter build/forth-tests/ (CTest unter
+build/sim/forth-tests/). Explizite --iverilog/--vvp-Optionen über FORTH_*-Variablen
+bis zu allen Helfern durchgereicht. Keine Querimporte zwischen Testmodulen:
+model.py enthält die gemeinsamen Fixtures und unabhängigen Sollwerthelfer.
+CTest forth_checks (Label forth) und Buildziel forth_kernel integriert.
+Neue gemischte Systemfälle: Software, UART-Puffer und kompletter serieller
+RX/CPU/SRAM/TX-Pfad. Echtes Debug-q für Kredit, abschließendes Debug-HALT,
+Rollback nach Fehler, genaue unabhängig vorgegebene Ausgabe. Kein Boardzugriff.
+Vorhandener Import-Sideeffect-Test erfasst jetzt auch Forth-Module.
+Stacks bleiben 16/16 und Benutzerlimit8; Messvarianten nicht übernommen.
+
+AP9-Verifikation: vollständiger CTest-Lauf 18/18 erfolgreich; Forth-Runner
+63 Tests, keine Skips, inklusive vollständigem seriellen RTL-Systemtest.
+Import-Sideeffect-Prüfung zusätzlich bestanden. Hardware-Stacks bleiben auf
+expliziten Nutzerwunsch unverändert 16/16 (kein Block-RAM-Umbau).
+
+AP10 als Nächstes: vollständige Wortreferenz, praxisnahe Beispiele samt
+verifiziertem Solltext, Build-/Start-/Board-Konsole-Anleitung und Grenzen.

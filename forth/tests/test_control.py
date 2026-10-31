@@ -12,8 +12,7 @@ from forth.build import build_image
 from forth.image import Image, USER_LIMIT
 from forth.kernel.boot import VARIABLES
 from prim.isa import PrimOpcodes as Op
-from test_console import session
-from test_compiler import cell, lookup
+from forth.tests.model import cell, lookup, session
 
 RTL = False
 CASES = [
@@ -116,7 +115,7 @@ class ControlChecks(unittest.TestCase):
     def test_rtl_control_with_physical_sram(self):
         if not RTL:
             self.skipTest('enable physical SRAM branch execution with --rtl')
-        from support.config import Tools
+        from forth.tests.tools import configured_tools as Tools
         from support.paths import TIMINGS
         from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
         # Source is interpreted/compiled by Prim; host only installs its bytes.

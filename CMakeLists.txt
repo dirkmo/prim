@@ -90,6 +90,15 @@ add_test(NAME top_makefile_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test_makefile.py)
 add_test(NAME test_harness_checks
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test_support.py)
+add_test(NAME forth_checks
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/forth/test.py --rtl
+        --iverilog ${IVERILOG_EXECUTABLE} --vvp ${VVP_EXECUTABLE}
+        --output ${CMAKE_BINARY_DIR}/forth-tests)
+set_tests_properties(forth_checks PROPERTIES TIMEOUT 900 LABELS "forth")
+add_custom_target(forth_kernel
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/forth/build.py
+        --output ${CMAKE_BINARY_DIR}/forth
+    VERBATIM)
 
 
 # The CPU simulator deliberately links no system or UART sources.

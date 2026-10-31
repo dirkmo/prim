@@ -14,7 +14,9 @@ from forth.build import build_image
 from forth.image import Image
 from forth.kernel.boot import VARIABLES
 from prim.isa import PrimOpcodes as Op
-from test_primitives import Runner
+from forth.tests.model import Runner
+
+from forth.tests.tools import configured_tools
 
 RTL = False
 
@@ -172,7 +174,7 @@ class ParserChecks(unittest.TestCase):
     def test_rtl_parser_and_number_conversion(self):
         if not RTL:
             self.skipTest('enable SRAM/UART instruction comparisons with --rtl')
-        from support.config import Tools
+        from forth.tests.tools import configured_tools as Tools
         from support.paths import TIMINGS
         from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
 
@@ -241,10 +243,10 @@ class ParserChecks(unittest.TestCase):
             tx_path, ram_path = directory / 'tx.hex', directory / 'ram.hex'
             image_path.write_text(''.join(f'{byte:02x}\n' for byte in bytes(image.memory) + bytes(16)))
             rx_path.write_text(''.join(f'{byte:02x}\n' for byte in payload))
-            run(['iverilog', '-g2012', '-s', 'tb_parser', '-I', ROOT / 'cpu/rtl',
+            run([configured_tools().iverilog, '-g2012', '-s', 'tb_parser', '-I', ROOT / 'cpu/rtl',
                  '-o', simulator, ROOT / 'forth/tests/tb_parser.sv',
                  ROOT / 'cpu/rtl/prim.v', ROOT / 'debug_uart/rtl/uart_buffers.v'])
-            result = run(['vvp', simulator, f'+image={image_path}', f'+rx={rx_path}',
+            result = run([configured_tools().vvp, simulator, f'+image={image_path}', f'+rx={rx_path}',
                           f'+count={len(payload)}', f'+tx={tx_path}', f'+ram={ram_path}'])
             self.assertIn('PASS Forth line/parser', result.stdout)
             actual_tx = bytes(int(line, 16) for line in tx_path.read_text().splitlines())

@@ -14,26 +14,10 @@ from forth.build import build_image
 from forth.image import Image, USER_LIMIT
 from forth.kernel.boot import VARIABLES
 from prim.isa import PrimOpcodes as Op
-from test_console import session
-from test_primitives import Runner
+from forth.tests.model import Runner, cell, lookup, session
+
 
 RTL = False
-
-
-def cell(memory, address):
-    data = memory.data if hasattr(memory, 'data') else memory
-    return int.from_bytes(data[address:address + 2], 'little')
-
-
-def lookup(memory, name):
-    data = memory.data if hasattr(memory, 'data') else memory
-    header = cell(data, VARIABLES['latest'])
-    while header:
-        length = data[header + 3]
-        if bytes(data[header + 8:header + 8 + length]).upper() == name.upper().encode():
-            return header, cell(data, header + 4)
-        header = cell(data, header)
-    raise AssertionError(f'missing dictionary entry: {name}')
 
 
 class CompilerChecks(unittest.TestCase):
@@ -247,7 +231,7 @@ class CompilerChecks(unittest.TestCase):
     def test_rtl_compile_and_execute_with_physical_sram(self):
         if not RTL:
             self.skipTest('enable CPU-side compilation with physical SRAM with --rtl')
-        from support.config import Tools
+        from forth.tests.tools import configured_tools as Tools
         from support.paths import TIMINGS
         from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
         cases = [(b': x 128 ; x', b'ok\r\n', [128]),

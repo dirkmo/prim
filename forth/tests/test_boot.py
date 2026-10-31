@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'src'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
-from forth.build import build_image, memory_map
+from forth.build import build_image
 from forth.kernel.boot import VARIABLES
 from forth.image import Image, Ref
 from prim.cpu import Prim
@@ -114,7 +114,7 @@ class BootChecks(unittest.TestCase):
     def test_rtl_cold_start(self):
         if not RTL:
             self.skipTest('enable CPU + physical SRAM + UART checks with --rtl')
-        from support.config import Tools
+        from forth.tests.tools import configured_tools as Tools
         from support.paths import TIMINGS
         from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
 

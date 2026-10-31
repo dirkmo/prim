@@ -1,6 +1,5 @@
 """Independent Forth primitive expectations; --rtl adds SRAM/UART checks."""
 import argparse
-from collections import deque
 from pathlib import Path
 import random
 import sys
@@ -12,104 +11,16 @@ for directory in (ROOT, ROOT / 'src', ROOT / 'tests'):
     sys.path.insert(0, str(directory))
 
 from forth.build import build_image
-from forth.image import Image, USER_LIMIT
+from forth.image import Image
 from forth.kernel.boot import VARIABLES
 from forth.kernel.primitives import ERRORS
-from prim.cpu import Prim
 from prim.isa import PrimOpcodes as Op
-from support.reference import Memory
+
+from forth.tests.model import Runner, signed, stack_delta
+
+from forth.tests.tools import configured_tools
 
 RTL = False
-
-
-def stack_delta(op):
-    return (1 if op in (Op.PUSH, Op.PUSH8, Op.DUP, Op.OVER, Op.CARRY, Op.FROM_R)
-            else -2 if op in (Op.JZ, Op.STORE, Op.BYTE_STORE)
-            else -1 if op in (Op.CALL, Op.JP, Op.AND, Op.OR, Op.XOR,
-                             Op.ADD, Op.SUB, Op.LTS, Op.LTU, Op.NIP,
-                             Op.DROP, Op.TO_R, Op.INTAD) else 0)
-
-
-def signed(n):
-    return n if n < 0x8000 else n - 65536
-
-
-class UartMemory(Memory):
-    def __init__(self, image, rx=()):
-        super().__init__(image, uart=True)
-        self.rx = deque(rx)
-        self.polls = self.consumed = 0
-
-    def read8(self, address):
-        if address == 0xFFFE:
-            self.polls += 1
-            value = 2 | (bool(self.rx) and self.polls >= 5)
-            self.reads.append([address, value])
-            return value
-        if address == 0xFFFF:
-            if self.polls < 5 or not self.rx:
-                raise AssertionError('RX read before RXAVAIL')
-            value = self.rx.popleft()
-            self.consumed += 1
-            self.reads.append([address, value])
-            return value
-        return super().read8(address)
-
-
-class Runner:
-    def __init__(self, image, inputs=(), rx=()):
-        self.image = image
-        self.memory = UartMemory(image.memory, rx)
-        self.cpu = Prim(self.memory)
-        self.words = {word['name']: image.symbols[word['xt']] for word in image.words}
-        self.max_data = self.max_return = self.max_extra = 0
-        self.initial = len(inputs)
-        for _ in range(500):
-            if self.cpu._pc == image.symbols['idle']:
-                break
-            self.cpu.step()
-        else:
-            raise AssertionError('boot timeout')
-        for value in inputs:
-            self.cpu.dpush(value)
-        self.memory.write16(VARIABLES['depth'], len(inputs))
-        self.memory.writes.clear()
-        self.base = self.cpu._dsp - len(inputs)
-
-    def call(self, word, limit=10000):
-        return self.invoke(self.words[word], word, limit)
-
-    def invoke(self, target, word='private routine', limit=200000):
-        program = Image()
-        program.org(USER_LIMIT)  # Reserved RAM, outside the compiling dictionary.
-        program.push(target)
-        program.op(Op.CALL)
-        program.op(Op.BREAK)
-        start, end = USER_LIMIT, program.pc
-        self.memory.data[start:end] = program.memory[start:end]
-        self.cpu._pc = start
-        physical_depth = self.memory.read16(VARIABLES['depth'])
-        entry_depth = physical_depth
-        for step in range(limit):
-            if self.cpu._pc == self.image.symbols['idle']:
-                return False  # Error abandons the current invocation.
-            opcode = self.memory.data[self.cpu._pc]
-            if opcode == Op.BREAK:
-                return True
-            op = opcode & 127
-            physical_depth += stack_delta(op)
-            if not 0 <= physical_depth <= 16:
-                raise AssertionError(f'physical stack violation in {word}: {physical_depth}')
-            self.max_data = max(self.max_data, physical_depth)
-            self.max_extra = max(self.max_extra, physical_depth - entry_depth)
-            self.cpu.step()
-            self.max_return = max(self.max_return, self.cpu._rsp)
-        raise AssertionError(f'timeout in {word}')
-
-    def values(self):
-        depth = self.memory.read16(VARIABLES['depth'])
-        return [self.cpu._ds[(self.cpu._dsp - depth + 1 + n) % 16]
-                for n in range(depth)]
 
 
 class PrimitiveChecks(unittest.TestCase):
@@ -351,7 +262,7 @@ class PrimitiveChecks(unittest.TestCase):
     def test_rtl_representative_programs(self):
         if not RTL:
             self.skipTest('enable CPU + physical SRAM + UART checks with --rtl')
-        from support.config import Tools
+        from forth.tests.tools import configured_tools as Tools
         from support.paths import TIMINGS
         from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
         with tempfile.TemporaryDirectory(prefix='forth-primitives-rtl-') as directory:
@@ -417,13 +328,13 @@ class PrimitiveChecks(unittest.TestCase):
             source = ROOT / 'forth/tests/tb_key.sv'
             # The shared source resolver intentionally only knows CPU/system
             # sources. Compile this Forth-owned testbench explicitly.
-            run(['iverilog', '-g2012', '-s', 'tb_key', '-I', ROOT / 'cpu/rtl',
+            run([configured_tools().iverilog, '-g2012', '-s', 'tb_key', '-I', ROOT / 'cpu/rtl',
                  '-o', binary, source, ROOT / 'cpu/rtl/prim.v',
                  ROOT / 'debug_uart/rtl/uart_buffers.v'])
             hexfile = directory / 'image.hex'
             memory = bytes(image.memory) + bytes(16)
             hexfile.write_text(''.join(f'{byte:02x}\n' for byte in memory))
-            result = run(['vvp', binary, f'+image={hexfile}'], cwd=directory)
+            result = run([configured_tools().vvp, binary, f'+image={hexfile}'], cwd=directory)
             self.assertIn('PASS Forth KEY', result.stdout)
 
     @classmethod
