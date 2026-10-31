@@ -22,6 +22,7 @@ ERRORS = {
     'immediate': (16, 'no user definition'),
     'control': (17, 'unresolved control'),
     'incomplete': (18, 'unfinished definition'),
+    'control_overflow': (19, 'control stack overflow'),
 }
 
 # Software arithmetic scratch. No interrupts/reentrant arithmetic in version 1.

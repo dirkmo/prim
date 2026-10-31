@@ -353,7 +353,7 @@ class PrimitiveChecks(unittest.TestCase):
             self.skipTest('enable CPU + physical SRAM + UART checks with --rtl')
         from support.config import Tools
         from support.paths import TIMINGS
-        from support.sram import SramSimulation
+        from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
         with tempfile.TemporaryDirectory(prefix='forth-primitives-rtl-') as directory:
             simulation = SramSimulation(directory, Tools(), with_uart=True)
             simulation.build()

@@ -116,7 +116,7 @@ class BootChecks(unittest.TestCase):
             self.skipTest('enable CPU + physical SRAM + UART checks with --rtl')
         from support.config import Tools
         from support.paths import TIMINGS
-        from support.sram import SramSimulation
+        from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
 
         image = build_image()
         fixture = bytearray(image.memory)

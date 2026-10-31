@@ -174,7 +174,7 @@ class ParserChecks(unittest.TestCase):
             self.skipTest('enable SRAM/UART instruction comparisons with --rtl')
         from support.config import Tools
         from support.paths import TIMINGS
-        from support.sram import SramSimulation
+        from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
 
         with tempfile.TemporaryDirectory(prefix='forth-parser-rtl-') as directory:
             simulation = SramSimulation(directory, Tools(), with_uart=True)

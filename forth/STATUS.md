@@ -1,8 +1,8 @@
 # Forth für Prim – kompakte Übergabe und Arbeitspakete
 
-Stand: 31. Oktober 2026. AP 1–6 abgeschlossen; AP 7–10 offen.
-Letzter Nutzerauftrag: AP 6 umsetzen und committen. Dieser Stand wird mit dem
-Commit dieser Übergabe festgehalten. AP 7 nicht begonnen.
+Stand: 31. Oktober 2026. AP 1–7 abgeschlossen; AP 8–10 offen.
+Letzter Nutzerauftrag: AP 7 und 8 umsetzen, jeweils committen. Dieser Stand wird mit dem
+Commit dieser Übergabe festgehalten. AP 8 nicht begonnen.
 AP-5-Commit: `d0ff968`, AP 4: `cf739a7`.
 Weitere Historie: AP 3 `1e77c88`, AP 1/2 `b620a9e`.
 
@@ -14,8 +14,8 @@ CPU/ISA, Stackgrößen und bestehende Tests/Simulationshelfer unverändert.
 Multiplikation/Division/variable Schiebeweiten in Software. Keine beschlossenen
 Hardware-Erweiterungen. Return-Bit-Folding und Tail-CALL→JP sind implementiert.
 
-71 Kernelwörter, interaktiver Interpreter und Laufzeitcompiler für `:`/`;`.
-Kontrollstrukturen und Daten-Definitionswörter folgen erst in AP 7/8.
+79 Kernelwörter, interaktiver Interpreter und Laufzeitcompiler für `:`/`;`.
+Kontrollstrukturen implementiert; Daten-Definitionswörter folgen in AP 8.
 Start: ` .venv/bin/python forth/run.py ` (Prim-Modell mit Terminal-UART).
 Build: ` .venv/bin/python forth/build.py `; reproduzierbare kernel.bin/map.json/
 disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
@@ -135,7 +135,7 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
    Fehler/ABORT zuerst Rollback, danach definition_open löschen. Konservative
    Return-Bit-/Tail-CALL→JP-Optimierung mit geprüften Wortaufrufen/Literalen.
    Keine Opcode-Inline-Klasse notwendig. Zehn neue Kernelwörter.
-7. **AP 7 – Kontrollstrukturen: offen.** Abhängig AP6. IF ELSE THEN BEGIN UNTIL
+7. **AP 7 – Kontrollstrukturen: abgeschlossen.** Abhängig AP6. IF ELSE THEN BEGIN UNTIL
    AGAIN WHILE REPEAT, getrennter RAM-Kontrollstack, Typ-/Grenzprüfung.
    Maximal ein offenes WHILE pro BEGIN. DO/LOOP nicht im ersten Umfang.
 8. **AP 8 – Daten/Alltagswörter: offen.** Abhängig AP6/teilweise7. HERE ALLOT ,
@@ -158,11 +158,12 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
 .venv/bin/python forth/tests/test_parser.py --rtl -v
 .venv/bin/python forth/tests/test_console.py --rtl -v
 .venv/bin/python forth/tests/test_compiler.py --rtl -v
+.venv/bin/python forth/tests/test_control.py --rtl -v
 ```
 
-AP6: alle 43 Testmethoden bestanden (4+9+8+9+13). Darin 54 instruktionsweise
+AP7: alle 50 Testmethoden bestanden (4+9+8+9+13+7). Darin 57 instruktionsweise
 Python/CPU/SRAM-Vergleiche über drei Timings, gerichtete KEY-/Eingabeprüfung
-sowie 14 komplette UART-Puffer-Konsolensitzungen. Alle Basen, alle .S-Tiefen,
+sowie 22 komplette UART-Puffer-Konsolensitzungen. Alle Basen, alle .S-Tiefen,
 Puffergrenzen, versteckte/überschriebene/compile-only Einträge, Suche vor Zahl,
 Fehler-/ABORT-Wiederaufnahme und zyklisches Zeiger-Wraparound geprüft.
 Strukturell maximal 12 Datenzellen (vier temporäre) und fünf Returnframes; .S separat
@@ -176,9 +177,17 @@ EXECUTE separat geprüft (dynamisches Ziel, aus struktureller Prüfung ausgenomm
 Kompilierung/Ausführung und Rollback im physischen SRAM-Modell bei allen drei
 Timings geprüft, keine Hosttokenisierung. CPU und bestehende Infrastruktur unverändert.
 
-Nächstes AP7 noch nicht begonnen. Immediate/COMPILE_ONLY-Kontrollwörter mit
-RAM-Kontrollstack ergänzen, private Byte-/Zellemitter und Reservierung nutzen.
-Immediate-Pfade invalidieren die Optimierung bereits automatisch; gemeinsames
-NOP.RET am Ende und korrekte Sprungziele erhalten. JZ verbraucht Flag und Ziel;
-auch den logischen DEPTH-Effekt des Flags abbilden. Zusätzliche Aufrufrahmen
-budgetieren, keine Stackvergrößerung und keine neue ISA voraussetzen.
+AP7: kernel/control.py, 32 typisierte Einträge (IF=1, ELSE=2, BEGIN=3,
+WHILE=4), Push/Peek geprüft. control_addr/type/slot/patch sind neue Zellen.
+branch_guard prüft/vermindert DEPTH vor JZ, lässt das physische Flag stehen.
+Vorwärts-Fixups auf HERE begrenzt, falsche Verschachtelung Fehler17, voll Fehler19.
+USER_START=3066, Boot171 Instruktionen. Exakte Adressen in generierter Map.
+Alle acht Kontrollwörter Flags3. Eine WHILE-Ebene pro BEGIN. Returnfolding wird
+über Immediate-Pfad deaktiviert, gemeinsames NOP.RET bleibt stehen.
+Tests prüfen beide Zweige, Schleifen/Nesting, Flags/Stackgrenzen, 32/33 Fixups,
+Rollback, acht Benutzerdaten während Kompilierung und SRAM-Codeausführung.
+forth/tests/forth_sram.py erweitert nur den Watchdog in einer temporären Kopie
+auf 1.000.000 Takte; keine Änderung an CPU, Timing oder vorhandenen Helfern.
+
+Nächstes AP8 noch nicht begonnen. Datenwörter und Strings gemäß Architektur,
+mit Bounds/Transaktionen und korrekten Laufzeit-Stackprüfungen ergänzen.

@@ -262,7 +262,7 @@ class ConsoleChecks(unittest.TestCase):
         from forth.image import Image
         from support.config import Tools
         from support.paths import TIMINGS
-        from support.sram import SramSimulation
+        from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
         with tempfile.TemporaryDirectory(prefix='forth-format-rtl-') as directory:
             sim = SramSimulation(directory, Tools(), with_uart=True)
             sim.build()

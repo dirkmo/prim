@@ -249,7 +249,7 @@ class CompilerChecks(unittest.TestCase):
             self.skipTest('enable CPU-side compilation with physical SRAM with --rtl')
         from support.config import Tools
         from support.paths import TIMINGS
-        from support.sram import SramSimulation
+        from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
         cases = [(b': x 128 ; x', b'ok\r\n', [128]),
                  (b': x Missing', b'error: unknown word Missing\r\n', [])]
         with tempfile.TemporaryDirectory(prefix='forth-compile-sram-') as directory:

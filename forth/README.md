@@ -1,8 +1,8 @@
 # Eigenständiges Forth für Prim
 
-Stand AP 6: **interaktives Forth mit Laufzeitcompiler und 71 Kernelwörtern**.
+Stand AP 7: **interaktives Forth mit Laufzeitcompiler und 79 Kernelwörtern**.
 Parser, Namenssuche, Übersetzung neuer Definitionen und Ausführung laufen auf Prim.
-Kontrollstrukturen und Daten-Definitionswörter folgen in AP 7/8.
+Kontrollstrukturen sind vorhanden; Daten-Definitionswörter folgen in AP 8.
 CPU und TokenForth wurden nicht verändert.
 
 Architektur: [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -72,6 +72,7 @@ AND OR XOR INVERT LSHIFT RSHIFT
 BASE DECIMAL HEX \ (
 . U. DEPTH .S WORDS ABORT
 : ; STATE IMMEDIATE [ ] LITERAL ' ['] EXECUTE
+IF ELSE THEN BEGIN UNTIL AGAIN WHILE REPEAT
 ```
 
 Namen werden ohne Unterscheidung von ASCII-Groß-/Kleinschreibung gesucht;
@@ -159,7 +160,7 @@ last_error (0126), 0 nach Reset, danach zuletzt gemeldeter Fehler:
 6 Zeile zu lang, 7 Kommentar offen, 8 BASE, 9 Text-Steuerzeichen,
 10 Zahlüberlauf, 11 unbekanntes Wort, 12 compile-only Wort, 13 Compilerkontext,
 14 Name, 15 Wörterbuch voll, 16 kein Benutzerwort für IMMEDIATE, 17 offener
-Kontrollstack, 18 unvollständige Definition bei Simulator-EOF. ABORT lässt ihn stehen.
+Kontrollstack, 18 unvollständige Definition bei Simulator-EOF, 19 Kontrollstack voll. ABORT lässt ihn stehen.
 
 ## Compiler (AP 6)
 
@@ -167,7 +168,7 @@ Kontrollstack, 18 unvollständige Definition bei Simulator-EOF. ABORT lässt ihn
 Definitionen dürfen mehrere Zeilen umfassen. Bis `;` ist der Header HIDDEN;
 bei einer Neudefinition kann der alte Name weiterhin aufgerufen werden.
 Ein verschachteltes `:` ist Fehler. `;` erfordert Kompiliermodus und leeren
-Kontrollstack. Leere Definitionen sind erlaubt. IF/Schleifen kommen erst in AP 7.
+Kontrollstack. Leere Definitionen sind erlaubt. IF und Schleifen sind in AP 7 implementiert.
 
 STATE liefert eine lesbare Variablenadresse: 0 interpretiert, 1 kompiliert.
 Direkte Zustandsänderungen mit ! sind nicht unterstützt. `[` interpretiert
@@ -219,6 +220,21 @@ found_xt, compile_literal nutzt compile_value. rollback_definition bewahrt den
 Benutzerstack. literal_guard ist ein spezieller Laufzeit-Guard, der DEPTH um
 eins erhöht; der anschließende generierte PUSH liefert die eigentliche Zelle.
 
+## Kontrollstrukturen (AP 7)
+
+IF ELSE THEN und BEGIN UNTIL / BEGIN AGAIN / BEGIN WHILE REPEAT sind
+IMMEDIATE/COMPILE_ONLY. Beispiel: `: betrag DUP 0< IF NEGATE THEN ;`.
+IF/UNTIL/WHILE verbrauchen ein Flag, auch logisch in DEPTH; jeder Wert ungleich
+null ist wahr. Ein eigener typisierter RAM-Kontrollstack hält 32 Fixups,
+keine Benutzerwerte oder Returnadressen. Pro BEGIN ist ein WHILE erlaubt;
+weitere Verschachtelung über innere BEGIN/IF ist möglich. Falsche Reihenfolge,
+offene Strukturen und Überschreitung führen zum Rollback der Definition.
+Vorwärtsziele zeigen bei einem Wortende auf den gemeinsamen NOP.RET.
+
+Die Forth-eigene SRAM-Testkopie erhöht ausschließlich den Watchdog von 100.000
+auf 1.000.000 Takte, damit ganze Quelltexte auf der CPU kompiliert werden können.
+CPU, SRAM-Timings und bestehende Simulationshelfer bleiben unverändert.
+
 ## Prüfungen
 
 ```sh
@@ -227,15 +243,16 @@ eins erhöht; der anschließende generierte PUSH liefert die eigentliche Zelle.
 .venv/bin/python forth/tests/test_parser.py --rtl -v
 .venv/bin/python forth/tests/test_console.py --rtl -v
 .venv/bin/python forth/tests/test_compiler.py --rtl -v
+.venv/bin/python forth/tests/test_control.py --rtl -v
 ```
 
 Ohne `--rtl` entfallen die entsprechenden RTL-Tests. Dafür mit `--rtl` werden
 iverilog und vvp im PATH benötigt; Simulatoren entstehen in temporären Verzeichnissen.
 Vorhandene Helfer aus tests/support/ bleiben unverändert.
 
-Stand AP 6: 43 Testmethoden bestanden. Enthalten sind 54 instruktionsweise
+Stand AP 7: 50 Testmethoden bestanden. Enthalten sind 57 instruktionsweise
 CPU/SRAM/Python-Vergleiche in drei SRAM-Timings (1/1/3 ns, 2/2/12 ns, 3/4/19 ns),
-gerichtete UART-Puffer-Tests für KEY und Zeileneingabe sowie 14 komplette
+gerichtete UART-Puffer-Tests für KEY und Zeileneingabe sowie 22 komplette
 Konsolensitzungen mit RX-Pacing, TX-Rückstau und verzögertem ACK. Erwartete Ausgabe
 und Stackwerte werden unabhängig vorgegeben. Serielle TX-Dekodierung wird in
 den SRAM-Tests geprüft, serielle RX-Leitung und echte Hardware hier nicht.

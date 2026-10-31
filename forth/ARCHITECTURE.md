@@ -2,7 +2,7 @@
 
 Stand: 31. Oktober 2026. Zielarchitektur; AP 2 implementiert Build und Boot,
 AP 3 die Grundwörter, AP 4 Texteingabe/Parser/Zahlen und AP 5 den interaktiven
-Interpreter. AP 6 implementiert den Laufzeitcompiler. Änderungen hier begründen;
+Interpreter. AP 6 implementiert den Laufzeitcompiler, AP 7 die Kontrollstrukturen. Änderungen hier begründen;
 aktuellen Stand und Messwerte in STATUS.md nachlesen.
 Arbeitsstand und APs: [STATUS.md](STATUS.md).
 
@@ -243,7 +243,7 @@ Return-Bit-Folding betrifft die unmittelbar erzeugten Literale:
 
 ## Öffentlicher Wortumfang der ersten Version
 
-Dies ist der Zielumfang nach AP 8; Zeilen für AP 3–6 sind implementiert,
+Dies ist der Zielumfang nach AP 8; Zeilen für AP 3–7 sind implementiert,
 die übrigen Wörter noch geplant. Aktuelle Wortliste und Prüfungen in README.md.
 Stubs/Inline-Emitter müssen jeweils dieselben dokumentierten Stackeffekte haben.
 
