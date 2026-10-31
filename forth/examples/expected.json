@@ -1,0 +1,65 @@
+{
+  "basics.fs": {
+    "responses": [
+      "ok\r\n",
+      "ok\r\n",
+      "49 \r\nok\r\n",
+      "ok\r\n",
+      "9 \r\nok\r\n"
+    ],
+    "stack": []
+  },
+  "loops.fs": {
+    "responses": [
+      "ok\r\n",
+      "compiled\r\n",
+      "compiled\r\n",
+      "ok\r\n",
+      "3 2 1 \r\nok\r\n",
+      "ok\r\n",
+      "0 \r\nok\r\n",
+      "ok\r\n",
+      "99 \r\nok\r\n"
+    ],
+    "stack": []
+  },
+  "data.fs": {
+    "responses": [
+      "ok\r\n",
+      "ok\r\n",
+      "ok\r\n",
+      "ok\r\n",
+      "15 \r\nok\r\n",
+      "ok\r\n",
+      "42 \r\nok\r\n",
+      "ok\r\n",
+      "AB\r\nok\r\n"
+    ],
+    "stack": []
+  },
+  "strings.fs": {
+    "responses": [
+      "ok\r\n",
+      "ok\r\n",
+      "Hello, Forth!\r\nok\r\n",
+      "ok\r\n",
+      "A persistent string\r\nok\r\n",
+      "temporary\r\nok\r\n",
+      "ok\r\n",
+      "Z\r\nok\r\n"
+    ],
+    "stack": []
+  },
+  "immediate.fs": {
+    "responses": [
+      "ok\r\n",
+      "ok\r\n",
+      "ok\r\n",
+      "42 \r\nok\r\n",
+      "ok\r\n",
+      "ok\r\n",
+      "1 \r\nok\r\n"
+    ],
+    "stack": []
+  }
+}

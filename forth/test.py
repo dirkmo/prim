@@ -11,7 +11,7 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-SUITES = ('boot', 'primitives', 'parser', 'console', 'compiler', 'control', 'data', 'system')
+SUITES = ('boot', 'primitives', 'parser', 'console', 'compiler', 'control', 'data', 'system', 'examples')
 
 
 def main():

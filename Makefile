@@ -55,6 +55,7 @@ HOST_COMMAND = $(call shq,$(PYTHON_EXEC)) $(call shq,$(HOST)) --port $(call shq,
  software base image _image asm disasm configure-fpga bitstream flash resources \
  configure-sim sim test test-python test-rtl test-makefile status uart-status halt stop \
  run step reset-halt pc sram-check upload load-run uart-console console-help clean FORCE
+.PHONY: forth-image forth-console test-forth
 
 help:
 	@printf '%s\n' \
@@ -75,6 +76,9 @@ help:
 	 '  test-python    Run src/ Python and shared test-helper checks' \
 	 '  test-rtl       Build simulator and run CTest (optional TEST_ARGS)' \
 	 '  test-makefile  Run isolated top-level Makefile workflow tests' \
+	 '  forth-image    Build the standalone Forth kernel (no TokenForth compilation)' \
+	 '  forth-console  Run standalone Forth in the Python CPU model' \
+	 '  test-forth     Run standalone Forth checks including RTL' \
 	 '  status uart-status halt stop run step reset-halt pc sram-check' \
 	 '                 Run one CPU/debug operation; requires PORT' \
 	 '  upload         Load existing IMAGE; optional VERIFY=1; leave CPU halted' \
@@ -99,6 +103,15 @@ help:
 	 '  make uart-console PORT=/dev/serial/by-id/your-uart'
 
 all: software image bitstream
+
+forth-image:
+	$(call shq,$(PYTHON_EXEC)) $(call shq,$(ROOT)/forth/build.py) --output $(call shq,$(abspath $(BUILD_DIR))/forth)
+
+forth-console:
+	$(call shq,$(PYTHON_EXEC)) $(call shq,$(ROOT)/forth/run.py)
+
+test-forth:
+	$(call shq,$(PYTHON_EXEC)) $(call shq,$(ROOT)/forth/test.py) --rtl --output $(call shq,$(abspath $(BUILD_DIR))/forth-tests)
 
 setup:
 	bash $(call shq,$(ROOT)/setup.sh)

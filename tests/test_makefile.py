@@ -28,6 +28,7 @@ class MakefileChecks(unittest.TestCase):
             shutil.copy2(ROOT / 'src' / name, source / name)
         shutil.copytree(ROOT / 'src/prim', source / 'prim', ignore=shutil.ignore_patterns('__pycache__'))
         shutil.copytree(ROOT / 'src/examples', source / 'examples')
+        shutil.copytree(ROOT / 'forth', self.root / 'forth', ignore=shutil.ignore_patterns('__pycache__'))
         shutil.copy2(ROOT / 'pyproject.toml', self.root / 'pyproject.toml')
         self.log = self.root / 'actions.jsonl'
         board = self.root / 'boards/olimex_ice40hx8k_evb'
@@ -48,13 +49,13 @@ class MakefileChecks(unittest.TestCase):
         (self.root / 'cpu/tests').mkdir(parents=True)
         (self.root / 'cpu/tests/test.asm').write_text('1 2 + BREAK\n')
 
-    def make(self, *args, ok=True):
+    def make(self, *args, ok=True, input=None):
         env = dict(os.environ)
         for name in ('MAKEFLAGS', 'MFLAGS', 'MAKELEVEL'):
             env.pop(name, None)
         result = subprocess.run(['make', '--no-print-directory', f'PYTHON={sys.executable}',
                                  f'SYSTEM_PYTHON={sys.executable}', f'CMAKE={self.cmake}', *args],
-                                cwd=self.root, env=env, text=True, capture_output=True, timeout=60)
+                                cwd=self.root, env=env, text=True, input=input, capture_output=True, timeout=60)
         if ok:
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         else:
@@ -70,6 +71,24 @@ class MakefileChecks(unittest.TestCase):
             self.assertIn(target, output)
         self.assertEqual(self.actions(), [])
         self.assertFalse((self.root / 'build').exists())
+
+    def test_standalone_forth_workflow_never_builds_tokenforth_or_accesses_hardware(self):
+        self.make('forth-image', 'PROGRAM=/missing/source.cf')
+        self.assertEqual(len((self.root / 'build/forth/kernel.bin').read_bytes()), 65520)
+        self.assertFalse((self.root / 'build/src').exists())
+        self.assertFalse((self.root / 'build/software').exists())
+        output = self.make('forth-console', input='2 3 + .\n')
+        self.assertIn('5 ok', output)
+        self.assertEqual(self.actions(), [])
+
+    def test_forth_check_target_delegates_to_runner(self):
+        (self.root / 'forth/test.py').write_text(
+            'import json,sys\nfrom pathlib import Path\n'
+            f'with Path({str(self.log)!r}).open("a") as f: '
+            'f.write(json.dumps({"kind":"forth-tests","args":sys.argv[1:]})+"\\n")\n')
+        self.make('test-forth')
+        self.assertEqual(self.actions(), [{'kind': 'forth-tests',
+            'args': ['--rtl', '--output', str(self.root / 'build/forth-tests')]}])
 
     def test_image_pipeline_incremental_and_source_identity(self):
         self.make('-j4', 'software', 'image')

@@ -1,9 +1,9 @@
 # Forth für Prim – kompakte Übergabe und Arbeitspakete
 
-Stand: 31. Oktober 2026. AP 1–9 abgeschlossen; AP 10 offen.
-Letzter Nutzerauftrag: restliche APs umsetzen und committen, Stacks unverändert lassen. Dieser Stand wird mit dem
-Commit dieser Übergabe festgehalten. AP 10 noch offen.
-AP-7-Commit: `79db3df`, AP 8: `797f599`. AP 9 wird mit dieser Übergabe committet.
+Stand: 31. Oktober 2026. AP 1–10 abgeschlossen.
+Letzter Nutzerauftrag: restliche APs umsetzen und committen, Stacks unverändert lassen.
+AP 9: `955c1d5`; AP 10 wird mit dieser Übergabe committet.
+AP-7-Commit: `79db3df`, AP 8: `797f599`.
 AP-5-Commit: `d0ff968`, AP 4: `cf739a7`.
 Weitere Historie: AP 3 `1e77c88`, AP 1/2 `b620a9e`.
 
@@ -20,7 +20,9 @@ Kontrollstrukturen, Daten-Definitionswörter und Strings sind implementiert.
 Start: ` .venv/bin/python forth/run.py ` (Prim-Modell mit Terminal-UART).
 Build: ` .venv/bin/python forth/build.py `; reproduzierbare kernel.bin/map.json/
 disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
-[README.md](README.md): Bedienung, aktuelle Wortliste, APIs und Testbefehle.
+[README.md](README.md): Bedienung, Build-/Board-Konsole und Testbefehle.
+[WORDS.md](WORDS.md): alle 89 Wörter mit Stackeffekten und Kontextflags.
+[examples/README.md](examples/README.md): fünf ausführbare Beispiele mit Sollausgaben.
 [ARCHITECTURE.md](ARCHITECTURE.md): vollständige Architektur/Zielsemantik.
 
 ## Technische Arbeitsreferenz
@@ -146,9 +148,10 @@ disasm unter build/forth/. Image: 65520 RAM-Bytes 0000..FFEF, Einstieg 0.
    Textsessions/CPU-Kompilierung, unabhängige Sollwerte, Python/RTL/UART,
    Fehler-/Speichergrenzen. Vorhandene Regressionen erhalten; echte Hardware
    getrennt ausweisen.
-10. **AP 10 – Anleitung/Beispiele: offen, begleitet laufend.** Nach AP9
-    abschließen. README/Wortliste/Grenzen aktuell halten, examples/ ergänzen,
-    diese Übergabe pflegen. lib/ und examples/ erst bei Bedarf anlegen.
+10. **AP 10 – Anleitung/Beispiele: abgeschlossen.** Vollständige Wortreferenz,
+    Build-/Start-/Board-Konsole-Anleitung und Grenzen. Fünf Beispiele mit
+    unabhängig festgelegten Sollausgaben, im Modell, CLI-Pipe und RTL geprüft.
+    Make-Ziele forth-image, forth-console und test-forth; Übergabe aktualisiert.
 
 ## Verifikation und nächste Schritte
 
@@ -232,5 +235,23 @@ AP9-Verifikation: vollständiger CTest-Lauf 18/18 erfolgreich; Forth-Runner
 Import-Sideeffect-Prüfung zusätzlich bestanden. Hardware-Stacks bleiben auf
 expliziten Nutzerwunsch unverändert 16/16 (kein Block-RAM-Umbau).
 
-AP10 als Nächstes: vollständige Wortreferenz, praxisnahe Beispiele samt
-verifiziertem Solltext, Build-/Start-/Board-Konsole-Anleitung und Grenzen.
+AP10: `forth/WORDS.md` erfasst alle 89 Wörter; ein Test prüft Vollständigkeit
+und Eindeutigkeit gegen das gebaute Wörterbuch. `forth/examples/` enthält
+basics.fs, loops.fs, data.fs, strings.fs und immediate.fs. expected.json
+enthält manuell festgelegte Antworten pro Eingabezeile und Endstacks. Vier
+zusätzliche Tests prüfen Modell, echten CLI-Pipe-Aufruf aus fremdem Arbeitsordner,
+Wortreferenz und UART-Puffer-RTL. Alle Beispiele lassen leere Datenstacks zurück.
+`forth/test.py --rtl` integriert diese Suite. Make-Ziele bauen nur das eigene
+Forth bzw. starten dessen Simulator/Tests; kein TokenForth-Build oder Boardzugriff.
+
+AP10-Verifikation: `forth/test.py --rtl` mit 67 bestandenen Tests, keine Skips;
+`tests/test_makefile.py -v` mit zehn bestandenen Tests. Wegen paralleler
+VGA-Arbeit im gemeinsamen Workspace lief die Schlussprüfung auf einer isolierten
+Kopie von AP9 (`955c1d5`) plus exakt den AP10-Dateien. Manifest und Prüfsummen:
+build/forth-final-tests/snapshot.json; Runnerbericht/Logs unter
+build/forth-final-tests/results/, Make-Log unter build/forth-final-tests/makefile.log.
+Die parallelen VGA-Änderungen sind nicht Teil dieser Forth-Abnahme oder Commits.
+
+Keine offenen APs. CPU/ISA und Hardwarestacks bleiben unverändert; keine
+Block-RAM-Stacks oder andere Hardware-Erweiterungen übernommen. Hardware-Upload
+ist dokumentiert, aber nicht auf einem physischen Board ausgeführt.

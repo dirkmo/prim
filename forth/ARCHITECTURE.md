@@ -3,8 +3,11 @@
 Stand: 31. Oktober 2026. Zielarchitektur; AP 2 implementiert Build und Boot,
 AP 3 die Grundwörter, AP 4 Texteingabe/Parser/Zahlen und AP 5 den interaktiven
 Interpreter. AP 6 implementiert den Laufzeitcompiler, AP 7 die Kontrollstrukturen und AP 8 Daten/Strings. Änderungen hier begründen;
-aktuellen Stand und Messwerte in STATUS.md nachlesen.
+AP 9 integriert Regressionen bis zum seriellen RTL-System; AP 10 ergänzt
+Bedienungsanleitung, vollständige Wortreferenz und ausführbare Beispiele.
+Alle APs abgeschlossen; aktuellen Stand und Messwerte in STATUS.md nachlesen.
 Arbeitsstand und APs: [STATUS.md](STATUS.md).
+Bedienung: [README.md](README.md), [Wörter](WORDS.md), [Beispiele](examples/README.md).
 
 ## Ziel und Abgrenzung
 

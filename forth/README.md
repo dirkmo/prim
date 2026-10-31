@@ -1,342 +1,226 @@
-# Eigenständiges Forth für Prim
+# Small Forth for Prim
 
-Stand AP 8: **interaktives Forth mit Laufzeitcompiler und 89 Kernelwörtern**.
-Parser, Namenssuche, Übersetzung neuer Definitionen und Ausführung laufen auf Prim.
-Kontrollstrukturen, Daten-Definitionswörter und Strings sind implementiert.
-CPU und TokenForth wurden nicht verändert.
+An independent on-CPU text interpreter and native-code compiler, with 89 kernel
+words. It uses the existing Prim ISA: **16-cell hardware data and return stacks,
+eight checked user data cells**. TokenForth remains a separate language/toolchain.
 
-Architektur: [ARCHITECTURE.md](ARCHITECTURE.md).
-Kompakte Übergabe und Arbeitspakete: [STATUS.md](STATUS.md).
+## Start here
 
-## Ausprobieren und bauen
-
-Vom Projekt-Root mit Python 3.11+:
+From the project root, with Python 3.11 or newer:
 
 ```sh
-.venv/bin/python forth/run.py
+python3 forth/run.py
 ```
 
-Der Simulator baut den aktuellen Kernel und führt ihn im Python-Modell der
-Prim-CPU aus. Der Host transportiert Bytes, er interpretiert keinen Forth-Text.
-Im POSIX-Terminal übernimmt der Kernel Echo und Backspace; Ctrl+C beendet den
-Simulator und stellt den Terminalmodus wieder her. Eine Pipe mit abgeschlossenen
-Zeilen ist ebenfalls möglich; EOF beendet den Simulator, sobald der Kernel
-wieder auf ein Zeichen wartet. Eine nicht abgeschlossene letzte Zeile wird
-nicht ausgeführt. Bei noch offener Definition führt der Kernel am EOF Rollback
-und Fehlerausgabe aus; der Simulator endet mit Status 1. Auf dem FPGA gibt es
-kein UART-EOF: mehrzeilige Definitionen warten dort weiter auf Eingabe.
-Der Adapter simuliert RAM/UART, keine Timer- oder FPGA-Zyklen.
-
-Beispielsitzung (erste Zeile ist die Bereitschaftsmeldung):
+Or use `make forth-console` with the project's Python environment. The kernel
+runs in the Prim CPU model; the host only transports UART bytes. For example:
 
 ```text
 ok
-2 3 + .
-5 ok
-: quadrat dup * ;
+: quadrat DUP * ;
 ok
 7 quadrat .
 49 ok
-1 2 .s
-<2> 1 2 ok
 ```
 
-Kernel-Artefakte erzeugen:
+At a POSIX terminal the kernel handles echo and backspace. Ctrl+C exits the
+simulator and restores the terminal settings. Files work through standard input:
 
 ```sh
-.venv/bin/python forth/build.py
+python3 forth/run.py < forth/examples/loops.fs
 ```
 
-Ohne Paketinstallation und ohne TokenForth-Kompilation. Absolute Skriptpfade
-funktionieren aus fremden Arbeitsverzeichnissen. `--output DIR` überschreibt das
-Standardziel `build/forth/`; relative Ziele beziehen sich auf das Arbeitsverzeichnis.
+The five [examples](examples/README.md) have independently specified expected
+responses and are tested in the CPU model, through this pipe workflow and in RTL.
+Finish every input line with a newline. EOF discards an unterminated last line;
+an already-open definition instead receives a kernel rollback/error and exit
+status 1. On hardware there is no UART EOF: the kernel waits for more input.
+The simulator models RAM/UART, not timer behavior or FPGA clock timing.
 
-| Artefakt | Inhalt |
-| --- | --- |
-| kernel.bin | SRAM 0000..FFEF, 65520 Bytes, Einstieg 0, kein MMIO |
-| kernel.map.json | Symbole, Variablen, Speicherbereiche, Header/XT und Stackeffekte |
-| kernel.disasm | Instruktionsdisassembly mit Codelabels; Daten ausgelassen |
-
-Builds sind byteweise reproduzierbar, ohne Zeitstempel/Buildpfade. Unbenutzter
-RAM im Image ist null. Das Image ab Adresse 0 laden; erneutes vollständiges Laden
-überschreibt den Benutzerbereich. Es wurde noch kein Boardtest durchgeführt.
-
-## Bedienung und Wortschatz
-
-```text
-DUP DROP SWAP OVER ROT -ROT NIP 2DUP 2DROP
-+ - * / MOD /MOD 1+ 1- NEGATE ABS 2* 2/
-AND OR XOR INVERT LSHIFT RSHIFT
-= <> < > U< 0= 0< 0<> MIN MAX TRUE FALSE
-@ ! C@ C! +! CELL+ CELLS KEY EMIT CR SPACE
-BASE DECIMAL HEX \ (
-. U. DEPTH .S WORDS ABORT
-: ; STATE IMMEDIATE [ ] LITERAL ' ['] EXECUTE
-IF ELSE THEN BEGIN UNTIL AGAIN WHILE REPEAT
-HERE ALLOT , C, CREATE VARIABLE CONSTANT TYPE S" ."
-```
-
-Namen werden ohne Unterscheidung von ASCII-Groß-/Kleinschreibung gesucht;
-neuere Einträge überschreiben ältere, HIDDEN-Einträge werden übersprungen.
-Suche erfolgt vor Zahlenerkennung. Im Interpretationsmodus werden COMPILE_ONLY-
-Einträge abgewiesen, andere über ihre XT ausgeführt. Im Kompiliermodus werden
-gewöhnliche Wörter übersetzt, IMMEDIATE-Wörter sofort ausgeführt.
-
-Zellen rechnen modulo 65536; wahr ist FFFF, falsch 0. Vergleiche und `.` sind
-signed, U< und U. unsigned. /MOD liefert `( n1 n2 -- rest quotient )` mit Quotient
-gegen null und Restvorzeichen des Dividenden; null als Divisor und -32768/-1
-sind Fehler. * liefert die unteren 16 Bits. 2/ ist arithmetisch, RSHIFT logisch;
-Schiebeweiten 0..15. Alle Rechenoperationen verwenden die bestehende ISA.
-
-BASE liefert die Adresse der Basiszelle; zulässig sind 2..36. DECIMAL/HEX setzen
-10/16. Zahlen erlauben ein Vorzeichen vor optionalem `$` (Hex) oder `#` (Dezimal),
-Ziffern 0..9/A..Z/a..z, positive 0..65535, negative Beträge bis 32768. Überlauf
-ist Fehler. . und U. verbrauchen einen Wert und geben ein nachfolgendes Leerzeichen
-aus. .S bewahrt den Stack und zeigt `<Tiefe> ` gefolgt von Werten von unten nach
-oben; auch die Tiefe wird in BASE ausgegeben. WORDS zeigt sichtbare Namen,
-neueste zuerst, mit abschließendem CRLF. DEPTH liefert die bisherige Benutzertiefe.
-
-Der Interpreter antwortet beim Start und nach erfolgreicher Zeile mit `ok`/CRLF,
-bei noch offener Definition mit `compiled`/CRLF.
-Fehler verwerfen die restliche Zeile und den logischen Datenstack, drucken den
-Grund und kehren mit `ok` zur Eingabe zurück. Unbekannte/compile-only Wörter
-werden im Fehlertext genannt. ABORT tut dasselbe ohne Fehlermeldung. HERE/LATEST
-bleiben für abgeschlossene Definitionen erhalten; offene Definitionen werden
-vollständig aus der Wörterbuchkette zurückgenommen.
-
-read_line erlaubt 127 Nutzbytes plus Abschlussbyte. CR oder LF beendet die
-Zeile, CRLF zählt einmal. BS/DEL löscht ein Byte und gibt BS SPACE BS aus;
-Löschen bei leerer Zeile wird ignoriert. TAB/VT/FF sind erlaubt, andere
-Steuerzeichen (auch NUL) machen die Textzeile ungültig. KEY liefert NUL trotzdem
-regulär. Ungültige/überlange Zeilen werden vor der Fehlermeldung bis EOL verworfen;
-Backspace kann eine bereits überlange Zeile nicht mehr retten. Sender müssen
-RXAVAIL-Kredit berücksichtigen oder ausreichend gepacet senden: kein RX-FIFO
-und keine verlustfreie Paste-Garantie. FPGA-UART überträgt sieben Bit.
-
-`\` ignoriert den Zeilenrest, `(` bis zum nächsten `)` derselben Zeile, ohne
-Verschachtelung. Beide benötigen eine Wortgrenze. Tokens dürfen 127 Bytes lang
-sein; die Namensgrenze von 31 Bytes gilt für Wörterbucheinträge.
-
-## Kernel-Schnittstellen und Grenzen
-
-Alle öffentlichen Wörter haben geprüfte aufrufbare Stubs und Header der
-Kompilierklasse 0. Auch der Laufzeitcompiler verwendet geprüfte Aufrufe statt
-ungeprüfter Opcode-Inlines. An Wortgrenzen maximal acht
-Benutzerzellen, DEPTH zählt nur diese. Acht Hardwarezellen sind als temporäre
-Reserve vorgesehen. Returnstack unverändert 16 Zellen, ohne Überlaufschutz.
-
-Boot initialisiert BASE=10, STATE/DEPTH=0, Parser-/Compilerzustand=0,
-HERE=USER_START und LATEST auf den letzten Kernelheader. Er maskiert CPU- und
-UART-Interrupts, erhält Benutzer-RAM und konsumiert kein RX. Einstieg über idle
-nach console_start, kein äußerer CALL-Rahmen. Kaltstart vergisst Benutzerwörter;
-Fehler/ABORT etablieren an den aktuellen Hardwarezeigern eine neue logische
-Stackbasis, statt durch verworfene Frames zurückzukehren.
-
-| Private Routine | Vertrag ohne Änderung von DEPTH |
-| --- | --- |
-| raw_key / raw_emit | `( -- c )` / `( c -- )`, Bytezugriffe mit RXAVAIL/Bus-ACK |
-| is_space / fold_ascii | `( c -- flag )` / `( c -- c' )`, ASCII |
-| read_line | `( -- )`, input_buffer/input_length, setzt Parserposition zurück |
-| parse_name | `( -- )`, token_addr/token_length, Länge 0 bei Zeilenende; konsumiert ein Trennzeichen |
-| skip_line / skip_paren | `( -- )`, verschieben input_pos |
-| parse_number | `( -- )`, number_status 0=ungültig, 1=Erfolg, 2=Überlauf; number_value sonst 0 |
-| find_word | `( -- )`, Token nach found_header/xt/flags, jeweils 0 bei Misserfolg |
-| print_signed / print_unsigned | `( n/u -- )`, kein nachfolgendes Leerzeichen |
-| unsigned_divide | `( -- )`, arith_a/b nach arith_q/rem; b=1..32768, kein öffentliches UM/MOD |
-
-Metadaten-Routinen bewahren Benutzerwerte, nutzen gemeinsame Zellen und sind
-nicht reentrant. raw_key/raw_emit/is_space/fold_ascii arbeiten dagegen mit
-expliziten temporären Stackwerten. Ungültige BASE löst auch in parse_number
-direkt Fehler aus. Status 0/2 wertet der Interpreter nach erfolgloser Suche aus.
-
-Scratch: 0380..038D Arithmetik; 038E..039D Ziffernpuffer (max. 16 Bytes);
-03A0..03AF Stackanzeige (max. acht Zellen); 039E..039F und 03B0..03FF frei.
-Keine dieser Daten darf einen sie überschreibenden Hilfsaufruf überleben.
-Exakte Variablen-/Codeadressen stehen in der Map; wesentliche globale Verträge
-stehen in STATUS.md. Arbiträre !/C!/EXECUTE-Adressen sind nicht isoliert;
-Kernelkorruption und Returnstacküberlauf sind nicht sicher abfangbar.
-
-last_error (0126), 0 nach Reset, danach zuletzt gemeldeter Fehler:
-1 Unterlauf, 2 Überlauf, 3 Schiebeweite, 4 Division null, 5 Divisionüberlauf,
-6 Zeile zu lang, 7 Kommentar offen, 8 BASE, 9 Text-Steuerzeichen,
-10 Zahlüberlauf, 11 unbekanntes Wort, 12 compile-only Wort, 13 Compilerkontext,
-14 Name, 15 Wörterbuch voll, 16 kein Benutzerwort für IMMEDIATE, 17 offener
-Kontrollstack, 18 unvollständige Definition bei Simulator-EOF, 19 Kontrollstack voll, 20 ungültiges ALLOT, 21 offene String-Anführungszeichen.
-ABORT lässt ihn stehen.
-
-## Compiler (AP 6)
-
-`: name ... ;` erzeugt einen eigenen Header und nativen Prim-Code im SRAM.
-Definitionen dürfen mehrere Zeilen umfassen. Bis `;` ist der Header HIDDEN;
-bei einer Neudefinition kann der alte Name weiterhin aufgerufen werden.
-Ein verschachteltes `:` ist Fehler. `;` erfordert Kompiliermodus und leeren
-Kontrollstack. Leere Definitionen sind erlaubt. IF und Schleifen sind in AP 7 implementiert.
-
-STATE liefert eine lesbare Variablenadresse: 0 interpretiert, 1 kompiliert.
-Direkte Zustandsänderungen mit ! sind nicht unterstützt. `[` interpretiert
-innerhalb einer Definition, `]` setzt dort das Übersetzen fort. Beispiel:
-
-```forth
-: antwort [ 20 22 + ] LITERAL ;
-antwort .
-```
-
-IMMEDIATE markiert das letzte abgeschlossene Benutzerwort. Keine Kernelwörter
-oder offenen Definitionen markieren. `:` und `]` sind unmittelbare Kontextwörter;
-`;`, `[`, LITERAL und `[']` sind IMMEDIATE und COMPILE_ONLY. Die Kommentarwörter
-bleiben IMMEDIATE. Beispiel einer auf der CPU ausgeführten Compiler-Erweiterung:
-
-```forth
-: zahl 42 ; IMMEDIATE
-: antwort zahl LITERAL ;
-```
-
-`' name` liest zur Ausführungszeit den nächsten Namen und legt dessen XT ab.
-In einer Definition wird dieser Parseraufruf übersetzt. `['] name` kompiliert
-dagegen das XT als Literal; EXECUTE verbraucht ein XT und führt es aus.
-Beispiel: `3 ' DUP EXECUTE .S` zeigt `<2> 3 3 `.
-
-Kompilierte Aufrufe: PUSH16 xt; CALL. Literale: PUSH16 literal_guard; CALL;
-PUSH8/16 wert. Der Guard prüft und zählt die Benutzerzelle zur Laufzeit, bevor
-der Wert abgelegt wird. Die Kompilierung selbst legt Zahlen nicht auf den
-Benutzerstack. Alle Wörter behalten ihre Stackprüfungen; keine neue ISA.
-
-Am sicheren Wortende ersetzt der Compiler CALL durch JP oder setzt Bit 7 am
-abschließenden PUSH-Opcode. Er merkt Opcodeadresse, Art und Ende, prüft die
-Adresse gegen den aktuellen Definitionskörper und verändert keine Operandbytes.
-Leere/unsichere Enden erhalten NOP.RET. Jede Immediate-Ausführung außer `;`
-deaktiviert konservativ die Optimierung für die ganze Definition, auch Kommentare
-und `[ ]`. Dadurch bleibt ein gemeinsamer Rücksprung für spätere Kontrollwörter
-erhalten. CALL.RET wird nicht verwendet; CALL ignoriert das Return-Bit.
-
-Der Compiler prüft HERE gegen USER_START..F000 und reserviert Header-/Codeblöcke
-vor dem ersten Schreiben; einzelne Byte-/Zellemitter prüfen zusätzlich ihre
-Grenzen. Fehler oder ABORT stellen HERE/LATEST der begonnenen Definition wieder
-her, bevor der offene Zustand gelöscht wird. Abgeschlossene Wörter bleiben
-erhalten. Beliebige Seiteneffekte von Immediate-Wörtern werden nicht rückgängig
-gemacht. Der Compiler verwendet nur Klasse 0, keine Opcode-Inline-Klasse.
-
-Private APIs für weitere APs: compiler_reserve nutzt compiler_needed (Bytes),
-compile_byte/compile_cell verbrauchen einen rohen Wert, compile_word nutzt
-found_xt, compile_literal nutzt compile_value. rollback_definition bewahrt den
-Benutzerstack. literal_guard ist ein spezieller Laufzeit-Guard, der DEPTH um
-eins erhöht; der anschließende generierte PUSH liefert die eigentliche Zelle.
-
-## Kontrollstrukturen (AP 7)
-
-IF ELSE THEN und BEGIN UNTIL / BEGIN AGAIN / BEGIN WHILE REPEAT sind
-IMMEDIATE/COMPILE_ONLY. Beispiel: `: betrag DUP 0< IF NEGATE THEN ;`.
-IF/UNTIL/WHILE verbrauchen ein Flag, auch logisch in DEPTH; jeder Wert ungleich
-null ist wahr. Ein eigener typisierter RAM-Kontrollstack hält 32 Fixups,
-keine Benutzerwerte oder Returnadressen. Pro BEGIN ist ein WHILE erlaubt;
-weitere Verschachtelung über innere BEGIN/IF ist möglich. Falsche Reihenfolge,
-offene Strukturen und Überschreitung führen zum Rollback der Definition.
-Vorwärtsziele zeigen bei einem Wortende auf den gemeinsamen NOP.RET.
-
-Die Forth-eigene SRAM-Testkopie erhöht ausschließlich den Watchdog von 100.000
-auf 1.000.000 Takte, damit ganze Quelltexte auf der CPU kompiliert werden können.
-CPU, SRAM-Timings und bestehende Simulationshelfer bleiben unverändert.
-
-## Daten und Strings (AP 8)
-
-HERE liefert das nächste freie Byte. ALLOT reserviert 0..32767 Bytes, negative
-Werte sind Fehler. `,` schreibt eine Zelle, `C,` das niederwertige Byte und
-rückt HERE vor. Alle Schreib-/Reservierungswege prüfen USER_START..F000.
-
-CREATE name erzeugt einen geprüften Stub, der die Body-Adresse zurückgibt;
-HERE zeigt danach auf den Body. VARIABLE reserviert dort eine mit null
-initialisierte Zelle. CONSTANT nimmt einen Wert vom Stack und erzeugt einen
-geprüften konstanten Stub. Die acht Byte langen Stubs enthalten den Literal-
-Guard, PUSH16 und NOP.RET; Body-Daten werden vor der Veröffentlichung angelegt.
-Diese Wörter laufen nur außerhalb offener Definitionen. Sie können in einem
-Definierwort aufgerufen werden (z. B. `: var VARIABLE ; var x`). Kein DOES>.
-
-TYPE `( addr len -- )` gibt einen Bytebereich aus; bei Länge null ohne Lesezugriff.
-`S" text"` liefert interpretiert Adresse/Länge eines temporären Puffers,
-kompiliert Adresse/Länge eingebetteter Daten. `." text"` gibt den Text direkt
-bzw. beim Ausführen der Definition aus. Beide sind IMMEDIATE und in beiden
-Modi verfügbar. Genau ein Trennzeichen nach dem öffnenden Wort gehört zur
-Syntax; zusätzliche Leerzeichen zum Text. Keine Escapes, Zeilenwechsel oder
-Kommentarauswertung im Text; ein fehlendes Schlusszeichen verwirft die Zeile
-und ggf. die Definition. Die gesamte Eingabezeile bleibt auf 127 Bytes begrenzt.
-
-Der temporäre Puffer liegt an 0280..02FF mit Abschlussbyte; seine Daten sind
-bis zum nächsten interpretierten S" oder Reset gültig. ." überschreibt ihn
-nicht. Eingebettete Strings bleiben mit der Definition erhalten. Ein Sprung
-überspringt die Datenbytes, danach folgen geprüfte Literale für S". Kompiliertes
-." nutzt rohe temporäre Argumente statt Benutzerzellen und funktioniert mit
-acht bereits belegten Zellen. Interpretiertes/kompiliertes S" prüft dagegen
-Platz für seine beiden tatsächlichen Ergebnisse. Die Map annotiert seinen
-modusabhängigen Stackeffekt in mode_effects. Alle Wörter behalten die bestehende
-sieben Bit breite UART-Ausgabe; TYPE akzeptiert auch NUL innerhalb des Bereichs.
-
-Beispiele:
-
-```forth
-VARIABLE zaehler 7 zaehler ! zaehler @ .
-CREATE daten 123 , daten @ .
-42 CONSTANT antwort antwort .
-: hallo ." Hallo!" ; hallo
-: text S" dauerhaft" ; text TYPE
-```
-
-## Prüfungen
+## Build the kernel
 
 ```sh
-.venv/bin/python forth/tests/test_boot.py --rtl -v
-.venv/bin/python forth/tests/test_primitives.py --rtl -v
-.venv/bin/python forth/tests/test_parser.py --rtl -v
-.venv/bin/python forth/tests/test_console.py --rtl -v
-.venv/bin/python forth/tests/test_compiler.py --rtl -v
-.venv/bin/python forth/tests/test_control.py --rtl -v
-.venv/bin/python forth/tests/test_data.py --rtl -v
+python3 forth/build.py
+# alternatively:
+make forth-image
+# or, in a configured CMake build:
+cmake --build build/sim --target forth_kernel
 ```
 
-Ohne `--rtl` entfallen die entsprechenden RTL-Tests. Dafür mit `--rtl` werden
-iverilog und vvp im PATH benötigt; Simulatoren entstehen in temporären Verzeichnissen.
-Vorhandene Helfer aus tests/support/ bleiben unverändert.
+Direct Python scripts need no package installation: they find the local Prim
+modules. `--output DIR` selects a different destination; default `build/forth/`.
+CMake's destination is its own build directory. No host TokenForth compiler or
+source tokenizer is used. Each initial image is deterministic.
 
-Stand AP 8: 60 Testmethoden bestanden. Enthalten sind 60 instruktionsweise
-CPU/SRAM/Python-Vergleiche in drei SRAM-Timings (1/1/3 ns, 2/2/12 ns, 3/4/19 ns),
-gerichtete UART-Puffer-Tests für KEY und Zeileneingabe sowie 30 komplette
-Konsolensitzungen mit RX-Pacing, TX-Rückstau und verzögertem ACK. Erwartete Ausgabe
-und Stackwerte werden unabhängig vorgegeben. Serielle TX-Dekodierung wird in
-den SRAM-Tests geprüft, serielle RX-Leitung und echte Hardware hier nicht.
+| File | Meaning |
+| --- | --- |
+| `kernel.bin` | Raw CPU RAM image, 65520 bytes, addresses 0000..FFEF, entry at 0 |
+| `kernel.map.json` | Memory regions, symbol addresses, word headers/XT/flags/effects |
+| `kernel.disasm` | Generated executable instructions; data and reserved RAM omitted |
 
-Zahlenausgabe in allen Basen 2..36 und .S bei jeder Tiefe 0..8 sind geprüft,
-einschließlich Puffergrenzen und Stackwiederherstellung. Strukturelle Prüfung
-aller übrigen Wort-/Parser-/Such-/Compilerpfade: maximal 12 physische Datenzellen,
-höchstens vier zusätzlich zur Eingabetiefe, sechs Returnframes einschließlich
-Wortaufruf. .S hat zählerabhängige Stack-Schleifen: separat alle Tiefen/Basen,
-maximal elf Datenzellen und drei Returnframes. Fehlerwiederaufnahme ist auch
-über mehrfaches zyklisches Wraparound der Hardwarezeiger geprüft. Weitere
-Benutzeraufrufe sind zusätzlich zu budgetieren. EXECUTE hat ein dynamisches
-Ziel und wird separat mit gültigen XT, Stackgrenzen und übersetzten Zielen
-geprüft. Eine Kette von 40 Tail-Aufrufen läuft ohne tiefen Returnstack. Der
-optimierte Wrapper benötigt direkt ausgeführt zwei Returnframes, der
-äquivalente unoptimierte drei. SRAM-Tests kompilieren und führen ein Literal
-mit Operandbyte 80 auf der CPU aus und prüfen Rollback nach unbekanntem Wort.
-Wörterbuchgrenzen, verborgene Header, Immediate-Ausführung und Opcode-/
-Operandgrenzen sind ebenfalls geprüft.
+Runtime definitions are written to SRAM by the CPU; they do not modify these
+initial build artifacts. A fresh build/run starts with kernel words only.
 
-AP 8 prüft außerdem atomare Daten-Definitionen auf bereits benutztem RAM,
-Allocation-/Puffergrenzen, String-Lebensdauer, Überspringen eingebetteter Bytes,
-fehlende Schlusszeichen, beide Stringmodi und volle Benutzerstacks. Ein
-übersetztes Stringwort wird mit allen drei physischen SRAM-Timings ausgeführt.
+## Use the existing FPGA console
 
+These instructions assume the board already runs the matching Prim FPGA design.
+The CPU RAM image is separate from the FPGA bitstream; this workflow does not
+program SPI flash. No physical board validation was performed for this Forth.
 
-## Integrated regression entry point (AP 9)
+```sh
+make forth-image
+make upload IMAGE=build/forth/kernel.bin PORT=/dev/serial/by-id/YOUR-UART VERIFY=1
+make uart-console PORT=/dev/serial/by-id/YOUR-UART
+```
+
+`upload` resets/halts the CPU, loads/verifies RAM and leaves it halted. In the
+console press Ctrl+B for the local debug prompt, enter `run`, then Ctrl+B to
+return to CPU input. The kernel prints `ok`. Ctrl+D closes this host console
+without changing CPU state. For a fresh Forth session, use `reset-halt` and
+`run` at the debug prompt; this forgets user definitions. The host console uses
+RX-credit polling for queued CPU input. A plain terminal or uploader must pace
+input: the CPU UART has a single retained RX byte, not a line FIFO.
+
+This image ends before FFF0, so no `SKIP_UART_MMIO` option is needed. Re-uploading
+it overwrites user RAM. The existing `make image`/`make load-run` targets build
+TokenForth `.cf` programs; use `forth-image` followed by `upload` for this kernel.
+Hardware transport needs the project's serial dependencies (`make setup`).
+
+## Language and input
+
+[WORDS.md](WORDS.md) documents every initial word, stack effect and context flag.
+Names are ASCII case-insensitive, at most 31 bytes. A newer definition shadows
+an older one. The dictionary is searched before number conversion. Words,
+including `:` and `;`, need whitespace separation:
+
+```forth
+: betrag DUP 0< IF NEGATE THEN ;
+-9 betrag . CR
+```
+
+Definitions may span lines: an open definition receives `compiled`/CRLF after
+each successful line; otherwise the response is `ok`/CRLF. Hidden incomplete
+headers are not found, so a redefinition can still reference its old meaning.
+`;` publishes the word only with a balanced compiler-control stack. Nested
+colon definitions are rejected.
+
+Input lines hold at most 127 bytes plus a terminator. CR or LF ends a line;
+CRLF counts once. BS/DEL deletes one byte. TAB/VT/FF are whitespace; other
+control characters invalidate the whole line, except the editing/EOL controls.
+An invalid or overlong line is drained through EOL before reporting its error.
+KEY still returns NUL as valid data. The FPGA UART is seven-bit ASCII.
+
+`\` ignores the remainder of a line. `(` skips through `)` on the same line,
+without nesting. Comment words need their own word boundaries. Strings use
+`S" text"` and `." text"`: exactly one separator after the opening word belongs
+to the syntax, further spaces belong to the text. No escapes or multiline
+strings; comment markers inside strings are literal data.
+
+Cells/addresses are 16-bit, byte-addressed, little-endian. Arithmetic wraps
+modulo 65536. True is FFFF and false is zero; branches accept any nonzero flag.
+Signed numbers range -32768..32767; positive literals may also be 32768..65535.
+BASE supports 2..36, optional signs, and `$`/`#` prefixes after the sign.
+`/MOD` truncates the quotient toward zero, with remainder sign matching the
+dividend; division by zero and -32768/-1 are errors. `2/` is arithmetic right
+shift (rounds negative odd values down), RSHIFT is logical. See WORDS.md for
+all arithmetic/stack contracts.
+
+## Compile-time behavior and data
+
+`[` temporarily interprets within a definition, `]` resumes compilation.
+LITERAL consumes a compile-time value and emits a checked runtime push:
+
+```forth
+: answer [ 20 22 + ] LITERAL ;
+```
+
+IMMEDIATE marks the latest completed user word. Such words run while compiling:
+
+```forth
+: forty-two 42 ; IMMEDIATE
+: answer forty-two LITERAL ;
+```
+
+`' name` parses at execution time and returns an XT. `['] name` compiles that
+XT as a literal. EXECUTE consumes the XT and invokes its word. STATE is a readable
+mode variable (0 interpret, 1 compile); change modes through the compiler words.
+Directly writing STATE or private kernel variables is unsupported.
+
+IF/ELSE/THEN and BEGIN/UNTIL, BEGIN/AGAIN, BEGIN/WHILE/REPEAT use a separate
+32-entry typed control stack. IF/UNTIL/WHILE consume one runtime flag. One
+unmatched WHILE is allowed per BEGIN; nested loops/conditionals are supported.
+DO/LOOP and public return-stack words are deliberately absent.
+
+HERE is the next free byte. ALLOT accepts 0..32767 bytes and does not clear them.
+`,`/`C,` store a cell/low byte and advance HERE. CREATE defines a body-address
+word; VARIABLE adds one zeroed cell; CONSTANT defines a stored value. These
+execute only outside open definitions, and may be used by simple defining
+words. No DOES> behavior is implemented.
+
+Interpreted S" returns a temporary address/length valid until the next
+interpreted S" or reset. ." does not overwrite that buffer. Compiled S" refers
+to persistent embedded bytes; compiled ." uses private temporaries and works
+even with eight occupied user cells. TYPE consumes address/length and writes
+bytes; length zero performs no read. All output uses the seven-bit UART.
+
+## Errors, reset and limits
+
+Errors print a reason (and the unknown/compile-only token when relevant),
+discard the current line and user data, and resume with `ok`. An open definition
+rolls HERE/LATEST back to their saved values before the state is cleared.
+ABORT takes the same non-returning path without an error message. Completed
+words survive both. Arbitrary immediate-word side effects are not rolled back.
+A CPU reset rebuilds the dictionary pointers to kernel-only state; SRAM bytes
+may remain, but user words are forgotten. No persistence or image-save facility.
+
+The hardware stacks remain 16/16. The kernel checks eight user data cells,
+reserving the remainder for internal work. Returnstack overflow has no general
+trap: arbitrary call depth is unsupported. Current structural checks bound
+kernel paths to 12 physical data cells and six return frames; user nesting
+adds to these. .S, S" and dynamic EXECUTE receive separate targeted checks.
+Tail calls reduce return depth but cannot remove every live caller frame.
+
+Code/data allocation is confined to USER_START..EFFF, with USER_START from the
+map (currently 3624). F000..FFEF is reserved; FFF0..FFFF is MMIO. Stack display,
+string and arithmetic scratch have separate regions. There is no memory
+isolation: arbitrary !/C!/EXECUTE operands can corrupt the kernel. Nontermination,
+invalid XT and hardware-stack overflow are not recoverable Forth exceptions.
+No floating point, files, interrupts, CATCH/THROW or standards compliance claim.
+
+Private `last_error` at 0126 retains the last code (zero after reset):
+
+| Codes | Meaning |
+| --- | --- |
+| 1–5 | Data underflow, overflow, shift range, zero divisor, quotient overflow |
+| 6–10 | Line too long, open comment, invalid BASE, invalid text control, numeric overflow |
+| 11–15 | Unknown word, compile-only word, compiler context, invalid name, dictionary full |
+| 16–21 | No user word for IMMEDIATE, unresolved control, simulator EOF in definition, control stack full, invalid ALLOT, open string |
+
+## Verification and implementation reference
 
 ```sh
 python3 forth/test.py --rtl
-cmake -S . -B build/sim
-cmake --build build/sim --target simulator forth_kernel
-ctest --test-dir build/sim --output-on-failure
+# alternatively:
+make test-forth
+ctest --test-dir build/sim -R '^forth_checks$' --output-on-failure
 ```
 
-The runner retains kernel artifacts, one log per suite and report.json under
-build/forth-tests/; CTest uses build/sim/forth-tests/. Explicit --iverilog/--vvp
-options support non-default tool locations. The AP-9 run passed all 18 CTest
-entries and all 63 Forth test methods without skips. It adds a complete serial
-RX/TX/CPU/SRAM test using debug-q input credit and debug HALT. This is RTL
-simulation, not a hardware test. Stacks remain 16/16, with eight user data cells.
+The runner accepts `--output`, `--iverilog` and `--vvp`. Without `--rtl`, software
+checks run and the report explicitly records the intentional RTL skips. Full
+runs require Icarus/vvp. CTest's overall setup also needs the installed project
+package, CMake, Verilator and a C++17 compiler; see [repository tests](../docs/TESTS.md).
+
+The retained report includes commands, exit codes, timings, tools and test/skip
+counts. Logs and initial kernel artifacts live under build/forth-tests/ (CTest:
+build/sim/forth-tests/). Serial-system source, expected bytes and captured TX
+are retained under artifacts/system/. Tests cover independently expected math,
+compiler rollback/limits, return-bit/tail-call behavior, instruction retirement
+through three SRAM timings, UART-buffer sessions and actual RTL serial RX/TX
+with debug-q credit and debug HALT. Examples are executable documentation.
+The Forth-specific SRAM bench copy raises only its watchdog; SRAM timings and
+RTL are unchanged. Simulation results are not a physical board validation.
+
+- [Word reference](WORDS.md)
+- [Examples and golden responses](examples/README.md)
+- [Architecture and private ABI](ARCHITECTURE.md)
+- [Compact handoff and completed work packages](STATUS.md)

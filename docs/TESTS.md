@@ -439,7 +439,7 @@ stehen in [DRAFT.md](DRAFT.md). FPGA-CPU-Ausgaben werden als sieben Nutzbits
 verglichen; UTF-8 wird auf dieser Leitung nicht erhalten.
 
 
-## Standalone Forth integration (AP 9)
+## Standalone Forth integration (AP 9/10)
 
 The independent Forth kernel in `forth/` has a separate `forth_checks` CTest
 entry; TokenForth and its unfinished token interpreter are different components.
@@ -466,3 +466,11 @@ the runtime state. Input, expected bytes and captured TX are retained under
 `artifacts/system/` when run by the integrated runner. This covers the serial
 RX boundary in simulation; it is not a board validation or a timing guarantee
 for external SRAM. Stacks remain 16/16 hardware cells and eight user data cells.
+
+The five source files under `forth/examples/` are executable documentation.
+Their manually specified response manifest is checked in the CPU model, through
+the actual CLI pipe workflow from another working directory, and through the
+RTL UART buffers. A separate check requires the word reference to cover every
+kernel word exactly once. The root Make targets `forth-image`, `forth-console`
+and `test-forth` expose the standalone workflow; isolated Makefile tests verify
+their behavior without accessing hardware or invoking TokenForth compilation.
