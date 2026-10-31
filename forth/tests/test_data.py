@@ -55,6 +55,48 @@ class DataChecks(unittest.TestCase):
                 self.assertTrue(out.endswith(f'{remaining} ok\r\n'.encode()), out)
                 self.assertEqual(cell(memory, VARIABLES['here']), USER_LIMIT - remaining)
 
+    def test_forget_reclaims_newer_words_and_data(self):
+        image = self.image
+        source = (b': kept 7 ; HERE\n: gone 8 ; VARIABLE newer 23 ALLOT\n'
+                  b'123 FORGET GoNe HERE UNUSED kept\n: replacement 9 ; replacement\n')
+        out, values, memory, _ = session(image, source)
+        self.assertNotIn(b'error:', out)
+        before, value, after, unused, kept, replacement = values
+        self.assertEqual(value, 123)
+        # Header alignment may leave one byte before the forgotten header.
+        self.assertEqual(after, (before + 1) & ~1)
+        self.assertEqual(unused, USER_LIMIT - after)
+        self.assertEqual((kept, replacement), (7, 9))
+        for name in ('gone', 'newer'):
+            with self.assertRaises(AssertionError):
+                lookup(memory, name)
+        self.assertEqual(lookup(memory, 'replacement')[0], after)
+
+    def test_forget_redefinition_and_first_user_word(self):
+        source = b': x 1 ;\n: x 2 ;\nFORGET x x\nFORGET x UNUSED\n'
+        out, values, memory, _ = session(self.image, source)
+        self.assertNotIn(b'error:', out)
+        self.assertEqual(values, [1, USER_LIMIT - self.image.symbols['user_start']])
+        self.assertEqual(cell(memory, VARIABLES['latest']), self.image.symbols['kernel_latest'])
+        with self.assertRaises(AssertionError):
+            lookup(memory, 'x')
+
+    def test_forget_errors_preserve_completed_definitions(self):
+        for command, code in ((b'FORGET DUP', 22), (b'FORGET missing', 11),
+                              (b'FORGET', 14), (b': bad FORGET kept ;', 13),
+                              (b': bad [ FORGET kept', 13)):
+            with self.subTest(command=command):
+                out, values, memory, _ = session(
+                    self.image, b': kept 42 ; HERE\n' + command + b'\nkept HERE\n')
+                self.assertIn(b'error:', out)
+                self.assertEqual(cell(memory, VARIABLES['last_error']), code)
+                self.assertEqual(values[0], 42)
+                header, xt = lookup(memory, 'kept')
+                self.assertNotEqual(header, 0)
+                self.assertEqual(values[1], xt + 6)
+                with self.assertRaises(AssertionError):
+                    lookup(memory, 'bad')
+
     def test_defining_words_and_runtime_stack_checks(self):
         cases = [(b'VARIABLE x x @ 123 x ! x @\n', [0, 123]),
                  (b'CREATE x 7 , x @\n', [7]),
@@ -218,6 +260,8 @@ class DataChecks(unittest.TestCase):
             self.skipTest('enable data/string UART sessions with --rtl')
         from rtl_console import RtlConsole
         cases = [(b'VARIABLE x 7 x ! x @\n', [7], b'ok\r\n'),
+                 (b': x 1 ; : x 2 ; VARIABLE newer\nFORGET x x\n', [1], b'ok\r\n'),
+                 (b'FORGET DUP\n2\n', [2], b'ok\r\n'),
                  (b'42 CONSTANT x x\n', [42], b'ok\r\n'),
                  (b'CREATE x 7 , x @\n', [7], b'ok\r\n'),
                  (b'S" hi" TYPE\n', [], b'hiok\r\n'),

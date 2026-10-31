@@ -81,6 +81,7 @@ see [the guide](README.md) for the complete input/memory contracts.
 | `;` | `--` | IC | Finish a definition, require an empty control stack, emit return and publish the header. |
 | `STATE` | `-- addr` | - | Read the mode variable: 0 interpret, 1 compile; use brackets instead of writing it. |
 | `IMMEDIATE` | `--` | - | Mark the latest completed user definition; kernel words are protected. |
+| `FORGET` | `--` | I | Parse a user word and remove it and all newer definitions/data, reclaiming RAM. Reject open definitions and kernel targets. |
 | `[` | `--` | IC | Temporarily interpret within an open definition. |
 | `]` | `--` | I | Resume compilation within an open definition. |
 | `LITERAL` | `a --` | IC | Compile a depth-tracked runtime literal from the compile-time top cell. |

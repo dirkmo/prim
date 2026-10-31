@@ -23,6 +23,7 @@ ERRORS = {
     'control_overflow': (19, 'control stack overflow'),
     'allot': (20, 'invalid allot'),
     'string': (21, 'unterminated string'),
+    'forget': (22, 'cannot forget kernel word'),
 }
 
 # Foreground arithmetic scratch; the ISR uses separate IRQ-private cells.

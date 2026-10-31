@@ -320,6 +320,27 @@ def emit_compiler(image):
         c.ops(Op.OR, Op.SWAP, Op.BYTE_STORE)
     word('IMMEDIATE', 0, 0, immediate)
 
+    def forget():
+        closed, user = c.label('forget_closed'), c.label('forget_user')
+        c.load('definition_open')
+        c.jz(closed)
+        c.jump('error_compiler')
+        c.mark(closed)
+        c.call('lookup_next_xt')
+        c.load('found_header')
+        c.push('user_start')
+        c.ops(Op.LTU)
+        c.jz(user)
+        c.jump('error_forget')
+        c.mark(user)
+        # Unlink this header and every newer word; their code/data is reusable.
+        c.load('found_header')
+        c.ops(Op.FETCH)
+        c.store('latest')
+        c.load('found_header')
+        c.store('here')
+    word('FORGET', 0, 0, forget, flags=1)
+
     def bracket_open():
         c.call('require_compiling')
         c.set_cell('state', 0)

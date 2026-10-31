@@ -1,6 +1,6 @@
 # Kleines Forth auf Prim – aktuelle Architektur
 
-Der Kernel umfasst Interpreter, Laufzeitcompiler und 90 Wörter. Die früheren
+Der Kernel umfasst Interpreter, Laufzeitcompiler und 91 Wörter. Die früheren
 Arbeitspakete sind abgeschlossen; historische Entscheidungen und Messwerte
 stehen in [HISTORY.md](HISTORY.md), der aktuelle Stand in [STATUS.md](STATUS.md).
 Diese Beschreibung verwendet das kompakte Wörterbuchformat der Map-Version 2.
@@ -228,7 +228,10 @@ Rollback bei Fehler innerhalb einer Definition setzt HERE und LATEST auf die
 gesicherten Werte zurück und verwirft den Kontrollstack. Dies rollt keine
 beliebigen Seiteneffekte von Immediate-Wörtern zurück. CREATE/VARIABLE/CONSTANT
 sind nur außerhalb offener Definitionen erlaubt; Größe vor Headerpublikation
-prüfen. ALLOT akzeptiert nur nichtnegative Größen. Kein FORGET/MARKER.
+prüfen. ALLOT akzeptiert nur nichtnegative Größen. FORGET setzt HERE auf den
+gefundenen Benutzerheader und LATEST auf dessen Vorgänger zurück; neuere
+Definitionen und Daten werden damit ebenfalls freigegeben. Kernelziele und
+offene Definitionen werden abgewiesen. Kein MARKER.
 
 ### Return-Bit und Tail-Aufrufe
 
@@ -266,7 +269,7 @@ Aufrufbare Wörter erfüllen die dort dokumentierten Stackeffekte.
 | 3 | @ ! C@ C! +! CELL+ CELLS KEY EMIT CR SPACE |
 | 4 | BASE DECIMAL HEX |
 | 5 | . U. .S DEPTH WORDS ABORT |
-| 6 | : ; STATE IMMEDIATE [ ] LITERAL ' ['] EXECUTE |
+| 6 | : ; STATE IMMEDIATE FORGET [ ] LITERAL ' ['] EXECUTE |
 | 7 | IF ELSE THEN BEGIN UNTIL AGAIN WHILE REPEAT |
 | 8 | HERE ALLOT , C, CREATE VARIABLE CONSTANT TYPE S\" .\" |
 

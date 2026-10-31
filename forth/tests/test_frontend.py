@@ -129,6 +129,26 @@ class FrontendChecks(unittest.TestCase):
         r.quiet()
         self.assertTrue(bytes(r.memory.tx).endswith(b'12 .\r\n12 ok\r\n'))
 
+    def test_forget_shares_dictionary_and_reclaimed_space_between_consoles(self):
+        r = DualSession()
+        r.uart(': kept 7 ;\r')
+        r.quiet()
+        before = r.get('here')
+        r.uart(': gone 8 ; VARIABLE newer 23 ALLOT\r')
+        r.quiet()
+        r.keyboard('FORGET gone\r')
+        r.quiet()
+        self.assertEqual(r.get('here'), (before + 1) & ~1)
+        r.uart('kept\r')
+        r.quiet()
+        self.assertEqual(r.stack(), [7])
+        r.uart('newer\r')
+        r.quiet()
+        self.assertIn(b'error: unknown word', bytes(r.memory.tx))
+        r.keyboard('gone\r')
+        r.quiet()
+        self.assertIn(b'error: unknown word', r.memory.screen())
+
     def test_multiline_ownership_including_bracket_interpretation(self):
         r = DualSession()
         r.keyboard(': LOCAL [\r')
