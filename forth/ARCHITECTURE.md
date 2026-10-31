@@ -1,7 +1,8 @@
 # Kleines Forth auf Prim – Architekturentscheidung (AP 1)
 
 Stand: 31. Oktober 2026. Zielarchitektur; AP 2 implementiert Build und Boot,
-AP 3 die Grundwörter. Textinterpreter und Compiler noch geplant. Änderungen
+AP 3 die Grundwörter, AP 4 Texteingabe/Parser/Zahlen. Textinterpreter und Compiler
+noch geplant. Änderungen
 hier begründen; aktuellen Stand und Messwerte in STATUS.md nachlesen.
 Arbeitsstand und APs: [STATUS.md](STATUS.md).
 
@@ -135,7 +136,10 @@ NUL ist kein Zeichen für „keine Eingabe“. Keine Wortzugriffe auf UART-Regis
 CR oder LF beendet eine Eingabezeile; CRLF zählt einmal. Echo, Backspace und
 DEL zum Löschen des letzten Zeichens. Überlange Zeile vollständig bis zum
 Zeilenende verwerfen und Fehler melden; keinen abgeschnittenen Text ausführen.
-127 Zeichen Nutztext pro Zeile. Sender wartet auf die Antwort der Konsole,
+127 Zeichen Nutztext pro Zeile. Ab AP 4 erlaubt die Eingaberoutine druckbare
+ASCII-Zeichen und TAB/VT/FF; andere Steuerzeichen außer BS/DEL/CR/LF machen
+die Zeile ungültig und werden wie Überlänge bis EOL verworfen. KEY bleibt
+davon unabhängig und liefert auch NUL. Sender wartet auf die Antwort der Konsole,
 bevor er die nächste Zeile sendet; RX hat keinen Mehrzeichen-FIFO. Zeichenweise
 Übertragung muss RXAVAIL-Kredit über das bestehende Debugprotokoll beachten
 oder ausreichend gepaced sein; die Konsole garantiert kein verlustfreies Paste.
@@ -226,7 +230,7 @@ AP 6 implementiert beide Optimierungen ohne ISA-Änderung:
 
 ## Öffentlicher Wortumfang der ersten Version
 
-Dies ist der Zielumfang nach AP 8; Zeilen für AP 3 sind implementiert,
+Dies ist der Zielumfang nach AP 8; Zeilen für AP 3 und AP 4 sind implementiert,
 die übrigen Wörter noch geplant. Aktuelle Wortliste und Prüfungen in README.md.
 Stubs/Inline-Emitter müssen jeweils dieselben dokumentierten Stackeffekte haben.
 
@@ -244,7 +248,10 @@ Stubs/Inline-Emitter müssen jeweils dieselben dokumentierten Stackeffekte haben
 | 8 | HERE ALLOT , C, CREATE VARIABLE CONSTANT TYPE S\" .\" |
 
 `\` und `(` als Parserwörter ab AP 4. Parserinterne Wörter wie FIND und
-PARSE-NAME benötigen zunächst keine öffentliche Schnittstelle. Kein POSTPONE,
+PARSE-NAME benötigen zunächst keine öffentliche Schnittstelle. Ab AP 4 liefern
+private parse_name/parse_number ihre Ergebnisse über Verwaltungszellen und
+haben keinen Benutzerstackeffekt (Verträge in README.md). Die Tokenlänge ist
+bis 127 erlaubt; die 31-Byte-Namensgrenze betrifft Wörterbuchnamen. Kein POSTPONE,
 EXIT, DOES>, EVALUATE, ACCEPT, CATCH/THROW oder Benutzer-Returnstack im ersten
 Umfang. Spätere Ergänzungen separat festlegen.
 

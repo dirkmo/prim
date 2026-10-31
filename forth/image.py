@@ -24,6 +24,7 @@ class Image:
         self.relocations = []
         self.occupied = set()
         self.words = []
+        self.label_serial = 0
 
     def define(self, name, value=None):
         if name in self.symbols:

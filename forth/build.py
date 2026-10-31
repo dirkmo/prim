@@ -25,7 +25,7 @@ def build_image():
 def memory_map(image):
     return {
         'format': 'prim-forth-map-v1',
-        'stage': 'AP3 checked primitives; no text interpreter yet',
+        'stage': 'AP4 input/parser/numbers; no text interpreter yet',
         'image': {'file': 'kernel.bin', 'start': 0, 'size': RAM_END,
                   'endianness': 'little', 'entry': 0},
         'symbols': dict(sorted(image.symbols.items())),

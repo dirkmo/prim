@@ -8,12 +8,14 @@ Ein kleines, eigenständiges Forth unter `forth/` im Projekt-Root entwickeln.
 Es verwendet normale Forth-Syntax und einen vollständig auf der Prim-CPU
 laufenden Textinterpreter und Compiler. Standardkonformität ist kein Ziel.
 
-**AP 1–3 sind abgeschlossen. Kernel-Build, Boot und 50 geprüfte Grundwörter
-sind implementiert; noch kein Textinterpreter oder Laufzeitcompiler.**
-Der Nutzer hat zuletzt mit „nun ap3“ AP 3 beauftragt. AP 4 wurde nicht begonnen.
+**AP 1–4 sind abgeschlossen. Kernel-Build, Boot, 55 Wörter und private
+CPU-Routinen für Eingabe/Parser/Zahlen sind implementiert; noch kein
+Textinterpreter oder Laufzeitcompiler.** Der Nutzer hat zuletzt AP 3 committen
+und das nächste AP beginnen lassen. AP-3-Commit: `1e77c88`; AP-4-Änderungen
+liegen noch uncommittet vor. AP 5 wurde nicht begonnen.
 Die konkrete Architektur steht in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-AP 4–10 sind offen. Dieses Dokument bei späterer Arbeit knapp aktuell halten:
+AP 5–10 sind offen. Dieses Dokument bei späterer Arbeit knapp aktuell halten:
 Entscheidungen, betroffene Dateien, Prüfungen und nächste Schritte festhalten.
 
 ## Verbindliche Leitplanken aus dem Gespräch
@@ -156,7 +158,7 @@ keine neuen CPU-Instruktionen. Private Fehlerausgänge geben den Grund über
 UART aus, setzen logischen Stack-/Compilerzustand zurück und springen über
 error_exit nach idle. Kein Zeilenhandling oder Definitionsrollback vorgezogen.
 
-Aktuell idle=048D, KERNEL_END=1131, USER_START=1132, kernel_latest=0C7C.
+Im AP-3-Stand idle=048D, KERNEL_END=1131, USER_START=1132, kernel_latest=0C7C.
 Variablen bis 0127; neue Zelle last_error an 0126. Arithmetik-Scratch exklusiv
 0380..038D (a,b,q,rem,count,qsign,rsign), Rest ab 038E frei. Nicht reentrant.
 Beim Weiterentwickeln sind generierte Map und Variablenzuordnung maßgeblich.
@@ -179,18 +181,57 @@ Strukturelle Stackprüfung aller Verzweigungen/Schleifen/Hilfsaufrufe bei
 zulässigen Eingabetiefen: maximal 10 physische Datenzellen, höchstens 2
 zusätzlich zur Eingabetiefe, maximal 2 Returnstack-Einträge einschließlich
 Aufruf des öffentlichen Wortes. Dynamische Tests bestätigen diese Budgets.
-Boot nun 72 Instruktionen, weiterhin maximal 2 Datenzellen und 0 Returnframes.
+Boot im AP-3-Stand 72 Instruktionen, maximal 2 Datenzellen und 0 Returnframes.
 Spätere Interpreter-/Compilerframes müssen zusätzlich berücksichtigt werden.
 
 ### AP 4 – Texteingabe und Parser
 
-Status: offen. Abhängigkeiten: AP 3.
+Status: abgeschlossen (31. Oktober 2026). Abhängigkeiten: AP 3.
 
 Zeilenpuffer, einfache Eingabekorrektur, Wortzerlegung, Kommentare und
 Zahlenkonvertierung mit `BASE`, `DECIMAL` und `HEX` umsetzen.
 
 Ergebnis: gewöhnlicher Forth-Text wird vollständig auf der CPU eingelesen
 und in Wörter/Zahlen zerlegt; Puffergrenzen werden berücksichtigt.
+
+[kernel/parser.py](kernel/parser.py): private read_line, parse_name,
+parse_number, skip_line/skip_paren, raw_key/raw_emit und is_space.
+Neue öffentliche Wörter BASE/DECIMAL/HEX und Immediate-Kommentare `\`/`(`.
+Noch keine Konsolenschleife oder automatische Wortsuche/Ausführung.
+
+read_line hat keinen Benutzerstackeffekt, Echo und BS/DEL-Korrektur,
+127-Byte-Grenze, CR/LF/CRLF. Ungültige Steuerzeichen (außer TAB/VT/FF und
+Editier-/EOL-Zeichen) und Überlänge werden bis EOL verworfen, dann Fehler.
+parse_name konsumiert ein folgendes Trennzeichen und liefert token_addr/length;
+Tokens bis 127 Bytes, Definitionen-Namensgrenze 31 erst in späteren APs.
+Kommentare werden durch expliziten Aufruf ihrer Wörter verarbeitet.
+
+parse_number erhält das aktuelle Token, bewahrt alle Benutzerwerte und liefert
+number_status: 0 ungültig/kein Zahlentoken, 1 Erfolg, 2 Zahlenüberlauf.
+number_value nur bei Status 1 gültig, sonst 0. Basis 2..36, +/-, Präfix $/#
+nach Vorzeichen, positive 0..65535, negative Beträge bis 32768. Invalides BASE
+ist Fehler; Syntax/Überlauf werden als Status zurückgegeben, damit AP 5 zuerst
+im Wörterbuch suchen kann. Bounded repeated addition mit Carry-Prüfung, kein
+Aufruf der öffentlichen Rechenwörter. Konvertierung nutzt eigene Variablen.
+
+Neue Fehlercodes: 6 Eingabe zu lang, 7 offener Kommentar, 8 ungültige BASE,
+9 Text-Steuerzeichen, 10 Zahlüberlauf (Ausgang für AP 5 vorbereitet).
+Alle Fehlerausgänge löschen zusätzlich Eingabe-/Tokenmetadaten; skip_lf
+bleibt für CRLF erhalten. Definitionstransaktionen weiterhin erst ab AP 6.
+
+Aktuell idle=04DB, KERNEL_END=1A9D, USER_START=1A9E, kernel_latest=1A8E.
+Variablen nun 0100..0141, neue Zellen ab 0128; number_status=013E,
+number_value=0140. Kernel wächst, generierte Map ist maßgeblich.
+Boot 111 Instruktionen, weiterhin 2 Datenzellen und kein Returnframe.
+
+Validierung: Build sowie test_boot.py, test_primitives.py und test_parser.py
+jeweils mit `--rtl -v` bestanden: 4+9+8 Testmethoden. Neue Prüfungen: alle
+Zahlenbasen und Grenzwerte, Kommentare, Eingabekorrektur, Zeilenverwerfen und
+Wiederaufnahme, 9 Parser-/Zahlenvergleiche mit physischem SRAM sowie gerichtete
+CPU/UART-Puffer-Prüfung für zwei editierte Zeilen unter TX-Rückstau/ACK-Wartezeit.
+Strukturelle Stackprüfung umfasst alle öffentlichen Wörter und die privaten
+read_line/parse_name/parse_number: maximal 11 Datenzellen, höchstens 3 zusätzlich
+zur Eingabetiefe und 2 Returnframes einschließlich Routineaufruf. Kein Boardtest.
 
 ### AP 5 – Wörterbuch und äußerer Interpreter
 
@@ -259,16 +300,19 @@ Ergebnis: Nutzung und Weiterentwicklung ohne Kenntnis des ursprünglichen Chats.
 
 ## Letzte Prüfung und nächster Schritt
 
-- AP 3 vollständig unter forth/ umgesetzt; CPU, TokenForth und bestehende
+- AP 4 vollständig unter forth/ umgesetzt; CPU, TokenForth und bestehende
   Simulationshelfer unverändert. Alle oben genannten Tests bestanden.
-- Nächster AP: AP 4, Texteingabe/Parser und Zahlenkonvertierung. Öffentliche
-  KEY/EMIT zählen DEPTH für Benutzerwerte; interne Parser-I/O braucht rohe
-  Varianten ohne Änderung der logischen Benutzertiefe. Code-Emitter Code in
-  kernel/primitives.py wiederverwenden oder beim Erweitern sauber aufteilen.
+- Nächster AP: AP 5, Wörterbuchsuche und äußerer Interpreter plus Ausgabe/
+  Stackanzeige. Parser-ABI in README.md nutzen: read_line, dann parse_name,
+  Suche vor parse_number. Kommentare haben Immediate-Flag. Roh-I/O raw_key/
+  raw_emit verändert DEPTH nicht, öffentliche KEY/EMIT dagegen schon.
+- Code und emit_word in kernel/primitives.py sind gemeinsame Codegeneratoren;
+  Code.label verwendet einen imageweiten Zähler. Stackeffekte prüfen bevor
+  Literalwerte auf den Benutzerstack gelegt werden, z. B. Code.guard(0,1).
 - Image bietet define/org/op/push/cell/emit/resolve. image.words enthält
-  Name, Header-/XT-Symbol und need/give; Map löst diese Symbole auf Adressen auf.
-  Kernelaufbau: Boot+idle, dann emit_primitives (Header, Wörter, Hilfsroutine,
-  Fehlerausgänge), danach kernel_end/user_start. Weitere Routinen vor kernel_end
+  Name, Header-/XT-Symbol, need/give und flags; Map löst Symbole auf Adressen auf.
+  Kernelaufbau: Boot+idle, emit_primitives (Header, Wörter, Hilfsroutine,
+  Fehlerausgänge), emit_parser, danach kernel_end/user_start. Routinen vor kernel_end
   einfügen; kernel_latest derzeit auf letzten Eintrag von image.words gesetzt.
 - error_exit führt derzeit nach idle. Zeilenverwerfen ab AP 5 und Rollback
   ab AP 6 ergänzen; beim Fehler keine Rückkehr durch verworfene Frames.

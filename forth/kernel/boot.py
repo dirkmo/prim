@@ -3,6 +3,7 @@ from prim.isa import PrimOpcodes as Op
 
 from forth.image import KERNEL_START, USER_LIMIT, Ref
 from forth.kernel.primitives import emit_primitives
+from forth.kernel.parser import emit_parser
 
 # Private RAM cells; public Forth words will expose selected cells later.
 VARIABLES = {
@@ -13,6 +14,9 @@ VARIABLES = {
         'definition_open', 'saved_here', 'saved_latest', 'pending_header',
         'last_opcode', 'last_end', 'fold_safe', 'skip_lf',
         'token_addr', 'token_length', 'last_error',
+        'io_char', 'line_error', 'number_pos', 'number_left', 'number_base',
+        'number_negative', 'number_acc', 'number_overflow', 'number_digit',
+        'number_sum', 'number_count', 'number_status', 'number_value',
     ))
 }
 
@@ -56,6 +60,7 @@ def emit_kernel(image):
     image.push(Ref('idle'))
     image.op(Op.JP)
     emit_primitives(image)
+    emit_parser(image)
     image.define('kernel_end')
     image.define('kernel_latest', image.symbols[image.words[-1]['header']])
     user_start = (image.pc + 1) & ~1

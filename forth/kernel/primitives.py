@@ -1,6 +1,7 @@
 """Checked Forth primitives, emitted as Prim code, not evaluated by the host."""
 from prim.isa import PrimOpcodes as Op
 from forth.image import Ref
+from functools import partial
 
 ERRORS = {
     'underflow': (1, 'stack underflow'),
@@ -8,6 +9,11 @@ ERRORS = {
     'shift': (3, 'shift range'),
     'division_zero': (4, 'division by zero'),
     'division_overflow': (5, 'division overflow'),
+    'input_overflow': (6, 'input too long'),
+    'comment': (7, 'unterminated comment'),
+    'base': (8, 'invalid base'),
+    'input_character': (9, 'input character'),
+    'number_overflow': (10, 'number overflow'),
 }
 
 # Software arithmetic scratch. No interrupts/reentrant arithmetic in version 1.
@@ -19,11 +25,10 @@ class Code:
     """Conveniences for emitting branches and private RAM operations."""
     def __init__(self, image):
         self.i = image
-        self.serial = 0
 
     def label(self, purpose):
-        self.serial += 1
-        return f'local_{self.serial}_{purpose}'
+        self.i.label_serial += 1
+        return f'local_{self.i.label_serial}_{purpose}'
 
     def mark(self, label):
         self.i.define(label)
@@ -88,31 +93,34 @@ class Code:
             self.store('depth')
 
 
+def emit_word(c, name, need, give, body, flags=0):
+    image = c.i
+    index = len(image.words)
+    header, xt = f'header_{index}', f'xt_{index}'
+    if image.pc & 1:
+        image.emit([0])
+    image.define(header)
+    previous = Ref(image.words[-1]['header']) if image.words else 0
+    image.cell(previous)
+    image.emit([flags, len(name)])
+    image.cell(Ref(xt))
+    image.emit([0, 0])  # Normal call class; checked inline emission is AP 6.
+    image.emit(name.encode('ascii'))
+    if image.pc & 1:
+        image.emit([0])
+    image.define(xt)
+    image.words.append({'name': name, 'header': header, 'xt': xt,
+                        'need': need, 'give': give, 'flags': flags})
+    c.guard(need, give)
+    body()
+    c.ops(Op.NOP | 0x80)
+
+
 def emit_primitives(image):
     c = Code(image)
     for name, address in ARITHMETIC.items():
         image.define('arith_' + name, address)
-
-    def word(name, need, give, body):
-        index = len(image.words)
-        header, xt = f'header_{index}', f'xt_{index}'
-        if image.pc & 1:
-            image.emit([0])
-        image.define(header)
-        previous = Ref(image.words[-1]['header']) if image.words else 0
-        image.cell(previous)
-        image.emit([0, len(name)])  # Flags; ASCII byte length.
-        image.cell(Ref(xt))
-        image.emit([0, 0])  # Normal call class; checked inline emission is AP 6.
-        image.emit(name.encode('ascii'))
-        if image.pc & 1:
-            image.emit([0])
-        image.define(xt)
-        image.words.append({'name': name, 'header': header, 'xt': xt,
-                            'need': need, 'give': give})
-        c.guard(need, give)
-        body()
-        c.ops(Op.NOP | 0x80)
+    word = partial(emit_word, c)
 
     simple = (
         ('DUP', 1, 2, (Op.DUP,)), ('DROP', 1, 0, (Op.DROP,)),
@@ -247,15 +255,7 @@ def emit_primitives(image):
         word(name, 2, give, divide)
 
     def key():
-        loop = c.label('key_poll')
-        c.mark(loop)
-        c.push('uart_csr')
-        c.ops(Op.BYTE_FETCH)
-        c.push(1)
-        c.ops(Op.AND)
-        c.jz(loop)
-        c.push('uart_data')
-        c.ops(Op.BYTE_FETCH)
+        c.call('raw_key')
     word('KEY', 0, 1, key)
     def emit():
         c.push('uart_data')
@@ -361,7 +361,8 @@ def emit_primitives(image):
         c.mark('error_' + name)
         c.push(number)
         c.store('last_error')
-        for slot in ('depth', 'state', 'control_depth', 'definition_open'):
+        for slot in ('depth', 'state', 'control_depth', 'definition_open',
+                     'input_length', 'input_pos', 'token_addr', 'token_length'):
             c.push(0)
             c.store(slot)
         output(('error: ' + message + '\r\n').encode('ascii'))

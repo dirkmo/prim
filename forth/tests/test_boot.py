@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / 'src'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
 from forth.build import build_image, memory_map
+from forth.kernel.boot import VARIABLES
 from forth.image import Image, Ref
 from prim.cpu import Prim
 from prim.isa import PrimOpcodes as Op
@@ -53,7 +54,8 @@ class BootChecks(unittest.TestCase):
         memory.data[0xE000:0xE004] = b'kept'
         cpu = Prim(memory)
         for _ in range(2):
-            memory.data[0x100:0x128] = b'\xa5' * 0x28
+            variable_end = 0x100 + 2 * len(VARIABLES)
+            memory.data[0x100:variable_end] = b'\xa5' * (variable_end - 0x100)
             memory.uart_ie = 12  # CPU reset alone preserves peripheral enables.
             cpu.reset()
             cpu._int_enable = True  # INTDI must actually disable, not rely on reset.
@@ -75,7 +77,7 @@ class BootChecks(unittest.TestCase):
             self.assertEqual(memory.read16(0x100), image.symbols['user_start'])
             self.assertEqual(memory.read16(0x102), image.symbols['kernel_latest'])
             self.assertEqual(memory.read16(0x104), 10)
-            self.assertEqual(memory.data[0x106:0x128], bytes(0x22))
+            self.assertEqual(memory.data[0x106:variable_end], bytes(variable_end - 0x106))
             self.assertEqual(memory.data[0x200], 0)
             self.assertEqual(memory.data[0x280], 0)
             self.assertEqual(memory.data[0xE000:0xE004], b'kept')
@@ -125,7 +127,7 @@ class BootChecks(unittest.TestCase):
                     self.assertEqual(result.serial, b'')
                     writes = [w for record in result.records
                               for w in record.get('writes', [])]
-                    expected = {address: 0 for address in range(0x100, 0x128)}
+                    expected = {address: 0 for address in range(0x100, 0x100 + 2 * len(VARIABLES))}
                     start = image.symbols['user_start']
                     latest = image.symbols['kernel_latest']
                     expected.update({0x100: start & 255, 0x101: start >> 8,

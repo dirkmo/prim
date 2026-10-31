@@ -1,7 +1,7 @@
 # Eigenständiges Forth für Prim
 
-Stand AP 3: reproduzierbarer Kernel-Build, Kaltstart und 50 aufrufbare
-Forth-Grundwörter mit Stackprüfungen. **Noch kein Textinterpreter oder
+Stand AP 4: Kernel-Build, Kaltstart, 55 aufrufbare Wörter mit Stackprüfungen
+und private CPU-Routinen für Texteingabe, Parser und Zahlen. **Noch kein Textinterpreter oder
 Laufzeitcompiler und keine interaktive UART-Konsole.**
 Architektur: [ARCHITECTURE.md](ARCHITECTURE.md), Übergabe: [STATUS.md](STATUS.md).
 
@@ -44,15 +44,15 @@ löscht die UART-Interruptfreigaben per Bytezugriff und initialisiert seine
 Verwaltungszellen unabhängig vom bisherigen SRAM-Inhalt:
 
 - HERE auf das erste freie, gerade Byte nach dem Kernel, LATEST auf den
-  neuesten der 50 Kernelheader.
+  neuesten der 55 Kernelheader.
 - BASE auf 10, STATE und logische Stacktiefe auf 0.
 - Eingabe-, Parser-, Definitions- und Compilerzustand auf 0.
 - Erstes Byte von Eingabe- und temporärem Stringpuffer auf 0.
 
 Danach läuft `idle` als endlose JP-Schleife ohne CALL, BREAK, UART-Ausgabe oder
 RX-Lesezugriff. Der spätere Interpreter ersetzt diese Schleife. Die generierte
-Speicherkarte enthält die jeweils aktuellen Adressen. Boot benötigt ab AP 3
-72 Instruktionen, maximal 2 Datenstack-
+Speicherkarte enthält die jeweils aktuellen Adressen. Boot benötigt ab AP 4
+111 Instruktionen, maximal 2 Datenstack-
 zellen und 0 Returnstack-Einträge. Er hinterlässt beide Stacks logisch leer.
 
 CPU-Reset startet erneut bei 0 und initialisiert HERE/LATEST neu. Boot selbst
@@ -65,6 +65,7 @@ Schnelle Build- und Python-CPU-Prüfungen:
 ```sh
 .venv/bin/python forth/tests/test_boot.py -v
 .venv/bin/python forth/tests/test_primitives.py -v
+.venv/bin/python forth/tests/test_parser.py -v
 ```
 
 Zusätzlich CPU mit physischem SRAM-Modell und UART-MMIO in Icarus:
@@ -72,6 +73,7 @@ Zusätzlich CPU mit physischem SRAM-Modell und UART-MMIO in Icarus:
 ```sh
 .venv/bin/python forth/tests/test_boot.py --rtl -v
 .venv/bin/python forth/tests/test_primitives.py --rtl -v
+.venv/bin/python forth/tests/test_parser.py --rtl -v
 ```
 
 Dafür müssen `iverilog` und `vvp` im PATH stehen. Vorhandene Helfer aus
@@ -140,10 +142,11 @@ Zeilenbehandlung und Transaktionsrollback folgen erst mit Interpreter/Compiler.
   Eingabetiefe jedes Wortes geprüft, Überlauf für alle wachsenden Wörter.
 - Eine zusätzliche strukturelle Kontrollflussprüfung untersucht beide Seiten
   aller bedingten Sprünge, Schleifen, Hilfsaufrufe und Fehlerausgänge für alle
-  zulässigen Eingabetiefen. Ergebnis: maximal zehn physische Datenstackzellen,
-  davon höchstens zwei zusätzlich zur Eingabetiefe, und zwei lebende
+  zulässigen Eingabetiefen. Sie umfasst ab AP 4 zusätzlich die privaten
+  Eingabe-/Parser-/Zahlenroutinen. Ergebnis: maximal elf physische Datenstackzellen,
+  davon höchstens drei zusätzlich zur Eingabetiefe, und zwei lebende
   Rücksprungadressen einschließlich des Wortaufrufs. Damit bleibt die geplante
-  Reserve von acht temporären Zellen eingehalten. Das Budget gilt für AP 3;
+  Reserve von acht temporären Zellen eingehalten. Das Budget gilt bis AP 4;
   spätere Interpreter-/Compileraufrufe müssen dazugezählt werden.
 - Neun repräsentative Programme laufen in drei SRAM-Timingkonfigurationen
   mit instruktionsweisem Python/RTL-Vergleich, erwarteten Stackwerten und
@@ -158,3 +161,76 @@ Arithmetik belegt exklusiv Scratch 0380..038D: a, b, q, rem, count, qsign,
 rsign (je eine Zelle). Sie ist bei deaktivierten Interrupts nicht reentrant.
 Spätere Anzeige-/Konvertierungsroutinen dürfen dort keine Werte halten, die
 einen Arithmetikaufruf überleben müssen. Scratch ab 038E bleibt frei.
+
+## Texteingabe, Parser und Zahlen (AP 4)
+
+Neue öffentliche Wörter: BASE `( -- addr )`, DECIMAL und HEX `( -- )`,
+sowie die Immediate-Kommentarwörter `\` und `(`. BASE liefert die Adresse der
+BASE-Zelle, HEX setzt sie auf 16 und DECIMAL auf 10. Namenssuche und eine
+aufrufende Konsolenschleife folgen erst in AP 5.
+
+Private Routinen aus kernel/parser.py sind über die Symbole der Map erreichbar:
+
+| Routine | Vertrag |
+| --- | --- |
+| raw_key | `( -- c )`, wartet auf RXAVAIL, liest genau ein Zeichen |
+| raw_emit | `( c -- )`, Byteausgabe mit Bus-Backpressure |
+| is_space | `( c -- flag )`, erkennt 09..0D und 20 |
+| read_line | `( -- )`, setzt input_buffer/input_length und Parserposition zurück |
+| parse_name | `( -- )`, nächstes Token über token_addr/token_length; Länge 0 am Zeilenende |
+| skip_line | `( -- )`, setzt input_pos ans Zeilenende |
+| skip_paren | `( -- )`, sucht `)` innerhalb der aktuellen Zeile, ohne Verschachtelung |
+| parse_number | `( -- )`, wandelt das aktuelle Token um, Ergebnis in number_value/number_status |
+
+Diese Routinen zählen ihre temporären Werte nicht zu DEPTH. read_line,
+parse_name, parse_number und die Kommentar-Scanner erhalten den kompletten
+Benutzerstack; sie sind wegen gemeinsamer Verwaltungszellen nicht reentrant.
+Der Aufrufer darf die Roh-I/O-Argumente von raw_key/raw_emit/is_space nicht
+als Benutzerwerte zählen.
+
+read_line erlaubt 127 Nutzbytes und setzt ein Abschlussbyte. CR oder LF
+beendet die Zeile, CRLF zählt auch über zwei Aufrufe hinweg einmal. BS/DEL
+löscht das letzte Byte und gibt BS SPACE BS aus; Löschen bei leerer Zeile wird
+ignoriert. Normale Zeichen werden gespiegelt, EOL als CRLF ausgegeben.
+TAB, VT und FF sind erlaubt, andere Steuerzeichen (einschließlich NUL) machen
+die Textzeile ungültig; KEY selbst liefert NUL weiterhin regulär.
+Überlange/ungültige Zeilen werden bis einschließlich EOL verworfen, bevor
+eine Fehlermeldung erscheint. Nach Überschreiten der Grenze kann Backspace
+die Zeile nicht nachträglich gültig machen. Es gibt keine verlustfreie
+Paste-Garantie; siehe die Empfangs-/Pacing-Konvention in ARCHITECTURE.md.
+
+parse_name überspringt führenden Leerraum und konsumiert genau ein folgendes
+Trennzeichen, falls vorhanden. Tokens dürfen bis zu 127 Bytes lang sein;
+die Wörterbuch-Namensgrenze von 31 gilt später beim Definieren/Suchen von
+Namen, nicht für lange Zahlen mit führenden Nullen. parse_name führt Kommentare
+nicht selbst aus: erst AP 5 sucht das Token im Wörterbuch und führt `\` oder
+`(` aus. Klammerkommentare müssen in derselben Zeile geschlossen werden.
+
+parse_number validiert zuerst BASE (2..36), dann das ganze Token. Optionale
+Vorzeichen stehen vor optionalem `$` (Hex) oder `#` (Dezimal). Ziffern sind
+0..9 und A..Z/a..z. Positive Werte 0..65535, negative Beträge 0..32768;
+keine stille Überlaufkonvertierung. Die CPU multipliziert intern durch
+höchstens 36 Additionen je Ziffer und prüft Carry vor weiteren Rechenoperationen.
+Die öffentliche Multiplikation/Division und ihr Scratch werden nicht benutzt.
+
+number_status: 0 = keine gültige Zahl, 1 = erfolgreich, 2 = Überlauf einer
+syntaktisch gültigen Zahl. number_value ist nur bei Status 1 gültig, sonst 0.
+Ungültige BASE führt direkt zum Fehlerausgang. Ein unbekanntes Wort oder ein
+ungültiges Zahlentoken löst hier noch keinen Fehler aus: AP 5 muss zuerst im
+Wörterbuch suchen und dann Status 0/2 als unbekanntes Wort/Zahlenüberlauf behandeln.
+
+Neue Fehlercodes in last_error: 6 Eingabe zu lang, 7 Klammerkommentar offen,
+8 BASE ungültig, 9 ungültiges Text-Steuerzeichen, 10 Zahlenüberlauf (Ausgang für
+AP 5 vorbereitet). Alle Fehlerausgänge löschen jetzt auch Eingabelänge,
+Parserposition und Tokenmetadaten. skip_lf bleibt für CRLF-Korrektheit erhalten.
+
+AP-4-Variablen liegen an 0128..0141. Konvertierungsergebnis: number_status
+an 013E, number_value an 0140. Diese Adressen stehen ebenfalls in der Map.
+
+Prüfungen: acht Parser-Testmethoden mit allen Basen, Zahlengrenzen, Präfixen,
+127-Byte-Eingaben, Korrektur, CR/LF/CRLF, Kommentaren, fehlerhaften Zeilen und
+Wiederaufnahme. Drei Parser-/Zahlenprogramme werden mit drei SRAM-Timings
+instruktionsweise verglichen. Ein zusätzlicher gerichteter RTL-Test prüft
+zwei Zeilen mit CRLF, Backspace, Echo und Parseraufrufen bei acht belegten
+Benutzerzellen, gepacetem RX, TX-Rückstau und verzögertem ACK. Byteeinspeisung
+erfolgt vor uart_buffers; kein Test der seriellen RX-Leitung oder echter Hardware.

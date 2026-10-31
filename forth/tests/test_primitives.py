@@ -77,9 +77,12 @@ class Runner:
         self.base = self.cpu._dsp - len(inputs)
 
     def call(self, word, limit=10000):
+        return self.invoke(self.words[word], word, limit)
+
+    def invoke(self, target, word='private routine', limit=200000):
         program = Image()
         program.org(self.image.symbols['user_start'])
-        program.push(self.words[word])
+        program.push(target)
         program.op(Op.CALL)
         program.op(Op.BREAK)
         start, end = self.image.symbols['user_start'], program.pc
@@ -135,7 +138,8 @@ class PrimitiveChecks(unittest.TestCase):
         names = []
         while header:
             self.assertEqual(header % 2, 0)
-            self.assertEqual(data[header + 2], 0)
+            metadata = next(w for w in self.image.words if self.image.symbols[w['header']] == header)
+            self.assertEqual(data[header + 2], metadata['flags'])
             self.assertEqual(data[header + 6:header + 8], b'\0\0')
             length = data[header + 3]
             self.assertTrue(1 <= length <= 31)
@@ -158,7 +162,11 @@ class PrimitiveChecks(unittest.TestCase):
         data = image.memory
         preceding = dict(zip(image.instructions[1:], image.instructions))
         budget_data = budget_return = budget_extra = 0
-        for word in image.words:
+        entries = image.words + [
+            {'name': name, 'xt': name, 'need': 0, 'give': 0}
+            for name in ('read_line', 'parse_name', 'parse_number')
+        ]
+        for word in entries:
             for initial in range(word['need'], 9 - max(0, word['give'] - word['need'])):
                 pending = [(image.symbols[word['xt']], initial, (None,))]
                 visited = set()
@@ -203,7 +211,7 @@ class PrimitiveChecks(unittest.TestCase):
                         pending.append((next_pc, depth, returns))
         self.assertLessEqual(budget_extra, 8)
         self.assertLessEqual(budget_return, 16)
-        print(f'Static AP3 budgets (all branches): DS={budget_data}/16, '
+        print(f'Static kernel budgets (all branches): DS={budget_data}/16, '
               f'RS={budget_return}/16, extra DS={budget_extra}/8')
 
     def test_stack_words_and_full_stack_preservation(self):
