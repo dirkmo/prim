@@ -35,6 +35,26 @@ class DataChecks(unittest.TestCase):
             self.assertNotIn(b'error:', out)
             self.assertEqual(cell(memory, VARIABLES['here']), start + count)
 
+    def test_unused_tracks_allocation_and_compiled_execution(self):
+        source = b'UNUSED 17 ALLOT UNUSED\n: free UNUSED ; free HERE\n'
+        out, values, memory, _ = session(self.image, source)
+        start = self.image.symbols['user_start']
+        here = cell(memory, VARIABLES['here'])
+        self.assertNotIn(b'error:', out)
+        self.assertEqual(values, [USER_LIMIT - start, USER_LIMIT - start - 17,
+                                  USER_LIMIT - here, here])
+
+    def test_unused_at_limit_and_unsigned_output(self):
+        for remaining in (0, 1, 32768):
+            with self.subTest(remaining=remaining):
+                def prepare(memory):
+                    memory.write16(VARIABLES['here'], USER_LIMIT - remaining)
+                out, values, memory, _ = session(self.image, b'UNUSED DUP U.\n', prepare)
+                self.assertNotIn(b'error:', out)
+                self.assertEqual(values, [remaining])
+                self.assertTrue(out.endswith(f'{remaining} ok\r\n'.encode()), out)
+                self.assertEqual(cell(memory, VARIABLES['here']), USER_LIMIT - remaining)
+
     def test_defining_words_and_runtime_stack_checks(self):
         cases = [(b'VARIABLE x x @ 123 x ! x @\n', [0, 123]),
                  (b'CREATE x 7 , x @\n', [7]),

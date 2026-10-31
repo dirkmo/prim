@@ -151,7 +151,9 @@ IF/ELSE/THEN and BEGIN/UNTIL, BEGIN/AGAIN, BEGIN/WHILE/REPEAT use a separate
 unmatched WHILE is allowed per BEGIN; nested loops/conditionals are supported.
 DO/LOOP and public return-stack words are deliberately absent.
 
-HERE is the next free byte. ALLOT accepts 0..32767 bytes and does not clear them.
+HERE is the next free byte. UNUSED returns the remaining dictionary/data bytes
+(`F000` minus HERE); `UNUSED U.` prints the count as an unsigned number.
+ALLOT accepts 0..32767 bytes and does not clear them.
 `,`/`C,` store a cell/low byte and advance HERE. CREATE defines a body-address
 word; VARIABLE adds one zeroed cell; CONSTANT defines a stored value. These
 execute only outside open definitions, and may be used by simple defining
@@ -181,7 +183,7 @@ adds to these. .S, S" and dynamic EXECUTE receive separate targeted checks.
 Tail calls reduce return depth but cannot remove every live caller frame.
 
 Code/data allocation is confined to USER_START..EFFF, with USER_START from the
-map (currently 3624). F000..FFEF is reserved; FFF0..FFFF is MMIO. Stack display,
+generated kernel map. F000..FFEF is reserved; FFF0..FFFF is MMIO. Stack display,
 string and arithmetic scratch have separate regions. There is no memory
 isolation: arbitrary !/C!/EXECUTE operands can corrupt the kernel. Nontermination,
 invalid XT and hardware-stack overflow are not recoverable Forth exceptions.

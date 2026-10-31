@@ -95,6 +95,7 @@ see [the guide](README.md) for the complete input/memory contracts.
 | `WHILE` | `--` | IC | Within BEGIN, compile an exit branch; runtime consumes a flag and exits when zero. |
 | `REPEAT` | `--` | IC | Close one BEGIN/WHILE pair with a backward branch and resolve its exit. |
 | `HERE` | `-- addr` | - | Return the next free dictionary/data byte. |
+| `UNUSED` | `-- u` | - | Return the remaining dictionary/data bytes (F000 minus HERE); print with U. |
 | `ALLOT` | `n --` | - | Reserve 0..32767 bytes; negative values are rejected, memory is not cleared. |
 | `,` | `cell --` | - | Store a cell at HERE and advance by two bytes. |
 | `C,` | `cell --` | - | Store the low byte at HERE and advance by one. |

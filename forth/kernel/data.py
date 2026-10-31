@@ -1,6 +1,7 @@
 """AP 8: data definitions, allocation, byte spans and immediate string words."""
 from functools import partial
 from prim.isa import PrimOpcodes as Op
+from forth.image import USER_LIMIT
 from forth.kernel.primitives import Code, emit_word
 
 
@@ -27,6 +28,12 @@ def emit_data(image):
         c.call('compile_cell')
 
     word('HERE', 0, 1, lambda: c.load('here'))
+
+    def unused():
+        c.push(USER_LIMIT)
+        c.load('here')
+        c.ops(Op.SUB)
+    word('UNUSED', 0, 1, unused)
 
     def allot():
         c.store('compiler_needed')
