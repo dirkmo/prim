@@ -7,6 +7,11 @@ See [system/README.md](../system/README.md) for signal details, edge cases and s
 Detailed walkthroughs are in [Code and architecture](CODE.md) and
 [Tests and verification](TESTS.md).
 
+Official hardware netlist snapshots are stored in [boards/netlists/](../boards/netlists/README.md):
+iCE40HX8K-EVB Rev.B and iCE40-IO Rev.A. Consult these local files first for
+FPGA ball assignments, connector signals and pin conflicts. Their README
+records official download URLs, retrieval date and SHA-256 checksums.
+
 ## Goal and components
 
 Prim is a stack CPU designed to be as minimal as possible, with a 16-bit data

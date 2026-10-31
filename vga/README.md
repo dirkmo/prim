@@ -123,8 +123,10 @@ escape-sequence parser are implemented in hardware.
 
 The board wrapper targets the **Olimex iCE40-IO Rev.A expansion board**,
 connected pin-for-pin to GPIO1 of the iCE40HX8K-EVB Rev.B. The assignments
-combine the official [expansion-board netlist](https://github.com/OLIMEX/iCE40-IO/blob/master/ICE40-IO_Rev_A.net)
-with the [FPGA-board Rev.B netlist](https://github.com/OLIMEX/iCE40HX8K-EVB/blob/master/HARDWARE/REV-B/iCE40HX8K-EVB_Rev_B.net).
+combine the official [expansion-board netlist](../boards/netlists/ICE40-IO_Rev_A.net)
+with the [FPGA-board Rev.B netlist](../boards/netlists/iCE40HX8K-EVB_Rev_B.net).
+Both are saved locally; [provenance and checksums](../boards/netlists/README.md)
+identify the upstream snapshots.
 
 | FPGA signal | iCE40-IO signal | GPIO1 / GPIO_In1 pin | FPGA ball |
 |---|---|---|---|

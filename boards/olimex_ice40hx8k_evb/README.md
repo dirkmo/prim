@@ -7,11 +7,13 @@ Debug link: separate FTDI USB-UART adapter, 115200/8N1, 3.3 V logic.
 Sources of the fixed pin mapping:
 
 - [Olimex Rev.B schematic](https://github.com/OLIMEX/iCE40HX8K-EVB/blob/master/HARDWARE/REV-B/iCE40HX8K-EVB_Rev_B.pdf)
-- [Olimex Rev.B netlist](https://github.com/OLIMEX/iCE40HX8K-EVB/blob/master/HARDWARE/REV-B/iCE40HX8K-EVB_Rev_B.net)
+- [Olimex Rev.B netlist (local copy)](../netlists/iCE40HX8K-EVB_Rev_B.net)
+- [iCE40-IO Rev.A netlist (local copy)](../netlists/ICE40-IO_Rev_A.net)
 - [SRAM manufacturer datasheet hosted by Olimex](https://www.olimex.com/Products/_resources/ds_k6r4016v1d_rev40.pdf)
 - [User-specified UM-FT2232H module](https://github.com/mariusgreuel/um-ft2232h/blob/main/README.md)
 
 The board wrapper and constraints are specifically for Rev.B, not Rev.B1.
+Netlist provenance and checksums are recorded in [boards/netlists/](../netlists/README.md).
 
 The board now includes the [VGA text controller](../../vga/README.md).
 The iCE40-IO Rev.A expansion board provides VGA through its onboard resistor
