@@ -5,6 +5,7 @@ import sys
 import subprocess
 import tempfile
 import unittest
+import re
 
 ROOT = Path(__file__).resolve().parents[2]
 for directory in (ROOT, ROOT / 'src', ROOT / 'tests', ROOT / 'forth/tests'):
@@ -26,9 +27,42 @@ class ConsoleChecks(unittest.TestCase):
     def setUpClass(cls):
         cls.image = build_image(dual_console=False)
 
+    def test_source_spans_from_real_kernel_in_both_profiles(self):
+        sys.path.insert(0, str(ROOT / 'debug_uart/python'))
+        from prim_debug_uart.forth_upload import source_error
+        from dual_support import DualSession
+        cases = ((b'0 ALLOT -1 ALLOT', b'', 12, 5, 'ALLOT'),
+                 (b'65536', b'', 1, 5, '65536'),
+                 (b' ' * 126 + b'X', b'', 127, 1, 'X'),
+                 (b'X' * 127, b'', 1, 127, 'X' * 127),
+                 (b'123', b'1 BASE !\n', 1, 3, '123'),
+                 (b'BOOM', b': BOOM 1 0 / ;\n', 1, 4, 'BOOM'))
+        for dual in (False, True):
+            fixture = DualSession() if dual else None
+            for line, setup, column, length, word in cases:
+                with self.subTest(dual=dual, line=line):
+                    payload = b'DECIMAL\n' + setup + line + b'\nDECIMAL 7 .\n'
+                    if dual:
+                        before = len(fixture.memory.tx)
+                        fixture.uart(payload)
+                        fixture.quiet()
+                        output = bytes(fixture.memory.tx[before:])
+                        self.assertTrue(fixture.cpu._int_enable)
+                    else:
+                        output, values, memory, _ = session(self.image, payload)
+                        self.assertEqual(values, [])
+                        self.assertEqual(memory.read16(VARIABLES['base']), 10)
+                    error = re.search(rb'error: [^\r\n]+', output).group().decode()
+                    self.assertTrue(error.endswith(f' [source {column:02X} {length:02X}]'), error)
+                    rendered = source_error('demo.fs', 3, line, error)
+                    self.assertIn(f'demo.fs:3:{column}:', rendered)
+                    self.assertIn(f'(word {word!r})', rendered)
+                    self.assertIn('^' + '~' * (length - 1), rendered)
+                    self.assertIn(b'7 ok', output)
+
     def test_all_error_entries_report_and_roll_back(self):
         # Independent expectations include the host-only EOF entry, and ensure
-        # only unknown/compile-only errors append the still-live input token.
+        # unknown/compile-only errors append the token; all include its span.
         errors = (
             ('shift', 3, b'shift range'),
             ('division_zero', 4, b'division by zero'),
@@ -68,7 +102,7 @@ class ConsoleChecks(unittest.TestCase):
                                            ('state', 1), ('control_depth', 2)):
                             put(key, value)
                     self.assertFalse(r.invoke(self.image.symbols['error_' + name]))
-                    self.assertEqual(bytes(r.memory.tx), b'error: ' + message + b'\r\n')
+                    self.assertEqual(bytes(r.memory.tx), b'error: ' + message + b' [source 01 05]\r\n')
                     self.assertEqual(get('last_error'), number)
                     self.assertEqual((get('here'), get('latest')), (here, latest))
                     for key in ('depth', 'state', 'control_depth', 'definition_open',
@@ -167,9 +201,9 @@ class ConsoleChecks(unittest.TestCase):
             (b'1 ( ignored ) 2 + \\ ignored\n.\n',
              b'ok\r\n1 ( ignored ) 2 + \\ ignored\r\nok\r\n.\r\n3 ok\r\n', []),
             (b'1 Missing 99\n2 .\n',
-             b'ok\r\n1 Missing 99\r\nerror: unknown word Missing\r\nok\r\n2 .\r\n2 ok\r\n', []),
+             b'ok\r\n1 Missing 99\r\nerror: unknown word Missing [source 03 07]\r\nok\r\n2 .\r\n2 ok\r\n', []),
             (b'65536\n3 .\n',
-             b'ok\r\n65536\r\nerror: number overflow\r\nok\r\n3 .\r\n3 ok\r\n', []),
+             b'ok\r\n65536\r\nerror: number overflow [source 01 05]\r\nok\r\n3 .\r\n3 ok\r\n', []),
             (b'1 2 ABORT 99\nDEPTH .\n',
              b'ok\r\n1 2 ABORT 99\r\nok\r\nDEPTH .\r\n0 ok\r\n', []),
             (b'1 2 3 4 5 6 7 8\n', b'ok\r\n1 2 3 4 5 6 7 8\r\nok\r\n', list(range(1, 9))),
@@ -219,10 +253,10 @@ class ConsoleChecks(unittest.TestCase):
         payload = b'HEX CaFe U.\nONLY\n1 U.\n'
         output, values, _, _ = session(self.image, payload, prepare_aliases)
         self.assertEqual(output, b'ok\r\nHEX CaFe U.\r\nFFFF ok\r\nONLY\r\n'
-                                 b'error: compile-only word ONLY\r\nok\r\n1 U.\r\n1 ok\r\n')
+                                 b'error: compile-only word ONLY [source 01 04]\r\nok\r\n1 U.\r\n1 ok\r\n')
         self.assertEqual(values, [])
         output, values, _, _ = session(self.image, b'1 BASE !\n1\nDECIMAL 2 .\n')
-        self.assertEqual(output, b'ok\r\n1 BASE !\r\nok\r\n1\r\nerror: invalid base\r\nok\r\n'
+        self.assertEqual(output, b'ok\r\n1 BASE !\r\nok\r\n1\r\nerror: invalid base [source 01 01]\r\nok\r\n'
                                  b'DECIMAL 2 .\r\n2 ok\r\n')
         self.assertEqual(values, [])
 
@@ -243,7 +277,7 @@ class ConsoleChecks(unittest.TestCase):
             (b'7 dUp * .\r\n', b'ok\r\n7 dUp * .\r\n49 ok\r\n', []),
             (b'1 2 .s\n+ .\n', b'ok\r\n1 2 .s\r\n<2> 1 2 ok\r\n+ .\r\n3 ok\r\n', []),
             (b'1 Wrong 99\n8 .\n',
-             b'ok\r\n1 Wrong 99\r\nerror: unknown word Wrong\r\nok\r\n8 .\r\n8 ok\r\n', []),
+             b'ok\r\n1 Wrong 99\r\nerror: unknown word Wrong [source 03 05]\r\nok\r\n8 .\r\n8 ok\r\n', []),
             (b'1 2 ABORT 99\n4\n', b'ok\r\n1 2 ABORT 99\r\nok\r\n4\r\nok\r\n', [4]),
             (b'1 2 3 4 5 6 7 8\n', b'ok\r\n1 2 3 4 5 6 7 8\r\nok\r\n', list(range(1, 9))),
         ]

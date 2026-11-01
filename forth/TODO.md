@@ -25,7 +25,10 @@ werden erst auf Auftrag begonnen.
 - [x] **4. Zeitfunktionen vereinheitlichen:** Audio-Demos verwenden den gemeinsamen
   Timer-Treiber über `TIMER-INIT`/`TIMER-WAIT`; Ladeabhängigkeiten und exklusive
   Timer-Nutzung für beide Konsolenprofile dokumentiert.
-- [ ] **5. Quellpositionen bei Fehlern:** Bei Uploads Dateiname, Zeilennummer
-  und betroffenes Wort ausgeben.
+- [x] **5. Quellpositionen bei Fehlern:** Kernel liefert Token-Spalte und -Länge;
+  Uploads melden Dateiname, Zeile, Spalte und betroffenes Wort mit Markierung.
+  Fehler ohne Token behalten die Dateiname-/Zeilenmeldung.
+- [x] **RAM-Layout prüfen:** Build prüft Variablen, Puffer, IRQ-Ringe und
+  Kernel-/Wörterbuchgrenzen in beiden Profilen auf Überlappungen und Überläufe.
 - [ ] **6. Status automatisch ableiten:** Wortanzahl und Speicherbilanz aus
   dem aktuellen Build übernehmen, statt feste Werte manuell zu pflegen.

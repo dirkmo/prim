@@ -23,7 +23,7 @@ LINES = [
     (b': sum BEGIN DUP WHILE DUP total +! 1- REPEAT DROP ;', b''),
     (b'0 total ! 3 sum total @ .', b'6 '),
     (b': text ." done" ; text', b'done'),
-    (b': bad IF ;', b'error: unresolved control\r\n'),
+    (b': bad IF ;', b'error: unresolved control [source 0A 01]\r\n'),
     (b'42 .', b'42 '),
 ]
 SOURCE = b''.join(line + b'\n' for line, _ in LINES)

@@ -181,7 +181,7 @@ class CompilerChecks(unittest.TestCase):
                 memory.write16(VARIABLES['here'], here)
                 memory.data[USER_LIMIT:USER_LIMIT + 16] = b'protected bytes!'
             out, stack, memory, _ = session(self.image, b': test 1 ;\n', prepare)
-            self.assertIn(b'error: dictionary full\r\n', out)
+            self.assertIn(b'error: dictionary full', out)
             self.assertEqual(cell(memory, VARIABLES['here']), here)
             self.assertEqual(cell(memory, VARIABLES['latest']), self.image.symbols['kernel_latest'])
             self.assertEqual(memory.data[USER_LIMIT:USER_LIMIT + 16], b'protected bytes!')
@@ -195,7 +195,7 @@ class CompilerChecks(unittest.TestCase):
         self.assertEqual(cell(memory, VARIABLES['here']), USER_LIMIT)
         # Brackets force a separate return: fail and roll the entire word back.
         out, _, memory, _ = session(self.image, b': x [ ] 1 ;\n', exact)
-        self.assertIn(b'error: dictionary full\r\n', out)
+        self.assertIn(b'error: dictionary full', out)
         self.assertEqual(cell(memory, VARIABLES['here']), USER_LIMIT - 14)
         self.assertEqual(cell(memory, VARIABLES['latest']), self.image.symbols['kernel_latest'])
 
@@ -236,7 +236,7 @@ class CompilerChecks(unittest.TestCase):
         from support.paths import TIMINGS
         from forth.tests.forth_sram import ForthSramSimulation as SramSimulation
         cases = [(b': x 128 ; x', b'ok\r\n', [128]),
-                 (b': x Missing', b'error: unknown word Missing\r\n', [])]
+                 (b': x Missing', b'error: unknown word Missing [source 05 07]\r\n', [])]
         with tempfile.TemporaryDirectory(prefix='forth-compile-sram-') as directory:
             sim = SramSimulation(directory, Tools(), with_uart=True)
             sim.build()

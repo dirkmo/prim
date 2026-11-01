@@ -93,7 +93,9 @@ class PrimitiveChecks(unittest.TestCase):
                     if state in visited:
                         continue
                     visited.add(state)
-                    self.assertLess(len(visited), 5000, 'unbounded stack growth in loop')
+                    # Source diagnostics add fixed output paths to each error.
+                    self.assertLess(len(visited), 10000,
+                                    f'unbounded stack growth in {word["name"]}')
                     self.assertIn(pc, image.instructions)
                     opcode = data[pc]
                     op = opcode & 127

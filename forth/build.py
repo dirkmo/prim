@@ -11,10 +11,11 @@ if __package__ in (None, ''):
     sys.path.insert(0, str(ROOT))
     sys.path.insert(0, str(ROOT / 'src'))
 
-from forth.image import Image, KERNEL_START, RAM_END, USER_LIMIT, WORD_NAME_OFFSET
+from forth.image import Image, RAM_END, WORD_NAME_OFFSET
 from forth.kernel.boot import VARIABLES, emit_kernel
 from forth.bootstrap import compile_core
 from forth.libraries import standard_sources
+from forth.layout import regions, validate_layout
 
 
 def build_image(*, dual_console=True):
@@ -26,6 +27,7 @@ def build_image(*, dual_console=True):
         compile_core(image, sources=standard_sources())
     else:
         compile_core(image)
+    validate_layout(image)
     return image
 
 
@@ -47,17 +49,7 @@ def memory_map(image):
                    'xt': image.symbols[word['xt']]} for word in image.words],
         'regions': [
             {'name': name, 'start': start, 'end_exclusive': end}
-            for name, start, end in (
-                ('boot', 0, 0x0100), ('variables', 0x0100, 0x0200),
-                ('input', 0x0200, 0x0280), ('string', 0x0280, 0x0300),
-                ('control', 0x0300, 0x0380), ('scratch', 0x0380, KERNEL_START),
-                ('kernel', KERNEL_START, image.symbols['kernel_end']),
-                ('alignment', image.symbols['kernel_end'], image.symbols['user_start']),
-                ('user', image.symbols['user_start'], USER_LIMIT),
-                *([('console_runtime', USER_LIMIT, 0xF400), ('reserved', 0xF400, RAM_END)]
-                  if image.dual_console else [('reserved', USER_LIMIT, RAM_END)]),
-                ('mmio', RAM_END, 0x10000),
-            )
+            for name, start, end in regions(image)
         ],
     }
 

@@ -162,8 +162,8 @@ Use a 3.3 V USB-UART adapter; 115200/8N1 and the debug protocol are unchanged.
 The previous pins 33/34 connect to IrDA_Tx / VGA_RED3 and must no longer be
 used for the UART adapter. PS/2 and IrDA are not driven by this VGA controller.
 
-Physical wiring and monitor output have not been tested; no bitstream has
-been programmed by this change.
+The user confirmed a successful physical monitor check of the repaired font
+on 2026-11-01.
 
 ## Verification and resources
 
@@ -199,8 +199,8 @@ The 2026-11-01 font repair build (current board design, seed 1) is in
 3458/7680 logic cells, 2816/7680 LUT4, 896/7680 flip-flops, 22/32 block RAMs
 and 1/2 PLLs. LUT4/flip-flop counts are synthesized primitives; logic-cell
 packing is from nextpnr. Routed timing passes at 25 MHz (27.87 MHz reported
-maximum). The bitstream is built but the repaired font still needs a physical
-monitor check after programming it.
+maximum). The user confirmed that the repaired font looks correct on the
+physical monitor on 2026-11-01; the visual check passed.
 
 The generated font RTL is checked in; normal builds have no image dependency.
 To regenerate it from [the complete glyph source](fonts/README.md), only Python

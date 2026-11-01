@@ -180,7 +180,22 @@ bytes per line, and no editing/control bytes except TAB/VT/FF whitespace.
 CRLF/CR/LF are normalized and a missing final newline is supplied. Ctrl+C
 cancels filename entry, or stops an upload after the current line completes.
 Errors and the ten-second per-line timeout report the source file and line;
-earlier definitions remain loaded. An unfinished definition at EOF is reported
+kernel errors with a current token also report its column and word and underline
+the exact source span, for example:
+
+```text
+demo.fs:2:12: error: invalid allot (word 'ALLOT')
+  0 ALLOT -1 ALLOT
+             ^~~~~
+```
+
+Columns count source bytes starting at one; tabs are expanded for display.
+The matching kernel supplies a suffix `[source CC LL]` with two hexadecimal
+bytes (column and length), independent of BASE. Older kernels, transport errors
+and errors without a token retain the file/line diagnostic without guessing a
+word. A runtime error inside a called definition identifies its invocation in
+the uploaded line, rather than a position inside the definition's body.
+Earlier definitions remain loaded. An unfinished definition at EOF is reported
 and remains open in the interpreter. After cancellation, timeout or incomplete
 input, inspect the interpreter state before continuing; `ABORT` at a fresh input
 line abandons an open definition. Ctrl+D closes the console.
@@ -263,6 +278,13 @@ DO/LOOP and public return-stack words are deliberately absent.
 
 HERE is the next free byte. UNUSED returns the remaining dictionary/data bytes
 (`F000` minus HERE); `UNUSED U.` prints the count as an unsigned number.
+The build validates fixed RAM allocations in both profiles before compiling
+the Forth sources, then checks the final kernel/dictionary boundaries. Variable
+cells must be aligned and fit their regions; buffers, arithmetic scratch,
+IRQ rings and line editors must not overlap. Emitted code/data must stay inside
+the boot/kernel regions, and the dual kernel must stay below the banked E000
+window. These checks use `forth/layout.py`; the build map uses the same region
+definitions. Invalid layouts fail the build with the affected allocation names.
 ALLOT accepts 0..32767 bytes and does not clear them.
 `,`/`C,` store a cell/low byte and advance HERE. CREATE defines a body-address
 word; VARIABLE adds one zeroed cell; CONSTANT defines a stored value. These

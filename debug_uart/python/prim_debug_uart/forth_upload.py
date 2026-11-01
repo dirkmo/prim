@@ -1,7 +1,27 @@
 """Line-paced source upload using the existing Forth echo and text prompts."""
 from pathlib import Path
+import re
 import threading
 import time
+
+
+def source_error(filename, number, line, message):
+    """Render a kernel-provided byte span; never guess a token from the message."""
+    match = re.search(r' \[source ([0-9A-F]{2}) ([0-9A-F]{2})\]$', message)
+    if line is None or match is None:
+        return f'{filename}:{number}: {message}'
+    column, length = (int(value, 16) for value in match.groups())
+    start = column - 1
+    if not (0 <= start < len(line) and 0 < length <= len(line) - start):
+        return f'{filename}:{number}: {message}'
+    text = line.decode('ascii')
+    word = text[start:start + length]
+    visible = text.replace('\v', ' ').replace('\f', ' ')
+    # Match the terminal's tab expansion, including a tab inside a source span.
+    prefix = visible[:start].expandtabs(8)
+    marked = visible[:start + length].expandtabs(8)
+    return (f'{filename}:{number}:{column}: {message[:match.start()]} (word {word!r})\n'
+            f'  {visible.expandtabs(8)}\n  {" " * len(prefix)}^{"~" * (len(marked) - len(prefix) - 1)}')
 
 
 def read_source(filename):
@@ -95,7 +115,8 @@ class ForthUpload:
                 raise RuntimeError('file ends inside an unfinished definition')
             return f'{filename}: {len(lines)} lines loaded'
         except Exception as exc:
-            raise RuntimeError(f'{filename}:{number}: {exc}') from exc
+            line = lines[number - 1] if number else None
+            raise RuntimeError(source_error(filename, number, line, str(exc))) from exc
         finally:
             # In particular, a timed-out line must not resume sending much later.
             self._discard.set()

@@ -6,6 +6,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from copy import copy
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -15,6 +17,7 @@ sys.path.insert(0, str(ROOT / 'tests'))
 from forth.build import build_image, memory_map
 from forth.kernel.boot import VARIABLES
 from forth.image import Image, RAM_END, Ref
+from forth.layout import validate_layout
 from prim.cpu import Prim
 from prim.isa import PrimOpcodes as Op
 from support.reference import Memory
@@ -23,6 +26,38 @@ RTL = False
 
 
 class BootChecks(unittest.TestCase):
+    def test_layout_rejects_overlaps_and_out_of_range_allocations(self):
+        for dual in (False, True):
+            image = build_image(dual_console=dual)
+            changes = [('here', 0x1ff), ('latest', image.symbols['here']),
+                       ('here', 0x200), ('string_buffer', 0x270),
+                       ('stack_buffer', 0x3e0), ('user_start', 0xf002),
+                       ('user_start', image.symbols['kernel_end'] - 2),
+                       ('kernel_end', 0x10000)]
+            if dual:
+                changes += [('console_owner', 0xeffe), ('irq_carry', 0xf000),
+                            ('front_char', 0xf400), ('user_start', 0xe000)]
+            for name, value in changes:
+                with self.subTest(dual=dual, name=name, value=value):
+                    bad = copy(image)
+                    bad.symbols = {**image.symbols, name: value}
+                    with self.assertRaisesRegex(ValueError, 'RAM layout'):
+                        validate_layout(bad)
+            bad = copy(image)
+            bad.occupied = image.occupied | {0x200}
+            with self.assertRaisesRegex(ValueError, 'outside boot/kernel'):
+                validate_layout(bad)
+        from forth.kernel.interrupts import RINGS
+        with patch.dict(RINGS, {'ps2': RINGS['uart']}):
+            with self.assertRaisesRegex(ValueError, 'overlap.*ring'):
+                validate_layout(image)
+        with patch('forth.kernel.frontend.LINES', (0xF200, 0xF270)):
+            with self.assertRaisesRegex(ValueError, 'overlap.*line_'):
+                validate_layout(image)
+        with patch.dict(VARIABLES, {'extra_cell': 0x200}):
+            with self.assertRaisesRegex(ValueError, 'extra_cell.*outside'):
+                build_image(dual_console=False)
+
     def test_profile_metadata_and_compact_dictionary(self):
         for dual in (False, True):
             with self.subTest(dual=dual):

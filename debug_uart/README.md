@@ -355,7 +355,10 @@ and the 127-byte line limit, normalizes line endings, and waits for each line's
 echo and `ok`/`compiled` response before sending the next. Ctrl+C cancels the
 filename prompt or stops after the current upload line completes. Errors and
 ten-second line timeouts stop with the filename/line; previously executed lines
-remain in effect. Unsent bytes are discarded on timeout. Inspect the interpreter
+remain in effect. With the matching Forth kernel, token errors also show the
+source column, affected word and an underline of the exact source span. Errors
+without a token and older firmware retain filename/line reporting.
+Unsent bytes are discarded on timeout. Inspect the interpreter
 state before continuing after a timeout or an unfinished definition.
 These are text acknowledgments: program output resembling prompts/errors can
 confuse the uploader, and `KEY` or long-running commands can time out.

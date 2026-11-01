@@ -486,6 +486,30 @@ class ForthUploadChecks(unittest.TestCase):
             upload.run(session, filename)
         self.assertEqual(session.queue_cpu.call_count, 3)
 
+    def test_source_span_reports_exact_repeated_word_and_tab_column(self):
+        upload = ForthUpload()
+        session = self.scripted_session(upload, iter((b'ok', b'ok',
+            b'error: invalid allot [source 0C 05]')))
+        filename = self.source(b'\\ first line\n\tALLOT -1  ALLOT\nnever sent')
+        # The kernel span identifies the second occurrence, not a text search.
+        with self.assertRaises(RuntimeError) as caught:
+            upload.run(session, filename)
+        self.assertEqual(str(caught.exception),
+            f'{filename}:2:12: error: invalid allot (word \'ALLOT\')\n'
+            '          ALLOT -1  ALLOT\n                    ^~~~~')
+        self.assertEqual(session.queue_cpu.call_count, 3)
+
+    def test_invalid_or_missing_source_span_is_not_guessed(self):
+        from prim_debug_uart.forth_upload import source_error
+        for message in ('error: invalid name', 'error: invalid name [source 00 04]',
+                        'error: invalid name [source 01 63]'):
+            self.assertEqual(source_error('demo.fs', 2, b'WORD', message),
+                             f'demo.fs:2: {message}')
+        self.assertEqual(source_error('demo.fs', 1, b'\v\fBAD',
+                                      'error: unknown word BAD [source 03 03]'),
+                         "demo.fs:1:3: error: unknown word BAD (word 'BAD')\n"
+                         '    BAD\n    ^~~')
+
     def test_cancel_finishes_current_line_and_incomplete_definition_is_reported(self):
         upload = ForthUpload()
         session = self.scripted_session(upload, iter((b'ok', b'compiled')))

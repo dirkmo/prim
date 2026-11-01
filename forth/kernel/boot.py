@@ -13,6 +13,7 @@ from forth.kernel.interrupts import IRQ_VARIABLES, emit_interrupts
 from forth.kernel.keyboard import KBD_VARIABLES, emit_keyboard
 from forth.kernel.frontend import FRONT_VARIABLES, emit_frontend
 from forth.kernel.see import SEE_NAMES, emit_see
+from forth.layout import validate_static_layout
 
 # Private RAM layout. Keep addresses stable across profiles; skip_lf is only
 # emitted/initialized for UART polling, since dual editors have per-source state.
@@ -57,6 +58,7 @@ def emit_kernel(image):
     }.items():
         image.define(name, address)
 
+    validate_static_layout(image)
     image.org(0)
     image.define('entry')
     image.push(Ref('cold_start'))

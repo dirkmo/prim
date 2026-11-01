@@ -400,11 +400,51 @@ def emit_primitives(image):
     c.output(b' ')
     c.call('print_token')
     c.mark(finish)
+    # Source span is relative to the current input line, never to a user word's
+    # body. The host uploader supplies filename/line and renders the caret.
+    no_source = c.label('error_no_source')
+    c.load('token_length')
+    c.jz(no_source)
+    c.output(b' [source ')
+    c.load('token_addr')
+    c.push('input_buffer')
+    c.ops(Op.SUB)
+    c.push(1)
+    c.ops(Op.ADD)
+    c.call('print_source_byte')
+    c.output(b' ')
+    c.load('token_length')
+    c.call('print_source_byte')
+    c.output(b']')
+    c.mark(no_source)
     c.output(b'\r\n')
     for slot in ('input_length', 'input_pos', 'token_addr', 'token_length'):
         c.set_cell(slot, 0)
     c.mark('error_exit')
     c.jump('idle')  # Abandon all call frames; never return through old ones.
+
+    # Two fixed hexadecimal digits, independent of BASE and arithmetic scratch.
+    # Avoid general numeric formatting on error paths, including invalid BASE.
+    c.mark('print_source_byte')
+    c.ops(Op.DUP, Op.SR, Op.SR, Op.SR, Op.SR)
+    c.call('print_source_nibble')
+    c.push(15)
+    c.ops(Op.AND)
+    c.mark('print_source_nibble')
+    alpha = c.label('source_hex_alpha')
+    c.ops(Op.DUP)
+    c.push(10)
+    c.ops(Op.LTU)
+    c.jz(alpha)
+    c.push(ord('0'))
+    c.ops(Op.ADD)
+    c.emit()
+    c.ops(Op.NOP | 128)
+    c.mark(alpha)
+    c.push(ord('A') - 10)
+    c.ops(Op.ADD)
+    c.emit()
+    c.ops(Op.NOP | 128)
 
     # Literal data, deliberately excluded from the instruction disassembly.
     for name, (_, message) in ERRORS.items():
