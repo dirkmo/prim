@@ -76,7 +76,7 @@ see [the guide](README.md) for the complete input/memory contracts.
 | `U.` | `u --` | - | Print unsigned number in BASE followed by a space. |
 | `DEPTH` | `-- u` | - | Push the previous user stack depth. |
 | `.S` | `... -- ...` | - | Print depth and values bottom-to-top without consuming them; depth is also in BASE. |
-| `WORDS` | `--` | - | List visible dictionary names, newest first, ending in CRLF. |
+| `WORDS` | `--` | - | List visible dictionary names, newest first, ending in CRLF. Native core words are older than hardware extensions; user definitions appear first. |
 | `SEE` | `--` | I | Parse a completed user word and inspect native calls, literals, branches and embedded strings without executing it. Reject kernel words and open definitions; preserve stack and BASE. |
 | `ABORT` | `... --` | - | Non-returning: rollback an open definition, discard stack/current line, resume input. |
 | `:` | `--` | I | Parse a name and begin a hidden definition; nested definitions are rejected. |

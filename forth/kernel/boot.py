@@ -95,11 +95,6 @@ def emit_kernel(image):
         image.op(Op.CALL)
     image.push(Ref('console_start'))
     image.op(Op.JP)
-    if dual:
-        emit_io(image)
-        emit_interrupts(image)
-        emit_keyboard(image)
-        emit_frontend(image)
     emit_primitives(image)
     emit_parser(image)
     emit_console(image)
@@ -107,6 +102,13 @@ def emit_kernel(image):
     emit_control(image)
     emit_data(image)
     emit_see(image)
+    # Keep the core vocabulary older than the hardware extensions in the
+    # dictionary; WORDS traverses these entries newest first.
+    if dual:
+        emit_io(image)
+        emit_interrupts(image)
+        emit_keyboard(image)
+        emit_frontend(image)
     image.define('kernel_end')
     image.define('kernel_latest', image.symbols[image.words[-1]['header']])
     user_start = (image.pc + 1) & ~1

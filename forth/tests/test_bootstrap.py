@@ -22,6 +22,19 @@ RTL = False
 
 
 class BootstrapChecks(unittest.TestCase):
+    def test_words_lists_hardware_before_older_core_and_user_words_first(self):
+        r = DualSession()
+        r.uart(': NEWEST 42 ;\rWORDS\r')
+        r.quiet()
+        output = bytes(r.memory.tx)
+        expected = ('NEWEST ' + ' '.join(w['name'] for w in reversed(r.image.words))
+                    + ' \r\nok\r\n').encode()
+        self.assertTrue(output.endswith(expected), output)
+        names = expected.decode().split()
+        self.assertLess(names.index('AUDIO-INIT'), names.index('VGA-INIT'))
+        self.assertLess(names.index('VGA-INIT'), names.index('+'))
+        self.assertEqual(names[-3:], ['DROP', 'DUP', 'ok'])
+
     def test_core_source_is_sealed_and_described_in_both_profiles(self):
         for dual in (False, True):
             image = build_image(dual_console=dual)
