@@ -22,8 +22,9 @@ werden erst auf Auftrag begonnen.
   exakt wiederherstellen, einschließlich eigener Definition und Alignment.
   `MS` mit Callback-Verarbeitung sowie überlappungssicheres `MOVE` und `FILL`
   stehen ebenfalls als Forth-Quellen im Standard-Image.
-- [ ] **4. Zeitfunktionen vereinheitlichen:** Audio-Demos auf den gemeinsamen
-  Timer-Treiber umstellen und Ladeabhängigkeiten dokumentieren.
+- [x] **4. Zeitfunktionen vereinheitlichen:** Audio-Demos verwenden den gemeinsamen
+  Timer-Treiber über `TIMER-INIT`/`TIMER-WAIT`; Ladeabhängigkeiten und exklusive
+  Timer-Nutzung für beide Konsolenprofile dokumentiert.
 - [ ] **5. Quellpositionen bei Fehlern:** Bei Uploads Dateiname, Zeilennummer
   und betroffenes Wort ausgeben.
 - [ ] **6. Status automatisch ableiten:** Wortanzahl und Speicherbilanz aus

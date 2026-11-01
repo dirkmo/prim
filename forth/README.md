@@ -166,7 +166,12 @@ and `ok` or `compiled`. Normal keyboard input is blocked during upload.
 For the audio examples on the standard image, send only `audio/forth/demo.fs`;
 afterward invoke the demo words interactively. For timer examples, send only
 `timer/forth/demo.fs`. The smaller UART-only profile needs the respective driver
-source first (`audio/forth/audio.fs` or `timer/forth/timer.fs`).
+source first. For audio demos, load `timer/forth/timer.fs`, then
+`audio/forth/audio.fs`, then `audio/forth/demo.fs`; for timer demos, load
+`timer/forth/timer.fs` before `timer/forth/demo.fs`.
+Before timed audio demos, run `AUDIO-INIT AUDIO-DEMO-TIMER` with the timer
+otherwise unused. `AUDIO-DEMO-TIMER` calls `TIMER-INIT`; the demo delay
+`AUDIO-MS` calls `TIMER-WAIT` and requires that free-running timer mode.
 On the Olimex board, `TIMER-INIT 1000 TIMER-WAIT` waits about one second.
 The host CPU model does not simulate the timer.
 

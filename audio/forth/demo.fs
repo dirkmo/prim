@@ -1,10 +1,8 @@
-\ Load audio.fs first. Millisecond delay uses the existing system timer COUNT.
-\ Timed demos require 1 ms/count; the optional setup word changes timer mode.
+\ Standard image: load only this file. UART-only: load timer.fs, then audio.fs first.
+\ Shared timer driver; 1 ms/tick on the Olimex 25 MHz build.
 \ Explicitly takes ownership of the system timer; use only when otherwise idle.
-: AUDIO-DEMO-TIMER
-  0 65524 C! 0 65520 ! -1 65522 ! 3 65524 C! ;
-: AUDIO-MS ( ms -- )
-  65520 @ BEGIN 2DUP 65520 @ SWAP - SWAP U< WHILE REPEAT 2DROP ;
+: AUDIO-DEMO-TIMER TIMER-INIT ;
+: AUDIO-MS ( ms -- ) TIMER-WAIT ;
 \ The timer may be configured by another application: these demos require
 \ free-running COUNT (AUTO enabled with COMPARE=65535), not a short auto-reload period.
 : AUDIO-SCALE

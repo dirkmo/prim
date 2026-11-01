@@ -101,12 +101,28 @@ interrupt handlers do not use them. There are no audio register accesses in an I
 
 Load `audio/forth/demo.fs` for `AUDIO-SCALE`, `AUDIO-CHORD`, `AUDIO-LASER` and
 `AUDIO-SIREN`. Chord runs until stopped. `NOISE` is already a percussion example.
-Scale/laser/siren use `AUDIO-MS`, requiring the existing timer to run freely at
-one millisecond/count, COMPARE=65535 and AUTO enabled. These examples do not change timer setup
-or timer interrupt handling. When the timer is otherwise unused, explicitly run
-`AUDIO-DEMO-TIMER` once to set up this mode (it disables timer interrupts).
-If the application owns a different timer mode,
-use its own delay/scheduler. `AUDIO-CHORD` and the direct examples need no timer.
+The standard dual-console image includes both required drivers. With UART-only,
+upload `timer/forth/timer.fs`, then `audio/forth/audio.fs`, then
+`audio/forth/demo.fs`, one line at a time. Loading these files only defines words;
+it does not configure the timer or start audio. The sources leave BASE decimal.
+
+Scale/laser/siren use `AUDIO-MS`, a wrapper around the shared `TIMER-WAIT`.
+They require free-running COUNT, COMPARE=65535 and AUTO enabled; one tick is
+one millisecond on the Olimex 25 MHz build. When the timer is otherwise unused,
+explicitly run `AUDIO-DEMO-TIMER` (a wrapper around `TIMER-INIT`) once:
+
+```forth
+AUDIO-INIT
+AUDIO-DEMO-TIMER
+AUDIO-SCALE
+```
+
+Setup resets the timer and disables its interrupts; it leaves CPU and console
+IRQs alone. The demos do not reconfigure the timer themselves. `AUDIO-MS`
+handles 16-bit COUNT wrap but does not poll callbacks; do not use timed demos
+alongside `TIMER-EVERY` or another timer mode. Applications that own the timer
+must use their own delay/scheduler (for example `MS` for periodic callbacks in
+the standard image). `AUDIO-CHORD` and the direct examples need no timer.
 
 The memory map now reserves **FFE0..FFFF**; program images end at **FFDF**
 (65,504 bytes). Loader `--skip-mmio` trims the entire range. Use matching freshly

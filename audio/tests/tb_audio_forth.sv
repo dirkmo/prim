@@ -53,6 +53,9 @@ always @(posedge clk) if(!reset) begin
  if(tx_valid)$fwrite(tx_file,"%02x\n",tx_data);
  if(halted)quiet=quiet+1;
  if(quiet==1024)begin
+  if(io.core.timer_bus.counter.count < 3)$fatal(1,"audio timer delay did not elapse");
+  if(io.core.timer_bus.counter.compare !== 16'hffff ||
+     io.core.timer_bus.counter.csr !== 3'b011)$fatal(1,"audio timer setup");
   if(voice_state[0][30:7]!==24'd75590)$fatal(1,"440 Hz driver rate %d",voice_state[0][30:7]);
   if(voice_state[0][1:0]!==1)$fatal(1,"triangle driver");
   if(voice_state[1][30:7]!==24'd89849)$fatal(1,"523 Hz driver rate %d",voice_state[1][30:7]);

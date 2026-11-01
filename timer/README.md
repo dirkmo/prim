@@ -113,8 +113,10 @@ keine Wirkung auf den Timer.
 [`forth/timer.fs`](forth/timer.fs) ist im Standard-Dual-Image bereits enthalten.
 Nur beim kleineren UART-only-Profil wird die Datei zeilenweise nachgeladen
 (UART-Konsole: **Ctrl+U**, dann `timer/forth/timer.fs`). Der Treiber
-belegt den Systemtimer exklusiv; Audio-Demos mit eigener Timer-Konfiguration
-dürfen ihn währenddessen nicht umstellen. Beim Laden werden nur Wörter
+belegt den Systemtimer exklusiv. Die Audio-Demos verwenden ebenfalls diesen
+Treiber: `AUDIO-DEMO-TIMER` ruft `TIMER-INIT` auf, `AUDIO-MS` ruft `TIMER-WAIT`
+auf. Zeitgesteuerte Audio-Demos benötigen daher freien Lauf und dürfen nicht
+parallel zu einer anderen Timer-Konfiguration laufen. Beim Laden werden nur Wörter
 definiert, keine Timerregister verändert. Die Zahlenbasis ist danach dezimal.
 
 ```forth

@@ -16,10 +16,14 @@ from forth.tests.model import lookup
 def main():
     standard = '--standard' in sys.argv
     image=build_image(dual_console=standard)
-    source=(b'' if standard else (ROOT/'audio/forth/audio.fs').read_bytes())
+    source=(b'' if standard else (ROOT/'timer/forth/timer.fs').read_bytes()
+            + (ROOT/'audio/forth/audio.fs').read_bytes())
     source+=(ROOT/'audio/forth/demo.fs').read_bytes()
     assert max(map(len,source.splitlines())) < 127
-    commands=b'''AUDIO-INIT
+    commands=b'''AUDIO-DEMO-TIMER
+0 AUDIO-MS
+3 AUDIO-MS
+AUDIO-INIT
 440 TRI-TONE
 1 AUDIO-VOICE AUDIO-SAW 6 AUDIO-VOLUME 523 AUDIO-HZ AUDIO-TRIGGER
 2 AUDIO-VOICE 13398 18 AUDIO-RATE AUDIO-TRIGGER
