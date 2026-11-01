@@ -1,5 +1,7 @@
 """Independent dual-console MMIO model and instruction-level kernel fixture."""
 from collections import deque
+from copy import deepcopy
+from functools import lru_cache
 from pathlib import Path
 import sys
 
@@ -93,9 +95,16 @@ class DualMemory(Memory):
                           for row in range(30))
 
 
+@lru_cache(maxsize=1)
+def dual_image():
+    # Compile the standard libraries once per suite; each fixture gets its own
+    # mutable copy, including symbols patched by interrupt-injection tests.
+    return build_image(dual_console=True)
+
+
 class DualRunner:
     def __init__(self):
-        self.image = build_image(dual_console=True)
+        self.image = deepcopy(dual_image())
         self.memory = DualMemory(self.image.memory)
         self.cpu = Prim(self.memory)
         self.memory.cpu = self.cpu

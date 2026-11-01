@@ -41,12 +41,16 @@ UART and PS/2 handlers drain into independent 64-byte rings (63 bytes usable).
 Overflow discards newest bytes and sets a sticky loss flag. PS/2 hardware
 errors also set that local loss flag. Decoding and output stay in foreground.
 Timer/TX are disabled at boot; their default handlers mask unexpected enabled
-events and record diagnostic bits rather than looping forever.
+events and record diagnostic bits rather than looping forever. With a registered
+`TIMER-CALLBACK!` XT, timer IRQs instead set a coalescing event flag;
+`TIMER-POLL` executes the callback in foreground, with IRQs enabled and recursive
+dispatch blocked. See [timer callback usage](../timer/README.md).
 
 Cold boot disables sources, drains stale hardware input, clears errors/pending,
 initializes the vector/rings, then enables RX sources. CPU-only reset therefore
 cannot accidentally interpret bytes retained from the previous image/session.
-IRQ-private cells occupy F020..F02F. Rings reserve F100..F17F and F180..F1FF;
+IRQ-private cells occupy F020..F02F; timer callback/event/busy cells use
+F030..F035. Rings reserve F100..F17F and F180..F1FF;
 each uses a six-byte head/tail/loss header followed by 64 bytes of storage.
 
 The current CPU has **32 data and 32 return cells**. After initialization,
@@ -154,7 +158,7 @@ Reserved SRAM allocation (user dictionary still ends at F000):
 
 | Region | Use |
 | --- | --- |
-| F000..F07F | Output, IRQ, keyboard and collector cells; 82 initialized bytes |
+| F000..F07F | Output, IRQ, timer callback, keyboard and collector cells; 88 initialized bytes |
 | F080..F0FF | Reserved padding for console globals |
 | F100..F17F | UART raw ring: six-byte header + 64-byte storage |
 | F180..F1FF | PS/2 raw ring: six-byte header + 64-byte storage |

@@ -1,4 +1,4 @@
-\ Optional Prim Forth audio driver, 25 MHz board. Load line by line.
+\ Standard-image audio driver, 25 MHz. UART-only: load line by line.
 \ Integer Hz conversion uses a 16x16 -> 32 bit software product.
 HEX
 : AUDIO-VOICE ( voice -- ) FFE1 C! ;

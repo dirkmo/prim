@@ -1,9 +1,10 @@
 """One non-nesting source dispatcher and bounded SRAM receive rings."""
 from prim.isa import PrimOpcodes as Op
-from forth.kernel.primitives import Code
+from forth.kernel.primitives import Code, emit_word
 
 IRQ_NAMES = ('irq_carry', 'irq_snapshot', 'irq_progress', 'irq_base',
-             'irq_byte', 'irq_next', 'irq_tail', 'irq_diagnostic')
+             'irq_byte', 'irq_next', 'irq_tail', 'irq_diagnostic',
+             'timer_callback', 'timer_event', 'timer_busy')
 IRQ_VARIABLES = {name: 0xF020 + 2 * n for n, name in enumerate(IRQ_NAMES)}
 RINGS = {'uart': 0xF100, 'ps2': 0xF180}
 RING_SIZE = 64  # One slot stays empty: 63 bytes usable per source.
@@ -94,8 +95,15 @@ def emit_interrupts(image):
     c.mark(done)
     c.ops(Op.NOP | 128)
 
-    # Unused event sources have safe handlers: mask and record, never spin.
-    for handler, address, mask, bit in (('irq_timer', 0xFFF4, 3, 1),
+    c.mark('irq_timer')
+    unconfigured = c.label('timer_unconfigured')
+    c.load('timer_callback')
+    c.jz(unconfigured)
+    c.set_cell('timer_event', 1)
+    c.ops(Op.NOP | 128)
+    c.mark(unconfigured)
+    # Unconfigured sources have safe handlers: mask and record, never spin.
+    for handler, address, mask, bit in (('irq_timer_default', 0xFFF4, 3, 1),
                                         ('irq_tx', 0xFFFE, 4, 4)):
         c.mark(handler)
         c.push(address)
@@ -174,3 +182,58 @@ def emit_interrupts(image):
     c.load('irq_base')
     c.push(4)
     c.ops(Op.ADD, Op.STORE, Op.NOP | 128)
+
+    # Foreground API: no user Forth code runs inside the ISR.
+    c.mark('timer_cancel')
+    c.push(0)
+    c.call('timer_configure')
+    c.set_cell('timer_busy', 0)
+    c.ops(Op.NOP | 128)
+
+    c.mark('timer_configure')  # ( xt -- ); preserve RUN/AUTO, clear stale events.
+    c.ops(Op.INTDI)
+    c.store('timer_callback')
+    c.set_cell('timer_event', 0)
+    c.push(1)
+    c.push(0xFFF5)
+    c.ops(Op.BYTE_STORE)
+    c.push(0xFFF4)
+    c.ops(Op.BYTE_FETCH)
+    c.push(3)
+    c.ops(Op.AND)
+    disabled = c.label('timer_disabled')
+    c.load('timer_callback')
+    c.jz(disabled)
+    c.push(4)
+    c.ops(Op.OR)
+    c.mark(disabled)
+    c.push(0xFFF4)
+    c.ops(Op.BYTE_STORE, Op.INTEI | 128)
+
+    emit_word(c, 'TIMER-CALLBACK!', 1, 0, lambda: c.call('timer_configure'))
+
+    def poll():
+        finish = c.label('timer_poll_finish')
+        c.ops(Op.INTDI)
+        c.load('timer_busy')
+        ready = c.label('timer_poll_ready')
+        c.jz(ready)
+        c.jump(finish)
+        c.mark(ready)
+        c.load('timer_event')
+        c.jz(finish)
+        c.set_cell('timer_event', 0)
+        c.load('timer_callback')
+        c.ops(Op.DUP)
+        absent = c.label('timer_poll_absent')
+        c.jz(absent)
+        c.set_cell('timer_busy', 1)
+        c.ops(Op.INTEI, Op.CALL)
+        c.set_cell('timer_busy', 0)
+        c.ops(Op.NOP | 128)
+        c.mark(absent)
+        c.ops(Op.DROP)
+        c.mark(finish)
+        c.ops(Op.INTEI | 128)
+
+    emit_word(c, 'TIMER-POLL', 0, 0, poll)

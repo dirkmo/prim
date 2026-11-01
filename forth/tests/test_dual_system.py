@@ -20,7 +20,12 @@ EXPECTED = (b'ok\r\n7 twice .\r\n14 ok\r\n'
             b': take key . ;\r\nok\r\ntake\r\n65 ok\r\n'
             b'2 .\r\n2 ok\r\n'
             b': scroll 35 BEGIN CR 1- DUP 0= UNTIL DROP ;\r\nok\r\n'
-            b': busy BEGIN 20480 @ UNTIL ;\r\nok\r\nbusy\r\nok\r\n')
+            b': busy BEGIN 20480 @ UNTIL ;\r\nok\r\nbusy\r\nok\r\n'
+            b'TIMER-INIT 2 MS 0 MS\r\nok\r\n'
+            b'32768 4 65 FILL 32768 32769 3 MOVE 32771 C@ .\r\n65 ok\r\n'
+            b'MARKER snap : gone 9 ; snap\r\nok\r\n'
+            b'VARIABLE hits : tick 1 hits +! ; 5 \' tick TIMER-EVERY 12 MS '
+            b'0 TIMER-CALLBACK! hits @ 0 > .\r\n-1 ok\r\n')
 LOCAL = (': twice dup + ;\r', 'nope\r', '9 .\r', '3 .\r', 'scroll\r', '1234 .\r')
 
 
@@ -58,20 +63,27 @@ class DualSystemChecks(unittest.TestCase):
         expected_file.write_text(''.join(f'{byte:02x}\n' for byte in EXPECTED))
         keys = [scan_sequence(text) for text in LOCAL]
         keys_file.write_text(''.join(f'{byte:02x}\n' for segment in keys for byte in segment))
-        modules = ('prim.v', 'prim_system.v', 'memory.v', 'memory_io.v', 'bus_mux.v',
+        modules = ('prim_system.v', 'memory.v', 'memory_io.v', 'bus_mux.v',
                    'timer_mmio.v', 'timer.v', 'uart_rx.v', 'uart_tx.v', 'uart_buffers.v',
                    'uart_arbiter.v', 'debug_uart.v', 'debug_uart_link.v', 'ps2_rx.v', 'ps2_fifo.v')
         tools = configured_tools()
         binary = directory / 'dual-system'
+        # This is a wire/behavior test, not a retirement-trace comparison.
+        # Keep production CPU behavior while avoiding a log line per instruction.
+        cpu_source = directory / 'prim.v'
+        cpu_source.write_text('\n'.join(
+            line for line in source_path('prim.v').read_text().splitlines()
+            if '$display("EXEC' not in line) + '\n')
         run([tools.iverilog, '-g2012', '-s', 'tb_dual_system', '-I', ROOT / 'cpu/rtl',
-             '-o', binary, ROOT / 'forth/tests/tb_dual_system.sv', *(source_path(n) for n in modules),
+             '-o', binary, ROOT / 'forth/tests/tb_dual_system.sv', cpu_source,
+             *(source_path(n) for n in modules),
              ROOT / 'vga/rtl/vga_text.v', ROOT / 'vga/rtl/vga_font.v'], log=directory / 'compile.log')
         result = run([tools.vvp, binary, f'+image={image_file}', f'+expected={expected_file}',
                       f'+keys={keys_file}', f'+output={output_file}', f'+expected_count={len(EXPECTED)}',
                       f'+waitpc={image.symbols["irq_wait"]}', f'+keypc={image.symbols["raw_key"]}',
                       f'+idlepc={image.symbols["idle"]}',
                       *(f'+k{n}={len(segment)}' for n, segment in enumerate(keys))],
-                     timeout=240, log=directory / 'simulation.log', allowed=(0, 1, 2))
+                     timeout=420, log=directory / 'simulation.log', allowed=(0, 1, 2))
         self.assertEqual(result.returncode, 0, result.stdout[-5000:] + result.stderr[-2000:])
         self.assertIn('PASS dual Forth wires', result.stdout)
         actual = bytes(int(line, 16) for line in output_file.read_text().split())

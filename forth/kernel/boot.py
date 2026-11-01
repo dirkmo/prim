@@ -12,6 +12,7 @@ from forth.kernel.io import IO_VARIABLES, emit_io
 from forth.kernel.interrupts import IRQ_VARIABLES, emit_interrupts
 from forth.kernel.keyboard import KBD_VARIABLES, emit_keyboard
 from forth.kernel.frontend import FRONT_VARIABLES, emit_frontend
+from forth.kernel.see import SEE_NAMES, emit_see
 
 # Private RAM layout. Keep addresses stable across profiles; skip_lf is only
 # emitted/initialized for UART polling, since dual editors have per-source state.
@@ -33,6 +34,7 @@ VARIABLES = {
         'compiler_index',
         'control_type', 'control_addr', 'control_slot', 'control_patch',
         'data_kind', 'data_value', 'string_addr', 'string_index', 'string_code_addr',
+        *SEE_NAMES,
     ))
 }
 
@@ -88,6 +90,9 @@ def emit_kernel(image):
 
     # Non-returning entry also used after errors/ABORT; no stale frames resumed.
     image.define('idle')
+    if dual:
+        image.push(Ref('timer_cancel'))
+        image.op(Op.CALL)
     image.push(Ref('console_start'))
     image.op(Op.JP)
     if dual:
@@ -101,6 +106,7 @@ def emit_kernel(image):
     emit_compiler(image)
     emit_control(image)
     emit_data(image)
+    emit_see(image)
     image.define('kernel_end')
     image.define('kernel_latest', image.symbols[image.words[-1]['header']])
     user_start = (image.pc + 1) & ~1

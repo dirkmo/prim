@@ -1,5 +1,9 @@
 # Project reporting preferences
 
+- Read `forth/TODO.md` when working on Forth. Keep task status current and
+  briefly remind the user of remaining tasks at the end of relevant Forth work.
+  These reminders do not authorize starting additional tasks automatically.
+
 - Keep IRQs disabled while an ISR executes; do not allow nested interrupt
   handlers. Re-enable IRQs only as part of the ISR return. The current Forth
   handler uses INTDI as its first instruction and INTEI.RET at its end.

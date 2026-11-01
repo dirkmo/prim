@@ -373,3 +373,22 @@ def emit_compiler(image):
         c.call('compile_literal')
     word("[']", 0, 0, bracket_tick, flags=3)
     word('EXECUTE', 1, 0, lambda: c.ops(Op.JP))  # Tail invocation using caller's frame.
+
+    if getattr(image, 'dual_console', False):
+        # Low-level compiler access for defining words written in Forth.
+        word('DP', 0, 1, lambda: c.push('here'))
+        word('LATEST', 0, 1, lambda: c.push('latest'))
+
+        def interpret_only():
+            c.load('definition_open')
+            closed = c.label('interpret_only_closed')
+            c.jz(closed)
+            c.jump('error_compiler')
+            c.mark(closed)
+        word('?INTERPRET', 0, 0, interpret_only)
+
+        def compile_comma():
+            c.call('require_compiling')
+            c.store('found_xt')
+            c.call('compile_word')
+        word('COMPILE,', 1, 0, compile_comma)

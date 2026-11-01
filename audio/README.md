@@ -6,8 +6,8 @@ output. One EBR holds parameters and voice state. No wavetables, samples, extra
 PLLs or audio IRQs.
 
 - [Register interface](registers.md): addresses, commands, clocking and reset.
-- [Forth driver](forth/audio.fs): load this optional library into the existing
-  on-CPU Forth interpreter, line by line using the normal UART console/pacing.
+- [Forth driver](forth/audio.fs): included in the standard dual-console image;
+  load it manually only with the smaller UART-only profile.
 - [Examples](forth/demo.fs): scale, chord, laser and siren.
 - [Validation and resources](BRAM_VALIDATION.md): measured implementation results.
 
@@ -49,8 +49,10 @@ make forth-image
 # Then upload the freshly rebuilt CPU image and open its normal console.
 ```
 
-Load `audio/forth/audio.fs` first. It creates ordinary Forth dictionary words;
-it does not change the initial kernel vocabulary. Number base is left DECIMAL.
+The standard dual-console image already contains `audio/forth/audio.fs` as
+protected kernel words. Run `AUDIO-INIT` before playback; boot does not start
+audio. With the UART-only profile, load the driver manually first; number base
+is left DECIMAL. Demo words in `audio/forth/demo.fs` remain optional.
 All voices now share one preparation buffer: `AUDIO-VOICE` changes the target
 only. Configuration getters return the shared preparation buffer, not a saved
 bank for the selected voice. Active playback remains independent. The existing
@@ -118,6 +120,7 @@ existing BREAK/end margin). Existing timer/UART/VGA/PS2 addresses do not move.
 ```sh
 .venv/bin/python audio/tests/test_audio.py
 .venv/bin/python audio/tests/test_forth.py
+.venv/bin/python audio/tests/test_forth.py --standard
 ctest --test-dir build/audio-checks --output-on-failure -R audio
 ```
 
@@ -129,5 +132,6 @@ checks shared staging, independent playback and clearing dirty RAM on reset. Bus
 unaligned RATE writes, SRAM/audio/timer boundaries and address wrapping. The
 Forth check compiles the optional sources with the actual interpreter on the
 Python CPU, then executes a compiled test word on CPU, SRAM bus, system MMIO
-and audio RTL. The standard Python CPU runner still
+and audio RTL. `--standard` exercises the built-in driver from the standard
+dual-console image without uploading its source. The standard Python CPU runner still
 has no audio model; its compile check does not imply sound simulation.

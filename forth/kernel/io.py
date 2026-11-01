@@ -1,6 +1,6 @@
 """Shared console output and the small integrated VGA backend."""
 from prim.isa import PrimOpcodes as Op
-from forth.kernel.primitives import Code
+from forth.kernel.primitives import Code, emit_word
 
 # Reserved SRAM above the user dictionary; never overlaps the banked window.
 IO_NAMES = ('console_owner', 'vga_x', 'vga_y', 'vga_row', 'vga_saved',
@@ -65,11 +65,12 @@ def emit_io(image):
     c.ops(Op.NOP | 128)
 
     c.mark('vga_init')
-    for name in ('vga_x', 'vga_y', 'vga_row'):
-        c.set_cell(name, 0)
     c.push(0x1E)
     c.push(0xFFF6)
     c.ops(Op.BYTE_STORE)
+    c.mark('vga_page')
+    for name in ('vga_x', 'vga_y', 'vga_row'):
+        c.set_cell(name, 0)
     c.set_cell('vga_clear', 0xE000)
     c.set_cell('vga_left', 2560)
     c.call('vga_clear_span')
@@ -115,6 +116,7 @@ def emit_io(image):
     c.jump(done)  # Other control characters do not become visible glyphs.
     c.mark(printable)
     c.load('vga_char')
+    c.mark('vga_put')  # ( byte -- ); unfiltered write, followed by cursor advance.
     c.call('vga_address')
     c.call('vga_write')
     c.advance('vga_x')
@@ -138,3 +140,27 @@ def emit_io(image):
     c.jump('vga_cursor')
     c.mark(done)
     c.ops(Op.NOP | 128)
+
+    c.mark('vga_backspace')
+    c.push(8)
+    c.jump('vga_emit')
+
+    c.mark('vga_clear_row')
+    c.call('vga_address')
+    c.load('vga_x')
+    c.ops(Op.SUB)
+    c.store('vga_clear')
+    c.set_cell('vga_left', 80)
+    c.jump('vga_clear_span')
+
+    # Explicit VGA access shares the local console's cursor and scroll state.
+    for name, target, need, give in (
+            ('VGA-INIT', 'vga_init', 0, 0), ('VGA-PAGE', 'vga_page', 0, 0),
+            ('VGA-EMIT', 'vga_emit', 1, 0), ('VGA-CR', 'vga_newline', 0, 0),
+            ('VGA-PUT', 'vga_put', 1, 0), ('VGA-BS', 'vga_backspace', 0, 0),
+            ('VGA-CLEAR-ROW', 'vga_clear_row', 0, 0),
+            ('VGA-CURSOR', 'vga_cursor', 0, 0), ('VGA-ADDR', 'vga_address', 0, 1),
+            ('VGA-C!', 'vga_write', 2, 0)):
+        emit_word(c, name, need, give, lambda target=target: c.call(target))
+    for name, cell in (('VX', 'vga_x'), ('VY', 'vga_y'), ('VO', 'vga_row')):
+        emit_word(c, name, 0, 1, lambda cell=cell: c.push(cell))

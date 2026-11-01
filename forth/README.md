@@ -1,7 +1,9 @@
 # Small Forth for Prim
 
-An independent on-CPU text interpreter and native-code compiler, with 91 kernel
-words. It uses the existing Prim ISA: **32-cell hardware data and return stacks,
+An independent on-CPU text interpreter and native-code compiler. The standard
+dual-console image includes timer, timer-callback, VGA and audio words; the
+UART-only profile contains the smaller core. Exact word counts are in the
+generated map. It uses the existing Prim ISA: **32-cell hardware data and return stacks,
 without runtime data-stack bounds checks**. TokenForth remains a separate language/toolchain.
 
 The default FPGA image runs one shared interpreter on **UART and PS/2/VGA**.
@@ -60,6 +62,47 @@ modules. `--output DIR` selects a different destination; default `build/forth/`.
 CMake's destination is its own build directory. No host TokenForth compiler or
 source tokenizer is used. Each initial image is deterministic.
 
+The primitive kernel is emitted by Python. The build then executes that kernel's
+own compiler on the Prim CPU model to compile [kernel/core.fs](kernel/core.fs).
+It seals these eight higher words into the initial dictionary: `2DUP`, `2DROP`,
+`1+`, `1-`, `CELL+`, `NEGATE`, `SPACE` and `CR`. Their definitions and generated
+instructions appear in the map/disassembly; map entries include source lines.
+Reset restores this complete kernel dictionary, and FORGET protects these words.
+The standard dual-console build also compiles the timer driver, `TIMER-EVERY`,
+the integrated `VGA-TYPE` helper and the audio driver. VGA words share the local
+console's cursor and scrolling backend. No driver upload is needed. For example:
+
+```forth
+TIMER-INIT 1000 TIMER-WAIT
+S" Hello VGA" VGA-TYPE
+AUDIO-INIT 440 TONE
+AUDIO-STOP-ALL
+```
+
+`TIMER-CALLBACK!` and `TIMER-POLL` are built into the IRQ kernel; `TIMER-EVERY`
+configures a periodic callback. Applications still call `TIMER-POLL` explicitly.
+Drivers do not start the timer or audio at boot. Demo programs remain optional.
+The standard image also includes `MS`, `MOVE`, `FILL` and `MARKER`, written in
+Forth in `timer/forth/ms.fs` and `kernel/standard.fs`. For example:
+
+```forth
+TIMER-INIT 100 MS
+MARKER clean
+CREATE buffer 32 ALLOT
+buffer 32 65 FILL
+buffer buffer 1+ 31 MOVE
+clean
+```
+
+`MS` services timer callbacks while waiting, preserving the timer configuration.
+Use a running AUTO timer and keep sample/callback intervals shorter than its
+period. `MARKER` restores the exact dictionary position before its creation and
+unregisters timer callbacks before reclaiming code. See [word contracts](WORDS.md).
+`forth/libraries.py` records source order and stack contracts, and the generated
+map lists `forth_sources`. The `--uart-only` profile retains only the core;
+hardware drivers can be loaded there for simulation-specific tests.
+No test utilities or external Forth compiler are required by the build.
+
 | File | Meaning |
 | --- | --- |
 | `kernel.bin` | Raw CPU RAM image, 65504 bytes, addresses 0000..FFDF, entry at 0 |
@@ -72,6 +115,27 @@ together when moving from the previous eight-byte header format.
 
 Runtime definitions are written to SRAM by the CPU; they do not modify these
 initial build artifacts. A fresh build/run starts with kernel words only.
+
+## Inspect a user word
+
+```forth
+: square DUP * ;
+SEE square
+```
+
+SEE prints an address for each native instruction group: `CALL DUP`, `TAIL * ;`,
+`LIT value`, `BRANCH $address` and `0BRANCH $address`. `;` marks a native return.
+Compiler bookkeeping is omitted; embedded strings appear as `DATA "text"`.
+Addresses are always hexadecimal; literal values use BASE as unsigned cells.
+Unknown calls use their XT address, raw opcodes use `.BYTE`, and truncated
+operands are not read beyond the selected word. Data after CREATE/VARIABLE
+stubs is not decoded. This is a native-code view, rather than a reconstruction
+of original IF/loop syntax or source formatting.
+
+SEE parses its name from the current line, does not execute the target, and
+preserves the user stack and BASE. It accepts completed user words only; kernel
+words and use within an open definition are errors. Output follows the command's
+console. [TODO.md](TODO.md) tracks follow-up work and reminder preferences.
 
 ## Use the existing FPGA console
 
@@ -99,10 +163,10 @@ Enter. Paths containing spaces need no quotes; `~` is expanded. Start with the
 interpreter ready and its input line empty. The console first sends an empty
 line to synchronize, then sends one source line at a time, waiting for its echo
 and `ok` or `compiled`. Normal keyboard input is blocked during upload.
-For the audio examples, send `audio/forth/audio.fs` first, then
-`audio/forth/demo.fs`; afterward invoke the demo words interactively.
-For the [system timer driver](../timer/README.md#forth-treiber), send
-`timer/forth/timer.fs`, then optionally `timer/forth/demo.fs`.
+For the audio examples on the standard image, send only `audio/forth/demo.fs`;
+afterward invoke the demo words interactively. For timer examples, send only
+`timer/forth/demo.fs`. The smaller UART-only profile needs the respective driver
+source first (`audio/forth/audio.fs` or `timer/forth/timer.fs`).
 On the Olimex board, `TIMER-INIT 1000 TIMER-WAIT` waits about one second.
 The host CPU model does not simulate the timer.
 
@@ -247,7 +311,9 @@ masked sections. Input is buffered asynchronously, while interpretation and
 echo remain in foreground. Finite receive rings can overflow during long-running
 code; input loss requires Enter to resynchronize. See
 [32/32 validation](../docs/STACK32_IRQ.md) for current measurements.
-No floating point, files, user interrupt API, CATCH/THROW or standards compliance claim.
+Timer callbacks use `TIMER-CALLBACK!` and explicit foreground `TIMER-POLL` in the
+dual-console profile; see [timer usage](../timer/README.md). No general user
+interrupt API, floating point, files, CATCH/THROW or standards compliance claim.
 
 Private `last_error` at 0126 retains the last code (zero after reset):
 
@@ -258,6 +324,7 @@ Private `last_error` at 0126 retains the last code (zero after reset):
 | 11–15 | Unknown word, compile-only word, compiler context, invalid name, dictionary full |
 | 16–21 | No user word for IMMEDIATE, unresolved control, simulator EOF in definition, control stack full, invalid ALLOT, open string |
 | 22 | FORGET target is a protected kernel word |
+| 23 | SEE target must be a user word |
 
 ## Verification and implementation reference
 

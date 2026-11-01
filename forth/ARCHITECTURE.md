@@ -1,9 +1,16 @@
 # Kleines Forth auf Prim – aktuelle Architektur
 
-Der Kernel umfasst Interpreter, Laufzeitcompiler und 91 Wörter. Die früheren
+Der Kernel umfasst Interpreter, Laufzeitcompiler und die im Image-Map erfassten
+Wörter; das Standard-Dual-Image enthält zusätzlich Timer, VGA und Audio. Die früheren
 Arbeitspakete sind abgeschlossen; historische Entscheidungen und Messwerte
 stehen in [HISTORY.md](HISTORY.md), der aktuelle Stand in [STATUS.md](STATUS.md).
 Diese Beschreibung verwendet das kompakte Wörterbuchformat der Map-Version 2.
+Python erzeugt die Primitive; anschließend übersetzt der CPU-seitige Compiler
+die höheren Wörter aus `kernel/core.fs` und im Dual-Profil die Hardwarequellen
+aus `forth/libraries.py`. Der Build übernimmt nur den fertigen
+Wörterbuchbereich, ergänzt Map/Disassembly und setzt die Boot-Referenzen für
+HERE/LATEST und die Kernelgrenze neu. Temporärer Compilerzustand und Hardware-
+Stacks werden nicht ins Image übernommen. Fehler nennen Quelldatei und Zeile.
 Bedienung: [README.md](README.md), [Wörter](WORDS.md), [Beispiele](examples/README.md).
 
 ## Dual-console extension

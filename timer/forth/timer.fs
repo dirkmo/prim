@@ -1,4 +1,4 @@
-\ Prim Forth system timer driver. Load line by line over UART.
+\ Standard-image timer driver. UART-only: load line by line over UART.
 \ Takes ownership of the timer; leaves CPU/console IRQs alone.
 \ Durations are unsigned hardware ticks (1 ms on the Olimex 25 MHz build).
 HEX

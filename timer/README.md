@@ -110,8 +110,9 @@ keine Wirkung auf den Timer.
 
 ## Forth-Treiber
 
-[`forth/timer.fs`](forth/timer.fs) wird zeilenweise in den laufenden Prim-Forth
-geladen (UART-Konsole: **Ctrl+U**, dann `timer/forth/timer.fs`). Der Treiber
+[`forth/timer.fs`](forth/timer.fs) ist im Standard-Dual-Image bereits enthalten.
+Nur beim kleineren UART-only-Profil wird die Datei zeilenweise nachgeladen
+(UART-Konsole: **Ctrl+U**, dann `timer/forth/timer.fs`). Der Treiber
 belegt den Systemtimer exklusiv; Audio-Demos mit eigener Timer-Konfiguration
 dürfen ihn währenddessen nicht umstellen. Beim Laden werden nur Wörter
 definiert, keine Timerregister verändert. Die Zahlenbasis ist danach dezimal.
@@ -155,12 +156,64 @@ Vergleich im AUTO-Modus verpassen. Es eignet sich vor allem für `TIMER-ONCE`.
 `TIMER-START` setzt COUNT nicht zurück: einen fertigen Einmallauf mit
 `TIMER-RESET` neu starten.
 
-Der Treiber schaltet Timer-IRQs bei der Konfiguration aus. Die Forth-ISR besitzt
-keine Benutzer-Callback-Schnittstelle. CPU-IRQ-Freigabe und andere Quellen bleiben
-unverändert; FFF4 wird ausschließlich byteweise geschrieben, damit FFF5
-(gemeinsames W1C-Pendingregister) unangetastet bleibt. Ein altes Timer-Pendingbit
-wird weder quittiert noch als Ereignis ausgewertet. Die ISR bleibt unverändert
-mit INTDI am Eintritt und INTEI.RET am Ende.
+Der Basistreiber schaltet Timer-IRQs bei der Konfiguration aus. FFF4 wird
+ausschließlich byteweise geschrieben; die Basiswörter lassen FFF5 unverändert.
+
+### Konfigurierbarer Timer-Callback (Dual-Konsolenprofil)
+
+Der IRQ-Kernel stellt `TIMER-CALLBACK! ( xt -- )` und `TIMER-POLL ( -- )`
+bereit. Das Standard-Image enthält den Basistreiber und `TIMER-EVERY` aus
+`timer/forth/callback.fs` bereits; manuelles Nachladen entfällt:
+
+```forth
+VARIABLE TICKS
+: ON-TIMER 1 TICKS +! ;
+100 ' ON-TIMER TIMER-EVERY
+: WORK BEGIN TIMER-POLL TICKS @ 10 = UNTIL ;
+WORK
+0 TIMER-CALLBACK!
+```
+
+`TIMER-EVERY ( ticks xt -- )` deaktiviert die alte Registrierung, richtet eine
+AUTO-Periode ein und registriert das neue Wort. Auf dem 25-MHz-Board entsprechen
+100 Ticks 100 ms; der erste Vergleich erfolgt nach 99 Ticks. Alternativ erst
+`TIMER-ONCE` oder `TIMER-PERIOD` konfigurieren, dann mit `' ON-TIMER
+TIMER-CALLBACK!` den Callback und den Timer-IRQ aktivieren. XT=0 deaktiviert den
+Timer-IRQ; RUN/AUTO und die anderen IRQ-Quellen bleiben erhalten. Registrierung
+und Abmeldung löschen alte Software-Ereignisse und quittieren ausschließlich
+das Timer-Bit in FFF5. Die API setzt normale Vordergrundausführung mit
+freigegebenen CPU-IRQs voraus und kehrt mit freigegebenen CPU-IRQs zurück.
+
+Der ISR quittiert Timer-Ereignisse und setzt ein Flag. `TIMER-POLL` nimmt das Flag
+atomar ab und ruft das registrierte Wort **im Vordergrund mit freigegebenen IRQs**
+auf. Es gibt keinen automatischen Aufruf während Konsolenleerlauf, `KEY` oder
+`TIMER-WAIT`: Anwendungsschleifen müssen `TIMER-POLL` regelmäßig ausführen.
+Mehrere IRQs vor einem Poll werden zusammengefasst; dies ist kein Tick-Zähler.
+Während eines Callbacks eintreffende Ereignisse bleiben für den nächsten Poll
+vorgemerkt. Rekursives `TIMER-POLL` führt keinen weiteren Callback aus.
+
+Das Standard-Image enthält außerdem `MS ( u -- )`, implementiert in
+`forth/ms.fs`. Nach `TIMER-INIT` oder `TIMER-EVERY` wartet es u Ticks (auf dem
+25-MHz-Board Millisekunden) und ruft dabei `TIMER-POLL` auf. Anders als
+`TIMER-WAIT` berücksichtigt es auch kürzere AUTO-Perioden. Der Timer muss bei
+u>0 laufen, AUTO muss aktiv und COMPARE ungleich null sein; sonst erfolgt ABORT.
+`0 MS` kehrt sofort zurück. Register und Periodenkonfiguration bleiben erhalten.
+Zwischen zwei COUNT-Abfragen, einschließlich Callback-Laufzeit, müssen weniger
+als COMPARE+1 Ticks liegen; übersehene Umläufe können die Wartezeit verlängern.
+Callbacks dürfen den Timer während MS nicht umkonfigurieren.
+
+Das Callback-Wort hat den Stackeffekt `( -- )`, erhält vorhandene Stackwerte
+und muss genügend Platz für Kernel und ISR lassen. Es darf sich selbst abmelden
+oder ersetzen. Vor `FORGET` eines registrierten Wortes den Callback abmelden.
+`ABORT` und Fehler brechen den Callback ab und löschen die Registrierung beim
+Neustart der Konsole. Die Basiswörter `TIMER-START`, `TIMER-STOP`, `TIMER-INIT`,
+`TIMER-ONCE` und `TIMER-PERIOD` maskieren weiterhin den Timer-IRQ; nach erneuter
+Konfiguration bei Bedarf den Callback erneut registrieren.
+
+Ohne Registrierung maskiert der Timer-Handler unerwartete Timer-IRQs weiterhin
+und setzt das Diagnosebit. Der ISR beginnt mit INTDI und endet mit INTEI.RET;
+verschachtelte ISR sind ausgeschlossen. Das UART-only-Pollingprofil enthält
+die Callback-Wörter nicht; dort nur den Basistreiber laden.
 
 `forth/run.py` simuliert keinen Timer: dort kann der Treiber geladen werden,
 zeitabhängige Aufrufe benötigen jedoch Hardware oder ein passendes Testmodell.

@@ -1,6 +1,7 @@
 # Forth word reference
 
-All initial kernel words are listed below. Cells are 16 bits and addresses are
+All core kernel words (the UART-only vocabulary) are listed in the first table;
+standard hardware extensions and their references follow below. Cells are 16 bits and addresses are
 byte addresses. Stack effects read left to right, with the top cell on the
 right. `n` is signed, `u` unsigned, `addr` a byte address, `xt` a code address.
 Arithmetic wraps modulo 65536 unless a specific error is documented.
@@ -76,6 +77,7 @@ see [the guide](README.md) for the complete input/memory contracts.
 | `DEPTH` | `-- u` | - | Push the previous user stack depth. |
 | `.S` | `... -- ...` | - | Print depth and values bottom-to-top without consuming them; depth is also in BASE. |
 | `WORDS` | `--` | - | List visible dictionary names, newest first, ending in CRLF. |
+| `SEE` | `--` | I | Parse a completed user word and inspect native calls, literals, branches and embedded strings without executing it. Reject kernel words and open definitions; preserve stack and BASE. |
 | `ABORT` | `... --` | - | Non-returning: rollback an open definition, discard stack/current line, resume input. |
 | `:` | `--` | I | Parse a name and begin a hidden definition; nested definitions are rejected. |
 | `;` | `--` | IC | Finish a definition, require an empty control stack, emit return and publish the header. |
@@ -107,6 +109,64 @@ see [the guide](README.md) for the complete input/memory contracts.
 | `TYPE` | `addr u --` | - | Emit u bytes; length zero performs no read. |
 | `S"` | `-- addr u (interpret); -- (compile)` | I | Parse through the next quote. Interpret to a temporary buffer; compile persistent data and two depth-tracked runtime results. |
 | `."` | `--` | I | Parse through the next quote. Print now or compile printing; uses private temporaries to preserve the user stack. |
+
+## Timer callbacks (dual-console profile)
+
+| Word | Stack effect | Behavior |
+| --- | --- | --- |
+| `TIMER-CALLBACK!` | `xt --` | Register a `( -- )` callback and enable timer IRQs; zero unregisters and masks the source. Clears stale timer events, preserves RUN/AUTO. |
+| `TIMER-POLL` | `--` | Execute one pending callback in foreground with IRQs enabled; coalesces events and prevents recursive dispatch. |
+
+Applications must call `TIMER-POLL` explicitly. `ABORT`/error recovery cancels the
+registration. `TIMER-EVERY ( ticks xt -- )` and the complete timer driver are
+included in the standard image. See [timer usage](../timer/README.md).
+
+## Standard hardware vocabulary (dual-console profile)
+
+The image includes the [timer driver](../timer/README.md),
+[audio driver](../audio/README.md) and explicit VGA output words:
+`VGA-INIT`, `VGA-PAGE`, `VGA-EMIT`, `VGA-TYPE`, `VGA-CR`, `VGA-CURSOR`,
+`VGA-ADDR`, `VGA-C!`, `VGA-PUT`, `VGA-BS`, `VGA-CLEAR-ROW`, `VX`, `VY`, `VO`.
+VGA state is shared with the local console. These words, including driver
+variables and helpers, are protected kernel dictionary entries. Demo words
+are loaded separately. The UART-only image retains the smaller core vocabulary.
+
+## Standard utilities (dual-console profile, written in Forth)
+
+| Word | Stack effect | Behavior |
+| --- | --- | --- |
+| `FILL` | `addr u byte --` | Fill u RAM bytes with the low eight bits of byte; zero length performs no destination access. |
+| `MOVE` | `src dst u --` | Copy u RAM bytes; overlapping ranges work in either direction. Zero length performs no source/destination access. |
+| `MS` | `u --` | Wait u timer ticks (milliseconds on the 25 MHz board), calling TIMER-POLL between samples. Zero returns immediately. |
+| `MARKER` | `"name" --` | Immediate defining word: create restoration word name, saving HERE and LATEST before its own definition. |
+
+`MOVE`/`FILL` require valid, non-wrapping RAM ranges that do not overwrite kernel,
+reserved console state, active code or MMIO. They preserve existing stack values
+and allow hardware IRQs, but do not dispatch callbacks. Their `MEM-*` variables
+are internal scratch. The routines do not promise atomic access to whole ranges.
+
+For `MS`, first use `TIMER-INIT` (free-running) or `TIMER-EVERY` (periodic IRQs).
+The timer must remain running in AUTO mode with nonzero COMPARE; otherwise a
+nonzero wait ABORTs. MS does not reconfigure it. Sample intervals, including
+callback execution, must be shorter than COMPARE+1 ticks (65536 when COMPARE is
+65535); longer gaps can hide wraps and extend the wait. Callbacks must not
+reconfigure the timer. `MS-STEP` is an internal elapsed-time helper. Timing has
+tick resolution plus execution overhead; there is no host timer emulation.
+
+Executing a marker restores dictionary pointers, removing itself and all newer
+words/data allocations. Older variable contents, BASE and the caller's data
+stack remain as they are. The timer callback is always unregistered first;
+RUN/AUTO and the console IRQs are preserved. Create/execute markers only outside
+open definitions (including `[ ... ]`); use them at the interpreter rather than
+from code that the marker will remove. Saved XTs/addresses of removed words are
+invalid. `M-RESTORE` is the internal Forth restoration helper.
+
+The small native compiler interfaces used by these Forth defining words are
+`DP ( -- addr )` (HERE cell), `LATEST ( -- addr )` (last-header cell),
+`?INTERPRET ( -- )` (reject an open definition) and `COMPILE, ( xt -- )`
+(compile a word call into an open compiling definition). Direct writes to DP or
+LATEST must preserve dictionary invariants. `COMPILE,` has compile-time stack
+effect; the emitted call retains the target word's runtime stack effect.
 
 ## Deliberate omissions
 

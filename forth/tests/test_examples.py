@@ -51,10 +51,14 @@ class ExampleChecks(unittest.TestCase):
 
     def test_word_reference_covers_every_kernel_word_once(self):
         text = (ROOT / 'forth/WORDS.md').read_text()
-        documented = re.findall(r'^\| `([^`]+)` \|', text, re.MULTILINE)
+        core, hardware = text.split('## Timer callbacks (dual-console profile)', 1)
+        documented = re.findall(r'^\| `([^`]+)` \|', core, re.MULTILINE)
         names = [w['name'] for w in build_image(dual_console=False).words]
         self.assertEqual(len(documented), len(set(documented)))
         self.assertEqual(set(documented), set(names))
+        dual_names = {w['name'] for w in build_image().words}
+        hardware_rows = re.findall(r'^\| `([^`]+)` \|', hardware, re.MULTILINE)
+        self.assertTrue(set(hardware_rows) <= dual_names - set(names))
 
     def test_examples_in_rtl(self):
         if not RTL:

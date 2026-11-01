@@ -4,6 +4,7 @@ from forth.image import Ref
 from functools import partial
 
 ERRORS = {
+    'see': (23, 'SEE requires a user word'),
     'shift': (3, 'shift range'),
     'division_zero': (4, 'division by zero'),
     'division_overflow': (5, 'division overflow'),
@@ -152,8 +153,7 @@ def emit_primitives(image):
         ('DUP', 1, 2, (Op.DUP,)), ('DROP', 1, 0, (Op.DROP,)),
         ('SWAP', 2, 2, (Op.SWAP,)), ('OVER', 2, 3, (Op.OVER,)),
         ('ROT', 3, 3, (Op.ROT,)), ('-ROT', 3, 3, (Op.NROT,)),
-        ('NIP', 2, 1, (Op.NIP,)), ('2DUP', 2, 4, (Op.OVER, Op.OVER)),
-        ('2DROP', 2, 0, (Op.DROP, Op.DROP)),
+        ('NIP', 2, 1, (Op.NIP,)),
         ('+', 2, 1, (Op.ADD,)), ('-', 2, 1, (Op.SUB,)),
         ('AND', 2, 1, (Op.AND,)), ('OR', 2, 1, (Op.OR,)),
         ('XOR', 2, 1, (Op.XOR,)), ('INVERT', 1, 1, (Op.NOT,)),
@@ -166,13 +166,6 @@ def emit_primitives(image):
     for name, need, give, ops in simple:
         word(name, need, give, lambda ops=ops: c.ops(*ops))
 
-    for name, amount, opcode in (('1+', 1, Op.ADD), ('1-', 1, Op.SUB),
-                                  ('CELL+', 2, Op.ADD)):
-        def body(amount=amount, opcode=opcode):
-            c.push(amount)
-            c.ops(opcode)
-        word(name, 1, 1, body)
-    word('NEGATE', 1, 1, c.negate)
 
     def absolute():
         done = c.label('abs_done')
@@ -286,8 +279,6 @@ def emit_primitives(image):
     def emit():
         c.emit()
     word('EMIT', 1, 0, emit)
-    word('CR', 0, 0, lambda: c.output(b'\r\n'))
-    word('SPACE', 0, 0, lambda: c.output(b' '))
 
     # Shared private routine. Inputs/outputs are raw; public wrappers own DEPTH.
     c.mark('signed_divmod')

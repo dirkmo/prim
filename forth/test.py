@@ -11,8 +11,8 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-SUITES = ('boot', 'primitives', 'parser', 'console', 'compiler', 'control', 'data',
-          'system', 'examples', 'timer', 'dual', 'irq', 'keyboard', 'frontend', 'dual_system')
+SUITES = ('boot', 'bootstrap', 'primitives', 'parser', 'console', 'compiler', 'control', 'data', 'see',
+          'system', 'examples', 'timer', 'standard', 'dual', 'irq', 'keyboard', 'frontend', 'dual_system')
 
 
 def main():
@@ -51,7 +51,8 @@ def main():
         with log.open('w') as stream:
             try:
                 result = subprocess.run(command, cwd=ROOT, env=env, stdout=stream,
-                                        stderr=subprocess.STDOUT, timeout=300)
+                                        stderr=subprocess.STDOUT,
+                                        timeout=480 if name == 'dual_system' else 300)
                 code = result.returncode
             except (subprocess.TimeoutExpired, OSError) as exc:
                 stream.write(f'\n{exc}\n')

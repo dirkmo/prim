@@ -13,6 +13,8 @@ if __package__ in (None, ''):
 
 from forth.image import Image, KERNEL_START, RAM_END, USER_LIMIT, WORD_NAME_OFFSET
 from forth.kernel.boot import VARIABLES, emit_kernel
+from forth.bootstrap import compile_core
+from forth.libraries import standard_sources
 
 
 def build_image(*, dual_console=True):
@@ -20,6 +22,10 @@ def build_image(*, dual_console=True):
     image.dual_console = dual_console
     emit_kernel(image)
     image.resolve()
+    if dual_console:
+        compile_core(image, sources=standard_sources())
+    else:
+        compile_core(image)
     return image
 
 
@@ -28,6 +34,7 @@ def memory_map(image):
         'format': 'prim-forth-map-v2',
         'dictionary': {'name_offset': WORD_NAME_OFFSET, 'xt_offset': 4},
         'console_profile': 'dual' if image.dual_console else 'uart-only',
+        'forth_sources': list(dict.fromkeys(w['source'] for w in image.words if 'source' in w)),
         'console_variables': {name: address for name, address in image.symbols.items()
                               if 0xF000 <= address < 0xFF00 and name != 'user_limit'},
         'stage': 'dual-console interpreter/compiler' if image.dual_console else 'UART-only interpreter/compiler',

@@ -128,7 +128,7 @@ always @(posedge clk) if(!reset) begin
     if(rs>max_rs) max_rs=rs;
 end
 
-integer saved_uart, final_uart, saved_irq, saved_tail;
+integer saved_uart, final_uart, saved_irq, saved_tail, marker_here, marker_latest;
 reg [9:0] saved_h;
 initial begin
     if(!$value$plusargs("image=%s",image_path) || !$value$plusargs("expected=%s",expected_path) ||
@@ -187,6 +187,15 @@ initial begin
         $fatal(1,"asynchronous input was not buffered during busy word");
     @(negedge clk); memory['h5000/2]=1;
     quiet(); row_check(28,"1234 ok"); row_check(29,"");
+    // Execute the Forth-defined utilities from the sealed standard image.
+    uart_text("TIMER-INIT 2 MS 0 MS\015"); quiet();
+    uart_text("32768 4 65 FILL 32768 32769 3 MOVE 32771 C@ .\015"); quiet();
+    marker_here=memory['h100/2]; marker_latest=memory['h102/2];
+    uart_text("MARKER snap : gone 9 ; snap\015"); quiet();
+    if(memory['h100/2]!=marker_here || memory['h102/2]!=marker_latest)
+        $fatal(1,"MARKER did not restore dictionary pointers");
+    uart_text("VARIABLE hits : tick 1 hits +! ; 5 ' tick TIMER-EVERY 12 MS 0 TIMER-CALLBACK! hits @ 0 > .\015");
+    quiet();
     if(cpu_count!=expected_count) $fatal(1,"UART final length");
     if(memory['he000/2]!==16'h1234 || memory['he002/2]!==16'h5678 || dut.io.bank)
         $fatal(1,"VRAM mapping damaged SRAM or was left enabled");

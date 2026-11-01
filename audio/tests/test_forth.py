@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the optional Forth sources and run them on the real audio system."""
+"""Run uploaded libraries, or --standard built-ins, on the CPU/audio RTL."""
 from io import BytesIO
 from pathlib import Path
 import subprocess
@@ -14,8 +14,10 @@ from prim.isa import PrimOpcodes as Op
 from forth.tests.model import lookup
 
 def main():
-    image=build_image(dual_console=False)
-    source=(ROOT/'audio/forth/audio.fs').read_bytes()+(ROOT/'audio/forth/demo.fs').read_bytes()
+    standard = '--standard' in sys.argv
+    image=build_image(dual_console=standard)
+    source=(b'' if standard else (ROOT/'audio/forth/audio.fs').read_bytes())
+    source+=(ROOT/'audio/forth/demo.fs').read_bytes()
     assert max(map(len,source.splitlines())) < 127
     commands=b'''AUDIO-INIT
 440 TRI-TONE
@@ -25,19 +27,31 @@ def main():
 '''
     # Compilation/syntax check in the host CPU; no claim of host audio simulation.
     definition = b': AUDIO-CHECK\n' + commands + b';\n'
-    memory=ConsoleMemory(image.memory,BytesIO(source+definition),BytesIO());cpu=Prim(memory)
-    for _ in range(6000000):
-        if memory.eof and cpu._pc==image.symbols['raw_key']:break
-        cpu.step()
-    else:raise AssertionError('host compile timeout')
-    assert b'error' not in memory.sink.getvalue().lower(),memory.sink.getvalue()
+    if standard:
+        from forth.tests.dual_support import DualSession
+        fixture=DualSession()
+        image=fixture.image
+        for line in (source+definition).splitlines(keepends=True):
+            fixture.uart(line)
+            fixture.quiet()
+        memory=fixture.memory
+        output=bytes(memory.tx)
+    else:
+        memory=ConsoleMemory(image.memory,BytesIO(source+definition),BytesIO());cpu=Prim(memory)
+        for _ in range(6000000):
+            if memory.eof and cpu._pc==image.symbols['raw_key']:break
+            cpu.step()
+        else:raise AssertionError('host compile timeout')
+        output=memory.sink.getvalue()
+    assert b'error' not in output.lower(),output
     assert memory.read16(image.symbols['depth'])==0
     free=0xf000-memory.read16(0x100)
-    print(f'UART-only with audio.fs + demo.fs + test definition: {free} free dictionary bytes, range HERE..EFFF')
+    profile='standard dual' if standard else 'UART-only'
+    print(f'{profile} with audio demos + test definition: {free} free dictionary bytes, range HERE..EFFF')
     with tempfile.TemporaryDirectory(prefix='prim-audio-forth-') as directory:
         d=Path(directory)
         header,xt=lookup(memory,'AUDIO-CHECK')
-        print(f'UART-only library+demo dictionary: HERE={header:04X}, free={0xf000-header} bytes through EFFF')
+        print(f'{profile} library+demo dictionary: HERE={header:04X}, free={0xf000-header} bytes through EFFF')
         blob=bytearray(memory.data)
         blob[:5]=bytes([Op.PUSH,xt&255,xt>>8,Op.CALL,Op.BREAK])
         (d/'image.hex').write_text(''.join(f'{blob[i+1]:02x}{blob[i]:02x}\n' for i in range(0,65536,2)))
@@ -62,5 +76,5 @@ def main():
         ram=bytes(b for s in (d/'ram.hex').read_text().split() for b in (int(s,16)&255,int(s,16)>>8))
         assert int.from_bytes(ram[0x108:0x10a],'little')==0
         print(result.stdout.strip())
-        print(f'RTL UART-only after library/demo/actions: {0xf000-int.from_bytes(ram[0x100:0x102],"little")} free dictionary bytes')
+        print(f'RTL {profile} after library/demo/actions: {0xf000-int.from_bytes(ram[0x100:0x102],"little")} free dictionary bytes')
 if __name__=='__main__':main()

@@ -96,8 +96,9 @@ A word at FFF8 changes both cursor coordinates through two byte writes.
 
 ## Forth output
 
-Load [examples/console.fs](examples/console.fs) line by line into the standalone
-Prim Forth over UART, then execute:
+The standard dual-console Forth image includes the explicit VGA words; no driver
+upload is needed. They share cursor and scroll state with the PS/2 console.
+For example, from UART:
 
 ```forth
 VGA-INIT
@@ -105,7 +106,12 @@ S" Prim VGA console" VGA-TYPE
 VGA-CR
 ```
 
-The driver provides VGA-EMIT, VGA-TYPE, VGA-CR, VGA-PAGE and cursor updates.
+The image provides VGA-EMIT, VGA-TYPE, VGA-CR, VGA-PAGE and cursor updates.
+Its integrated VGA-C! restores all CONTROL bits after a write. Kernel code stays
+below E000 while user definitions can use the hidden E000..EFFF SRAM.
+
+For the smaller UART-only image, load [examples/console.fs](examples/console.fs)
+line by line. This separate example driver provides the same output helpers.
 It handles CR, LF, backspace/DEL, line wrapping and scrolling. All driver
 words must reside below E000; VGA-INIT checks HERE before enabling output.
 VGA-C! temporarily maps VRAM only during a write and immediately restores
