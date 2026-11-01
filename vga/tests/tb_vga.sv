@@ -87,8 +87,11 @@ initial begin
         font[i]=dut.video.display.font.rom[i];
     end
     // Independent anchors guard font extraction and left/right bit order.
-    if(font[32*16+7]!==0 || font[65*16+4]!==8'h38)
-        $fatal(1,"unexpected source font anchors: A scanline4=%h",font[65*16+4]);
+    if(font[32*16+7]!==0 || font[65*16+3]!==8'h38 ||
+       font[103*16+14]!==8'h78 || font[106*16+14]!==8'h3c ||
+       font[121*16+14]!==8'hf8 || font[95*16+13]!==8'hff ||
+       font[219*16+15]!==8'hff)
+        $fatal(1,"unexpected font anchors or clipped descenders");
     repeat(3) @(negedge clk); reset=0;
     read_check(16'hfff6,3,0);
     read_check(16'he000,3,16'ha55a);

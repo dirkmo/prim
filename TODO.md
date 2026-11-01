@@ -1,5 +1,11 @@
 # TODO
 
+- [x] VGA-Fontdaten reparieren: Der ursprüngliche Atlas enthält bereits
+  abgeschnittene Unterlängen und keinen Unterstrich. Vollständigen 8x16-Zeichensatz
+  übernommen und Font-/Rasterprüfungen ergänzt.
+- [ ] Reparierten VGA-Font auf dem Board prüfen: Unterlängen (`g j p q y`),
+  Unterstrich und unterste Reihe der Blockgrafik vollständig sichtbar.
+
 - [ ] Compiler-Ladeabbild auf tatsächlich benötigte Speicherbereiche verkleinern;
   benötigte Nullinitialisierungen dabei erhalten.
 

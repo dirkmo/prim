@@ -9,7 +9,7 @@ existing board SRAM; no external SDRAM is required for video.
 
 The implemented steps are:
 
-1. Generate the font ROM from the supplied `VGA-8x16.png` atlas.
+1. Generate the font ROM from the complete CP437 8x16 glyph source.
 2. Generate the raster, fetch characters and font rows, and align pixels and sync.
 3. Add the 32-line ring buffer, cursor overlay and frame-based blink.
 4. Add MMIO and the banked CPU/debug memory window with byte-lane handling.
@@ -122,7 +122,7 @@ KEY, ordinary EMIT/TYPE and interpreter echo use UART. The default
 [Forth kernel now integrates automatic UART/PS2/VGA routing](../forth/DUAL_CONSOLE.md);
 that profile does not need this example driver loaded before local interaction.
 
-The font contains 256 glyphs, including the supplied extended character set;
+The font contains 256 glyphs in CP437 order, including the extended character set;
 printable ASCII uses its usual byte values. No attribute/color bytes or
 escape-sequence parser are implemented in hardware.
 
@@ -194,12 +194,24 @@ nextpnr reports a 30.53 MHz maximum internal clock. Logs and bitstream are in
 `build/vga-ice40-io/`. These are implementation results, not physical monitor
 or external SRAM timing measurements.
 
+The 2026-11-01 font repair build (current board design, seed 1) is in
+`build/vga-font-fix/`. Matching synthesis and place-and-route reports show
+3458/7680 logic cells, 2816/7680 LUT4, 896/7680 flip-flops, 22/32 block RAMs
+and 1/2 PLLs. LUT4/flip-flop counts are synthesized primitives; logic-cell
+packing is from nextpnr. Routed timing passes at 25 MHz (27.87 MHz reported
+maximum). The bitstream is built but the repaired font still needs a physical
+monitor check after programming it.
+
 The generated font RTL is checked in; normal builds have no image dependency.
-To regenerate it, use a Python environment with Pillow:
+To regenerate it from [the complete glyph source](fonts/README.md), only Python
+is required:
 
 ```sh
-python3 vga/font.py --source VGA-8x16.png
+python3 vga/font.py
 ```
 
-The atlas contains 16x16 cells of 9x17 pixels. The generator crops each cell to
-8x16, discarding the separator column and row, and emits one byte per scanline.
+The original `VGA-8x16.png` atlas already has clipped descenders and a missing
+underscore. It is no longer the default font source. The optional PNG importer
+(`--source VGA-8x16.png`, requires Pillow) retains the old 9x17-cell crop for
+historical reproduction. The current ROM preserves complete descenders and all
+16 scanlines, including the bottom row of block/line drawing glyphs.
